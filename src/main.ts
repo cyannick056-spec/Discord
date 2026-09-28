@@ -1,4 +1,4 @@
-import { DiscordSDK } from '@discord/embedded-app-sdk';
+import { DiscordSDK, patchUrlMappings } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import './style.css';
 
@@ -26,6 +26,12 @@ const player = document.querySelector<HTMLElement>('#player')!;
 
 let room: Room | null = null;
 let config: AppConfig | null = null;
+let liveKitProxyPatched = false;
+
+function isInsideDiscord() {
+  const params = new URLSearchParams(window.location.search);
+  return params.has('frame_id') || params.has('instance_id');
+}
 
 function setStatus(text: string) {
   statusText.textContent = text;
@@ -45,12 +51,18 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function initDiscord(clientId: string) {
-  const params = new URLSearchParams(window.location.search);
-  const insideDiscord = params.has('frame_id') || params.has('instance_id');
-  if (!insideDiscord || !clientId) return;
+  if (!isInsideDiscord() || !clientId) return;
 
   const discordSdk = new DiscordSDK(clientId);
   await discordSdk.ready();
+}
+
+function patchLiveKitProxy(serverUrl: string) {
+  if (!isInsideDiscord() || liveKitProxyPatched) return;
+
+  const target = new URL(serverUrl).host;
+  patchUrlMappings([{ prefix: '/livekit', target }]);
+  liveKitProxyPatched = true;
 }
 
 function attachTrack(track: RemoteTrack) {
@@ -83,6 +95,7 @@ async function connectViewer(stream: string) {
 
   const credentials = await fetchJson<ViewerCredentials>(`/api/viewer-token?stream=${encodeURIComponent(stream)}`);
   roomText.textContent = credentials.roomName;
+  patchLiveKitProxy(credentials.serverUrl);
 
   const nextRoom = new Room({ adaptiveStream: true });
   room = nextRoom;
