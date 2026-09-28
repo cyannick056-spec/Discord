@@ -196,7 +196,9 @@ func handleConnection(conn net.Conn) {
 	_ = conn.SetDeadline(time.Time{})
 	log.Printf("[%d] publishing to %s", id, roomName)
 
+	var firstVideoTS uint64
 	var previousVideoTS uint64
+	var videoPackets uint64
 	for {
 		h, err := readFrameHeader(reader)
 		if err != nil {
@@ -213,15 +215,39 @@ func handleConnection(conn net.Conn) {
 
 		switch h.Kind {
 		case kindVideo:
+			if firstVideoTS == 0 {
+				firstVideoTS = h.TimestampUS
+			}
+
 			duration := 33333 * time.Microsecond
+			var deltaUS uint64
 			if previousVideoTS != 0 && h.TimestampUS > previousVideoTS {
-				d := time.Duration(h.TimestampUS-previousVideoTS) * time.Microsecond
+				deltaUS = h.TimestampUS - previousVideoTS
+				d := time.Duration(deltaUS) * time.Microsecond
 				if d >= 5*time.Millisecond && d <= 250*time.Millisecond {
 					duration = d
 				}
 			}
 			previousVideoTS = h.TimestampUS
-			if err := videoTrack.WriteSample(pionmedia.Sample{Data: payload, Duration: duration}, nil); err != nil {
+
+			// Preserve SysDVR's capture clock in the outgoing 90 kHz RTP timeline.
+			// This avoids accumulating timing drift from estimating every H.264 NAL
+			// as an independent fixed-duration sample.
+			rtpTimestamp := uint32(90000)
+			if h.TimestampUS >= firstVideoTS {
+				rtpTimestamp += uint32(((h.TimestampUS - firstVideoTS) * 90) / 1000)
+			}
+
+			videoPackets++
+			if videoPackets <= 8 || videoPackets%300 == 0 {
+				log.Printf("[%d] video #%d ts_us=%d delta_us=%d rtp_ts=%d bytes=%d idr=%t nal=%d", id, videoPackets, h.TimestampUS, deltaUS, rtpTimestamp, len(payload), h.Flags&1 != 0, firstH264NALType(payload))
+			}
+
+			if err := videoTrack.WriteSample(pionmedia.Sample{
+				Data:            payload,
+				Duration:        duration,
+				PacketTimestamp: rtpTimestamp,
+			}, nil); err != nil {
 				log.Printf("[%d] video write: %v", id, err)
 				return
 			}
@@ -239,6 +265,24 @@ func handleConnection(conn net.Conn) {
 			log.Printf("[%d] unknown frame kind %d", id, h.Kind)
 		}
 	}
+}
+
+func firstH264NALType(data []byte) int {
+	for i := 0; i+3 < len(data); i++ {
+		if data[i] != 0 || data[i+1] != 0 {
+			continue
+		}
+		if data[i+2] == 1 && i+3 < len(data) {
+			return int(data[i+3] & 0x1f)
+		}
+		if data[i+2] == 0 && i+4 < len(data) && data[i+3] == 1 {
+			return int(data[i+4] & 0x1f)
+		}
+	}
+	if len(data) != 0 {
+		return int(data[0] & 0x1f)
+	}
+	return -1
 }
 
 func readFrameHeader(r io.Reader) (frameHeader, error) {
