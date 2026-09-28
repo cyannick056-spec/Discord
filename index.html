@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d0f14" />
+    <title>SHIS Stream</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">SHIS STREAM</div>
+          <h1>Switch de Cris</h1>
+        </div>
+        <div id="liveBadge" class="badge">ESPERANDO</div>
+      </header>
+
+      <main>
+        <section id="player" class="player">
+          <div id="emptyState" class="empty-state">
+            <div class="controller">🎮</div>
+            <strong>Esperando transmisión</strong>
+            <span>Cuando la Switch empiece a publicar aparecerá aquí automáticamente.</span>
+          </div>
+          <div id="videoMount" class="video-mount"></div>
+          <div id="audioMount" aria-hidden="true"></div>
+        </section>
+
+        <section class="controls">
+          <div>
+            <div id="statusText" class="status">Conectando…</div>
+            <div id="roomText" class="substatus"></div>
+          </div>
+          <div class="buttons">
+            <button id="audioButton" hidden>🔊 Activar audio</button>
+            <button id="fullscreenButton">⛶ Pantalla completa</button>
+            <button id="retryButton" hidden>↻ Reconectar</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

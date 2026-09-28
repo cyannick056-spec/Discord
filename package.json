@@ -1,0 +1,26 @@
+{
+  "name": "shis-stream-discord-activity",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "node server.mjs",
+    "build": "vite build",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "2.5.0",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "livekit-client": "2.22.3",
+    "livekit-server-sdk": "2.19.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

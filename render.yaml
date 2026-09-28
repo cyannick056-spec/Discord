@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: shis-stream-discord
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: STREAM_KEY
+        generateValue: true
+      - key: DEFAULT_STREAM
+        value: cris
