@@ -1,0 +1,28 @@
+name: Build SHIS Native Relay
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'relay/**'
+      - '.github/workflows/relay.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: relay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: relay/go.mod
+      - name: Resolve modules
+        run: go mod tidy
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build -trimpath -o shis-relay .
