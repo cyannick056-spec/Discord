@@ -1,4 +1,4 @@
-import { DiscordSDK, patchUrlMappings } from '@discord/embedded-app-sdk';
+import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import './style.css';
 
@@ -26,7 +26,6 @@ const player = document.querySelector<HTMLElement>('#player')!;
 
 let room: Room | null = null;
 let config: AppConfig | null = null;
-let liveKitProxyPatched = false;
 
 function isInsideDiscord() {
   const params = new URLSearchParams(window.location.search);
@@ -57,12 +56,15 @@ async function initDiscord(clientId: string) {
   await discordSdk.ready();
 }
 
-function patchLiveKitProxy(serverUrl: string) {
-  if (!isInsideDiscord() || liveKitProxyPatched) return;
+function getLiveKitConnectUrl(serverUrl: string) {
+  if (!isInsideDiscord()) return serverUrl;
 
-  const target = new URL(serverUrl).host;
-  patchUrlMappings([{ prefix: '/livekit', target }]);
-  liveKitProxyPatched = true;
+  // Discord Activities run behind a sandbox proxy. Connecting to the mapped
+  // /livekit path directly avoids external CSP blocks and also prevents
+  // LiveKit Cloud's regional failover from escaping the Discord proxy.
+  const proxyUrl = new URL('/livekit', window.location.origin);
+  proxyUrl.protocol = serverUrl.startsWith('ws:') ? 'ws:' : 'wss:';
+  return proxyUrl.toString().replace(/\/$/, '');
 }
 
 function attachTrack(track: RemoteTrack) {
@@ -95,7 +97,6 @@ async function connectViewer(stream: string) {
 
   const credentials = await fetchJson<ViewerCredentials>(`/api/viewer-token?stream=${encodeURIComponent(stream)}`);
   roomText.textContent = credentials.roomName;
-  patchLiveKitProxy(credentials.serverUrl);
 
   const nextRoom = new Room({ adaptiveStream: true });
   room = nextRoom;
@@ -120,7 +121,8 @@ async function connectViewer(stream: string) {
     setStatus('Desconectado');
   });
 
-  await nextRoom.connect(credentials.serverUrl, credentials.token, { autoSubscribe: true });
+  const connectUrl = getLiveKitConnectUrl(credentials.serverUrl);
+  await nextRoom.connect(connectUrl, credentials.token, { autoSubscribe: true });
   setStatus('Esperando a la Switch…');
 }
 
