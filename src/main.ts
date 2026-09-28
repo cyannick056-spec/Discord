@@ -98,7 +98,10 @@ async function connectViewer(stream: string) {
   const credentials = await fetchJson<ViewerCredentials>(`/api/viewer-token?stream=${encodeURIComponent(stream)}`);
   roomText.textContent = credentials.roomName;
 
-  const nextRoom = new Room({ adaptiveStream: true });
+  // SHIS publishes one native H.264 layer from SysDVR. Adaptive stream can
+  // request quality/layer changes that do not exist on this single-layer track,
+  // so keep the subscription continuous for the lowest-latency stable path.
+  const nextRoom = new Room({ adaptiveStream: false });
   room = nextRoom;
 
   nextRoom.on(RoomEvent.TrackSubscribed, (track) => attachTrack(track));
@@ -109,7 +112,9 @@ async function connectViewer(stream: string) {
       setStatus('Esperando a la Switch…');
     }
   });
-  nextRoom.on(RoomEvent.ParticipantConnected, () => setStatus('Switch conectada, esperando imagen…'));
+  nextRoom.on(RoomEvent.ParticipantConnected, () => {
+    if (videoMount.childElementCount === 0) setStatus('Switch conectada, esperando imagen…');
+  });
   nextRoom.on(RoomEvent.ParticipantDisconnected, () => {
     if (videoMount.childElementCount === 0) {
       setLive(false);
@@ -123,7 +128,7 @@ async function connectViewer(stream: string) {
 
   const connectUrl = getLiveKitConnectUrl(credentials.serverUrl);
   await nextRoom.connect(connectUrl, credentials.token, { autoSubscribe: true });
-  setStatus('Esperando a la Switch…');
+  if (videoMount.childElementCount === 0) setStatus('Esperando a la Switch…');
 }
 
 async function boot() {
