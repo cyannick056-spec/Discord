@@ -30,10 +30,11 @@ const (
 	kindAudio  byte = 2
 	maxPayload      = 0x60000
 
-	videoFPS          = 30
-	videoJitterFrames = 3
-	videoQueueDepth   = 120
-	audioQueueDepth   = 256
+	videoFPS             = 30
+	videoJitterFrames    = 6
+	videoQueueDepth      = 180
+	audioQueueDepth      = 384
+	videoDiscontinuityUS = 55000
 )
 
 const videoFrameDuration = time.Second / videoFPS
@@ -175,7 +176,7 @@ func handleConnection(conn net.Conn) {
 		},
 		lksdk.NewRoomCallback(),
 		lksdk.WithAutoSubscribe(false),
-		lksdk.WithRetransmitBufferSize(4096),
+		lksdk.WithRetransmitBufferSize(8192),
 	)
 	if err != nil {
 		_, _ = io.WriteString(conn, "ERR livekit\n")
@@ -194,13 +195,17 @@ func handleConnection(conn net.Conn) {
 			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640c1f",
 		},
 		lksdk.WithRTCPHandler(func(packet rtcp.Packet) {
-			switch packet.(type) {
+			switch p := packet.(type) {
 			case *rtcp.PictureLossIndication:
 				waitForIDR.Store(true)
 				log.Printf("[%d] RTCP PLI: pausing P-frames until the next H264 keyframe", id)
 			case *rtcp.FullIntraRequest:
 				waitForIDR.Store(true)
 				log.Printf("[%d] RTCP FIR: pausing P-frames until the next H264 keyframe", id)
+			case *rtcp.TransportLayerNack:
+				if len(p.Nacks) != 0 {
+					log.Printf("[%d] RTCP NACK: %d lost packet group(s), retransmit buffer active", id, len(p.Nacks))
+				}
 			}
 		}),
 	)
@@ -241,7 +246,7 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 	_ = conn.SetDeadline(time.Time{})
-	log.Printf("[%d] publishing to %s (smooth %dfps, jitter buffer %d frames)", id, roomName, videoFPS, videoJitterFrames)
+	log.Printf("[%d] publishing to %s (smooth %dfps, jitter buffer %d frames, RTP retransmit 8192)", id, roomName, videoFPS, videoJitterFrames)
 
 	videoCh := make(chan videoFrame, videoQueueDepth)
 	audioCh := make(chan audioFrame, audioQueueDepth)
@@ -290,6 +295,15 @@ func handleConnection(conn net.Conn) {
 				log.Printf("[%d] video #%d ts_us=%d delta_us=%d bytes=%d idr=%t nal=%d", id, videoPackets, h.TimestampUS, deltaUS, len(payload), isIDR, firstH264NALType(payload))
 			}
 
+			// A timestamp jump means one or more reference frames vanished before
+			// reaching the relay. Do not forward the following dependent P-frames;
+			// wait for the next IDR so the browser never decodes a broken chain.
+			if deltaUS > videoDiscontinuityUS {
+				waitForIDR.Store(true)
+				drainVideoQueue(videoCh)
+				log.Printf("[%d] video discontinuity: delta_us=%d, waiting for next IDR", id, deltaUS)
+			}
+
 			accessUnit, hasVCL := normalizeH264AccessUnit(payload, isIDR)
 			if !hasVCL {
 				continue
@@ -335,7 +349,7 @@ func runVideoPacer(id uint64, track *lksdk.LocalSampleTrack, in <-chan videoFram
 	ticker := time.NewTicker(videoFrameDuration)
 	defer ticker.Stop()
 
-	queue := make([]videoFrame, 0, 16)
+	queue := make([]videoFrame, 0, 24)
 	started := false
 	var sent uint64
 
@@ -370,6 +384,9 @@ func runVideoPacer(id uint64, track *lksdk.LocalSampleTrack, in <-chan videoFram
 			}
 
 			if len(queue) == 0 {
+				// Re-prime instead of repeatedly missing ticker slots. One controlled
+				// rebuffer is visually smoother than a run of irregular 30fps stalls.
+				started = false
 				continue
 			}
 
