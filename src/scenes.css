@@ -236,3 +236,33 @@
     border-radius: 1.5%;
   }
 }
+
+/* Both real television shapes stand on the same continuous shelf in the alcove. */
+@media (min-width: 521px), (min-height: 361px) {
+  .home-mode .tv-scene.aspect-4x3 .tv-shell { aspect-ratio: 1349 / 1077; }
+  .home-mode .tv-scene.aspect-4x3 .tv-face {
+    background-image: url('/tv-slate-4x3.webp');
+  }
+  .home-mode .tv-scene.aspect-4x3 .screen-wrap {
+    left: 13.1%;
+    top: 8.3%;
+    width: 73.8%;
+    height: 73%;
+  }
+}
+@media (orientation: portrait) and (min-height: 430px) {
+  .home-mode .tv-scene,
+  .home-mode .tv-scene.aspect-4x3 {
+    top: auto;
+    bottom: 66.5%;
+    left: 50%;
+    transform: translateX(-50%);
+    max-height: none;
+  }
+  .home-mode .tv-scene { width: min(90vw, 650px); }
+  .home-mode .tv-scene.aspect-4x3 { width: min(75vw, 540px); }
+  .home-mode .tv-face { filter: drop-shadow(0 7px 8px rgba(0,0,0,.65)); }
+}
+@media (orientation: landscape) and (min-height: 361px) {
+  .home-mode .tv-scene.aspect-4x3 { width: min(88vw, calc(90dvh * 1.25)); }
+}
