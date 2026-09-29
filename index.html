@@ -78,6 +78,14 @@
           <button id="modeButton" type="button" aria-label="Cambiar a modo arcade">Arcade</button>
           <button id="aspectButton" type="button" aria-label="Cambiar proporción de la TV a 4:3" title="Cambiar tamaño de la TV">16:9</button>
           <button id="filterButton" type="button" aria-pressed="false" title="Activar efecto de TV antigua">TV retro</button>
+          <button id="smoothingButton" type="button" aria-pressed="false" title="Suavizar bordes dentados">Bordes</button>
+          <div class="volume-control" id="volumeControl">
+            <button id="volumeButton" type="button" aria-label="Abrir volumen" aria-expanded="false" aria-controls="volumePanel" title="Volumen">Volumen</button>
+            <div id="volumePanel" class="volume-panel" hidden>
+              <label for="volumeSlider">Volumen <output id="volumeValue" for="volumeSlider">100%</output></label>
+              <input id="volumeSlider" type="range" min="0" max="100" value="100" aria-label="Volumen de la transmisión" />
+            </div>
+          </div>
           <button id="audioButton" type="button" hidden title="Activar audio">🔊 Audio</button>
           <button id="retryButton" type="button" hidden title="Reconectar">↻</button>
           <button id="exitButton" type="button" hidden title="Salir de la actividad">Salir</button>

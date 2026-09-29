@@ -32,6 +32,12 @@ const arcadeScene = document.querySelector<HTMLDivElement>('#arcadeScene')!;
 const arcadeScreen = document.querySelector<HTMLDivElement>('#arcadeScreen')!;
 const modeButton = document.querySelector<HTMLButtonElement>('#modeButton')!;
 const filterButton = document.querySelector<HTMLButtonElement>('#filterButton')!;
+const smoothingButton = document.querySelector<HTMLButtonElement>('#smoothingButton')!;
+const volumeControl = document.querySelector<HTMLDivElement>('#volumeControl')!;
+const volumeButton = document.querySelector<HTMLButtonElement>('#volumeButton')!;
+const volumePanel = document.querySelector<HTMLDivElement>('#volumePanel')!;
+const volumeSlider = document.querySelector<HTMLInputElement>('#volumeSlider')!;
+const volumeValue = document.querySelector<HTMLOutputElement>('#volumeValue')!;
 
 let room: Room | null = null;
 let config: AppConfig | null = null;
@@ -46,7 +52,6 @@ try {
 function setAspect(mode: AspectMode) {
   aspectMode = mode;
   tvScene.classList.toggle('aspect-4x3', mode === '4:3');
-  stage.classList.toggle('aspect-4x3', mode === '4:3');
   aspectButton.textContent = mode;
   aspectButton.setAttribute('aria-label', `Cambiar proporción de la TV a ${mode === '4:3' ? '16:9' : '4:3'}`);
   try { localStorage.setItem('shis-tv-aspect', mode); } catch { /* Session-only fallback. */ }
@@ -64,6 +69,9 @@ function setScene(mode: SceneMode) {
   stage.classList.toggle('home-mode', mode === 'home');
   stage.classList.toggle('arcade-mode', mode === 'arcade');
   arcadeScene.hidden = mode !== 'arcade';
+  aspectButton.hidden = mode === 'arcade';
+  volumePanel.hidden = true;
+  volumeButton.setAttribute('aria-expanded', 'false');
   (mode === 'arcade' ? arcadeScreen : homeScreenMount).appendChild(player);
   modeButton.textContent = mode === 'arcade' ? 'Casa' : 'Arcade';
   modeButton.setAttribute('aria-label', mode === 'arcade' ? 'Cambiar a modo casa' : 'Cambiar a modo arcade');
@@ -72,18 +80,55 @@ function setScene(mode: SceneMode) {
 }
 setScene(sceneMode);
 
-let retroFilter = false;
-try { retroFilter = localStorage.getItem('shis-retro-filter') === 'on'; } catch { /* Session-only fallback. */ }
-function setRetroFilter(enabled: boolean) {
-  retroFilter = enabled;
-  stage.classList.toggle('retro-strong', enabled);
-  filterButton.setAttribute('aria-pressed', String(enabled));
-  filterButton.textContent = enabled ? 'TV retro ✓' : 'TV retro';
-  filterButton.setAttribute('aria-label', enabled ? 'Desactivar efecto de TV antigua' : 'Activar efecto de TV antigua');
-  filterButton.title = enabled ? 'Ver imagen limpia' : 'Activar efecto de TV antigua';
-  try { localStorage.setItem('shis-retro-filter', enabled ? 'on' : 'off'); } catch { /* Session-only fallback. */ }
+type RetroLevel = 'off' | 'normal' | 'immersive';
+let retroLevel: RetroLevel = 'off';
+let smoothing = false;
+let volume = 100;
+try {
+  const storedRetro = localStorage.getItem('shis-retro-level');
+  if (storedRetro === 'normal' || storedRetro === 'immersive') retroLevel = storedRetro;
+  else if (storedRetro === null && localStorage.getItem('shis-retro-filter') === 'on') retroLevel = 'normal';
+  smoothing = localStorage.getItem('shis-edge-smoothing') === 'on';
+  const storedVolume = Number(localStorage.getItem('shis-volume'));
+  if (localStorage.getItem('shis-volume') !== null && Number.isFinite(storedVolume)) {
+    volume = Math.max(0, Math.min(100, storedVolume));
+  }
+} catch { /* Session-only fallback. */ }
+
+function setRetroLevel(level: RetroLevel) {
+  retroLevel = level;
+  stage.classList.toggle('retro-strong', level === 'normal');
+  stage.classList.toggle('retro-immersive', level === 'immersive');
+  filterButton.dataset.level = level;
+  filterButton.setAttribute('aria-pressed', String(level !== 'off'));
+  filterButton.textContent = level === 'off' ? 'Retro apagado' : `Retro ${level === 'normal' ? 'normal' : 'inmersivo'}`;
+  const next = level === 'off' ? 'normal' : level === 'normal' ? 'inmersivo' : 'apagado';
+  filterButton.setAttribute('aria-label', `Retro ${level === 'off' ? 'apagado' : level === 'normal' ? 'normal' : 'inmersivo'}; cambiar a ${next}`);
+  filterButton.title = `Retro: ${level === 'off' ? 'apagado' : level === 'normal' ? 'normal' : 'inmersivo'}. Pulsar para ${next}`;
+  try { localStorage.setItem('shis-retro-level', level); } catch { /* Session-only fallback. */ }
 }
-setRetroFilter(retroFilter);
+setRetroLevel(retroLevel);
+
+function setSmoothing(enabled: boolean) {
+  smoothing = enabled;
+  stage.classList.toggle('edge-smoothing', enabled);
+  smoothingButton.setAttribute('aria-pressed', String(enabled));
+  smoothingButton.setAttribute('aria-label', enabled ? 'Desactivar suavizado de bordes' : 'Activar suavizado de bordes');
+  smoothingButton.title = enabled ? 'Suavizado activado: pulsar para comparar' : 'Suavizar bordes dentados';
+  try { localStorage.setItem('shis-edge-smoothing', enabled ? 'on' : 'off'); } catch { /* Session-only fallback. */ }
+}
+setSmoothing(smoothing);
+
+function setVolume(value: number) {
+  volume = Math.max(0, Math.min(100, value));
+  volumeSlider.value = String(volume);
+  volumeValue.value = `${volume}%`;
+  volumeButton.dataset.muted = String(volume === 0);
+  volumeButton.title = `Volumen: ${volume}%`;
+  audioMount.querySelectorAll('audio').forEach((element) => { element.volume = volume / 100; });
+  try { localStorage.setItem('shis-volume', String(volume)); } catch { /* Session-only fallback. */ }
+}
+setVolume(volume);
 
 function isInsideDiscord() {
   const params = new URLSearchParams(window.location.search);
@@ -134,6 +179,7 @@ function attachTrack(track: RemoteTrack) {
     setStatus('SEÑAL RECIBIDA');
   } else if (track.kind === Track.Kind.Audio) {
     element.style.display = 'none';
+    element.volume = volume / 100;
     audioMount.appendChild(element);
     element.play().then(() => { audioButton.hidden = true; }).catch(() => {
       audioButton.hidden = false;
@@ -199,8 +245,27 @@ async function boot() {
 }
 
 modeButton.addEventListener('click', () => setScene(sceneMode === 'home' ? 'arcade' : 'home'));
-filterButton.addEventListener('click', () => setRetroFilter(!retroFilter));
+filterButton.addEventListener('click', () => setRetroLevel(retroLevel === 'off' ? 'normal' : retroLevel === 'normal' ? 'immersive' : 'off'));
+smoothingButton.addEventListener('click', () => setSmoothing(!smoothing));
 aspectButton.addEventListener('click', () => setAspect(aspectMode === '4:3' ? '16:9' : '4:3'));
+volumeButton.addEventListener('click', () => {
+  volumePanel.hidden = !volumePanel.hidden;
+  volumeButton.setAttribute('aria-expanded', String(!volumePanel.hidden));
+});
+volumeSlider.addEventListener('input', () => setVolume(Number(volumeSlider.value)));
+document.addEventListener('pointerdown', (event) => {
+  if (!volumeControl.contains(event.target as Node)) {
+    volumePanel.hidden = true;
+    volumeButton.setAttribute('aria-expanded', 'false');
+  }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !volumePanel.hidden) {
+    volumePanel.hidden = true;
+    volumeButton.setAttribute('aria-expanded', 'false');
+    volumeButton.focus();
+  }
+});
 exitButton.addEventListener('click', () => discordSdk?.close(RPCCloseCodes.CLOSE_NORMAL, 'Salió de Shis Stream'));
 
 audioButton.addEventListener('click', async () => {

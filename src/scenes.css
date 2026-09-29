@@ -117,6 +117,7 @@
 .scene-controls button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .scene-controls button[hidden] { display: none !important; }
 #filterButton[aria-pressed="true"] { border-color: #8cbac7; background: linear-gradient(#315865, #223a43); box-shadow: 0 0 12px #76c9df55, 0 3px 12px #0009; }
+#smoothingButton[aria-pressed="true"] { border-color: #8cbac7; background: linear-gradient(#315865, #223a43); box-shadow: 0 0 12px #76c9df55, 0 3px 12px #0009; }
 
 /* The analog treatment is defined at the end of this file, on the video and
    glass layers only. The OSD remains an unfiltered sibling above them. */
@@ -308,6 +309,13 @@
 .stage.arcade-mode #modeButton::after { content: "Casa"; }
 #filterButton::before { content: "CRT"; font-size: 13px; letter-spacing: .04em; }
 #filterButton::after { content: "Retro"; }
+#filterButton[data-level="normal"]::after { content: "Normal"; }
+#filterButton[data-level="immersive"]::after { content: "Intenso"; }
+#smoothingButton::before { content: "◌"; font-size: 24px; }
+#smoothingButton::after { content: "Bordes"; }
+#volumeButton::before { content: "♪"; }
+#volumeButton::after { content: "Volumen"; }
+#volumeButton[data-muted="true"]::before { content: "×"; }
 #aspectButton::before { content: "▭"; font-size: 21px; }
 #aspectButton::after { content: "Tamaño"; }
 .scene-controls #aspectButton {
@@ -636,9 +644,8 @@
     box-shadow: 0 0 0 2px #232b32, 0 0 30px rgba(36, 91, 112, .17);
   }
 }
-.arcade-screen .video-mount video { object-fit: cover; }
-.stage.arcade-mode:not(.aspect-4x3) .video-mount video { transform: scale(1.025); }
-.stage.arcade-mode.aspect-4x3 .video-mount video { transform: scaleX(1.33); }
+.arcade-screen .video-mount video { object-fit: contain; }
+.stage.arcade-mode .video-mount video { transform: none; }
 
 /* Discord's compact activity surface gets the picture, with just two slim
    graphite side rails. The outer call grid remains under Discord's control. */
@@ -682,5 +689,103 @@
     transform: none;
     border-radius: 0;
     box-shadow: none;
+  }
+}
+
+/* Volume stays folded into a single button. The open slider lives beside the
+   landscape rail or beneath the portrait rail, away from the screen center. */
+.volume-control { position: relative; flex: 0 0 50px; }
+.volume-panel[hidden] { display: none !important; }
+.volume-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 164px;
+  padding: 10px 12px;
+  border: 1px solid #79909a;
+  border-radius: 10px;
+  color: #f0f2f1;
+  background: rgba(12, 20, 27, .97);
+  box-shadow: 0 6px 18px #000b;
+  font: 600 11px/1.2 system-ui, sans-serif;
+}
+.volume-panel label { display: flex; justify-content: space-between; gap: 8px; }
+.volume-panel input { width: 100%; margin: 0; accent-color: #9bcddd; cursor: pointer; }
+.volume-panel input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@media (orientation: landscape) and (min-height: 361px) {
+  .volume-panel {
+    top: 50%;
+    left: calc(100% + 8px);
+    transform: translateY(-50%);
+    align-items: center;
+    width: 48px;
+    padding: 8px 5px;
+  }
+  .volume-panel label { flex-direction: column; align-items: center; gap: 3px; font-size: 8px; }
+  .volume-panel input { width: 23px; height: 88px; writing-mode: vertical-lr; direction: rtl; }
+}
+
+/* Border smoothing changes decoded video only; toggling it preserves crisp OSD. */
+.stage.edge-smoothing .video-mount video { filter: blur(.55px); }
+.stage.retro-strong .video-mount video { filter: blur(.42px) saturate(1.06) contrast(1.06); }
+.stage.retro-strong.edge-smoothing .video-mount video { filter: blur(.85px) saturate(1.06) contrast(1.06); }
+.stage.retro-immersive .video-mount video { filter: blur(.55px) saturate(1.09) contrast(1.08); }
+.stage.retro-immersive.edge-smoothing .video-mount video { filter: blur(.95px) saturate(1.09) contrast(1.08); }
+.stage.retro-immersive .crt-overlay,
+.stage.retro-immersive .player:has(.video-mount video) .crt-overlay {
+  opacity: .84;
+  background:
+    repeating-linear-gradient(to bottom, rgba(0,0,0,.28) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(to right, rgba(219,87,71,.025) 0 1px, rgba(70,189,125,.025) 1px 2px, rgba(83,127,219,.027) 2px 3px),
+    radial-gradient(ellipse at center, transparent 44%, rgba(0,0,0,.61) 100%);
+}
+.stage.retro-immersive .screen-glare {
+  opacity: .48;
+  background: radial-gradient(ellipse at 27% 7%, rgba(205,222,241,.19), transparent 55%);
+}
+.stage.retro-immersive .player { box-shadow: inset 0 0 27px rgba(0,0,0,.6); }
+.stage.home-mode.retro-immersive .screen-wrap .player { border-radius: 6% / 4.5%; }
+
+@media (max-width: 420px) and (min-height: 361px) {
+  .scene-controls { gap: 4px; }
+  .scene-controls button,
+  .scene-controls #exitButton,
+  .scene-controls #aspectButton {
+    flex-basis: 42px;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    min-height: 42px;
+  }
+  .volume-control { flex-basis: 42px; }
+}
+
+/* In Discord's smallest tile, only the tucked-away volume control remains. */
+@media (max-width: 520px) and (max-height: 360px) {
+  .scene-controls {
+    display: flex !important;
+    top: auto;
+    right: auto;
+    bottom: max(5px, env(safe-area-inset-bottom));
+    left: max(5px, env(safe-area-inset-left));
+    transform: none;
+  }
+  .scene-controls > :not(.volume-control) { display: none !important; }
+  .volume-control { flex-basis: 30px; }
+  .scene-controls #volumeButton { width: 30px; height: 30px; min-height: 30px; flex-basis: 30px; }
+  #volumeButton::before { font-size: 17px; }
+  #volumeButton::after { display: none; }
+  .volume-panel {
+    top: auto;
+    bottom: calc(100% + 5px);
+    left: 0;
+    transform: none;
+    width: 136px;
+    padding: 7px 9px;
   }
 }
