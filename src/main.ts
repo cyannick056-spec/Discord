@@ -31,6 +31,7 @@ const homeScreenMount = document.querySelector<HTMLDivElement>('#homeScreenMount
 const arcadeScene = document.querySelector<HTMLDivElement>('#arcadeScene')!;
 const arcadeScreen = document.querySelector<HTMLDivElement>('#arcadeScreen')!;
 const modeButton = document.querySelector<HTMLButtonElement>('#modeButton')!;
+const filterButton = document.querySelector<HTMLButtonElement>('#filterButton')!;
 
 let room: Room | null = null;
 let config: AppConfig | null = null;
@@ -69,6 +70,18 @@ function setScene(mode: SceneMode) {
   try { localStorage.setItem('shis-scene', mode); } catch { /* Session-only fallback. */ }
 }
 setScene(sceneMode);
+
+let retroFilter = false;
+try { retroFilter = localStorage.getItem('shis-retro-filter') === 'on'; } catch { /* Session-only fallback. */ }
+function setRetroFilter(enabled: boolean) {
+  retroFilter = enabled;
+  stage.classList.toggle('retro-strong', enabled);
+  filterButton.setAttribute('aria-pressed', String(enabled));
+  filterButton.textContent = enabled ? 'Retro ✓' : 'Filtro retro';
+  filterButton.title = enabled ? 'Quitar filtro retro' : 'Activar filtro retro';
+  try { localStorage.setItem('shis-retro-filter', enabled ? 'on' : 'off'); } catch { /* Session-only fallback. */ }
+}
+setRetroFilter(retroFilter);
 
 function isInsideDiscord() {
   const params = new URLSearchParams(window.location.search);
@@ -183,6 +196,7 @@ async function boot() {
 }
 
 modeButton.addEventListener('click', () => setScene(sceneMode === 'home' ? 'arcade' : 'home'));
+filterButton.addEventListener('click', () => setRetroFilter(!retroFilter));
 aspectButton.addEventListener('click', () => setAspect(aspectMode === '4:3' ? '16:9' : '4:3'));
 exitButton.addEventListener('click', () => discordSdk?.close(RPCCloseCodes.CLOSE_NORMAL, 'Salió de Shis Stream'));
 
