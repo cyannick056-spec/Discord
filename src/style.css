@@ -379,7 +379,7 @@ button[hidden] { display: none !important; }
   .sticker-sailor-happy { width: 40px; right: 2px; bottom: 27px; }
 
   .retro-table {
-    width: min(91vw, 560px);
+    width: min(96vw, 650px);
     display: block;
     flex: 0 0 auto;
   }
@@ -387,8 +387,8 @@ button[hidden] { display: none !important; }
     display: block;
     width: 100%;
     height: auto;
-    margin-top: -10%;
-    margin-bottom: -6%;
+    margin-top: -1%;
+    margin-bottom: 0;
     object-fit: contain;
     filter: drop-shadow(0 9px 12px rgba(0,0,0,.3));
   }
