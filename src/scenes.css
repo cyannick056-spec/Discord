@@ -116,7 +116,7 @@
 }
 .scene-controls button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .scene-controls button[hidden] { display: none !important; }
-#filterButton[aria-pressed="true"] { border-color: #9fbdad; background: #33443d; }
+#filterButton[aria-pressed="true"] { border-color: #8cbac7; background: linear-gradient(#315865, #223a43); box-shadow: 0 0 12px #76c9df55, 0 3px 12px #0009; }
 
 /* Clean default picture. Strong analog tube treatment is opt-in. */
 .stage:not(.retro-strong) .video-mount video { filter: none; transform: none; }
