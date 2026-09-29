@@ -10,7 +10,7 @@
     <div id="app">
       <main class="stage" aria-label="Transmisión de Switch">
         <div class="room-scene">
-          <div class="tv-scene">
+          <div id="tvScene" class="tv-scene">
             <section class="tv-shell" aria-label="Televisor retro gris">
               <div class="tv-face">
                 <aside class="speaker-column speaker-left" aria-hidden="true">
@@ -53,6 +53,8 @@
                   </div>
                   <span class="sensor-dot" aria-hidden="true"></span>
                   <span class="power-lamp" aria-hidden="true"></span>
+                  <button id="aspectButton" class="tv-action" type="button" aria-label="Cambiar proporción de la TV a 4:3" title="Cambiar proporción">16:9</button>
+                  <button id="exitButton" class="tv-action" type="button" hidden aria-label="Salir de la actividad" title="Salir de la actividad">Salir</button>
                   <button id="audioButton" class="physical-button" hidden title="Activar audio" aria-label="Activar audio">🔊</button>
                   <button id="retryButton" class="physical-button" hidden title="Reconectar" aria-label="Reconectar">↻</button>
                 </div>
