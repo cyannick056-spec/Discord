@@ -1,41 +1,527 @@
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #f4f6fb;
-  background: #0d0f14;
+  background: #0b0c10;
   font-synthesis: none;
+  --bg: #0b0c10;
+  --panel: rgba(24, 25, 31, .72);
+  --tv-body: #d8d2c5;
+  --tv-body-dark: #b9b1a3;
+  --tv-edge: #80796e;
+  --bezel: #2a2927;
+  --glass: #050607;
+  --accent: #d59aae;
+  --accent-soft: #f0becd;
+  --osd: #e9f5ee;
 }
 
 * { box-sizing: border-box; }
-
 html, body, #app { margin: 0; width: 100%; min-height: 100%; }
-body { min-height: 100vh; background: radial-gradient(circle at top, #181d2b 0, #0d0f14 48%); }
+html, body { background: var(--bg); }
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(77, 67, 91, .22), transparent 36%),
+    linear-gradient(180deg, #111217 0%, #0b0c10 58%, #090a0d 100%);
+}
+button { font: inherit; }
+button[hidden] { display: none !important; }
 
-#app { padding: 20px; }
-.topbar { max-width: 1400px; margin: 0 auto 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.eyebrow { color: #9299ff; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
-h1 { margin: 3px 0 0; font-size: clamp(20px, 4vw, 32px); }
-.badge { border: 1px solid #343b4d; background: #1a1f2a; color: #aeb7c7; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; }
-.badge.live { border-color: #3a7d5c; background: #173528; color: #71e6a5; }
+#app { min-height: 100vh; }
+.stage {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: clamp(14px, 3vw, 34px);
+}
 
-main { max-width: 1400px; margin: 0 auto; }
-.player { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 18px; border: 1px solid #282e3c; background: #07080b; box-shadow: 0 22px 60px #0008; }
-.video-mount, .video-mount video { width: 100%; height: 100%; }
-.video-mount video { display: block; object-fit: contain; background: #000; }
-.empty-state { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #eef1f8; text-align: center; padding: 20px; }
-.empty-state span { color: #858ea0; max-width: 540px; }
-.controller { font-size: 44px; margin-bottom: 4px; }
+.tv-scene {
+  position: relative;
+  width: min(1120px, 96vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  isolation: isolate;
+}
 
-.controls { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 2px; }
-.status { font-weight: 750; }
-.substatus { color: #838c9e; font-size: 12px; margin-top: 3px; }
-.buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-button { border: 1px solid #353c4d; border-radius: 10px; background: #1a1f2a; color: #f4f6fb; padding: 9px 12px; cursor: pointer; font: inherit; }
-button:hover { background: #242a38; }
-button[hidden] { display: none; }
+.tv-scene::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  width: 84%;
+  height: 58%;
+  top: 12%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(178, 145, 164, .12), transparent 66%);
+  filter: blur(20px);
+}
 
-@media (max-width: 720px) {
-  #app { padding: 12px; }
-  .controls { align-items: flex-start; flex-direction: column; }
-  .buttons { justify-content: flex-start; }
-  .player { border-radius: 12px; }
+.antenna {
+  position: relative;
+  width: 170px;
+  height: 58px;
+  margin-bottom: -15px;
+  z-index: 0;
+  pointer-events: none;
+}
+.antenna span {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 7px;
+  height: 72px;
+  border-radius: 999px;
+  transform-origin: bottom center;
+  background: linear-gradient(90deg, #6f6d69, #c4c1bb 42%, #787671 75%);
+  box-shadow: 0 0 0 1px #4d4b48;
+}
+.antenna-left { transform: translateX(-50%) rotate(-29deg); }
+.antenna-right { transform: translateX(-50%) rotate(29deg); }
+.antenna span::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: #8f8b84;
+  border: 1px solid #5c5954;
+}
+
+.tv-shell {
+  position: relative;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(88px, 11vw, 132px);
+  gap: clamp(10px, 1.4vw, 18px);
+  align-items: center;
+  padding: clamp(16px, 2.3vw, 28px);
+  border-radius: clamp(30px, 4vw, 54px);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.22), transparent 16%),
+    linear-gradient(145deg, #ded9cd 0%, #d4cec0 52%, #c5beaf 100%);
+  border: 1px solid #8f897e;
+  box-shadow:
+    0 34px 70px rgba(0, 0, 0, .55),
+    inset 0 0 0 2px rgba(255,255,255,.12),
+    inset 0 -10px 24px rgba(95, 87, 73, .18);
+}
+
+.screen-bezel {
+  position: relative;
+  min-width: 0;
+  padding: clamp(8px, 1.3vw, 14px);
+  border-radius: clamp(24px, 3vw, 42px);
+  background: linear-gradient(145deg, #2f2e2b, #1e1f1e);
+  box-shadow:
+    inset 0 0 0 2px #171817,
+    inset 0 0 0 5px rgba(255,255,255,.035),
+    0 6px 14px rgba(0,0,0,.28);
+}
+
+.player {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: clamp(18px, 2.5vw, 34px) / clamp(14px, 2vw, 28px);
+  background: #020303;
+  box-shadow:
+    inset 0 0 26px rgba(0,0,0,.9),
+    0 0 0 1px rgba(255,255,255,.04);
+}
+
+.video-mount,
+.video-mount video {
+  width: 100%;
+  height: 100%;
+}
+.video-mount video {
+  display: block;
+  object-fit: contain;
+  background: #000;
+  filter: saturate(.98) contrast(1.02) brightness(.99);
+}
+
+.empty-state {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--osd);
+  background: #050606;
+}
+.noise {
+  position: absolute;
+  inset: -30%;
+  opacity: .15;
+  background-image:
+    repeating-radial-gradient(circle at 35% 45%, #fff 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.08) 3px 4px);
+  background-size: 9px 9px, 100% 4px;
+  animation: staticShift .16s steps(2, end) infinite;
+}
+.no-signal-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+  text-align: center;
+  font-family: "Courier New", monospace;
+  text-shadow: 0 1px 4px #000;
+}
+.no-signal-copy strong { font-size: clamp(13px, 2vw, 23px); letter-spacing: .12em; }
+.no-signal-copy span { font-size: clamp(9px, 1vw, 13px); opacity: .75; }
+
+.crt-overlay,
+.screen-glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.crt-overlay {
+  opacity: .28;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,.28) 100%);
+  mix-blend-mode: soft-light;
+}
+.screen-glare {
+  background:
+    linear-gradient(115deg, rgba(255,255,255,.08), transparent 22% 76%, rgba(255,255,255,.025)),
+    radial-gradient(circle at 27% 10%, rgba(255,255,255,.07), transparent 28%);
+}
+
+.osd {
+  position: absolute;
+  z-index: 4;
+  left: clamp(10px, 1.6vw, 18px);
+  right: clamp(10px, 1.6vw, 18px);
+  display: flex;
+  align-items: center;
+  font-family: "Courier New", monospace;
+  color: var(--osd);
+  text-shadow: 0 1px 3px #000, 0 0 6px rgba(211,255,226,.2);
+  pointer-events: none;
+}
+.osd-top {
+  top: clamp(8px, 1.4vw, 16px);
+  justify-content: space-between;
+  font-size: clamp(9px, 1.2vw, 14px);
+  letter-spacing: .08em;
+}
+.osd-channel,
+.osd-state {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(0,0,0,.24);
+}
+.osd-state.live::before {
+  content: "● ";
+  color: #d8f2dc;
+  font-size: .8em;
+}
+.osd-bottom {
+  bottom: clamp(8px, 1.3vw, 15px);
+  justify-content: space-between;
+  gap: 10px;
+  font-size: clamp(8px, 1vw, 12px);
+}
+.osd-status {
+  max-width: 72%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(0,0,0,.22);
+}
+.osd-room {
+  opacity: .58;
+  max-width: 30%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tv-console {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.2vw, 14px);
+  min-width: 0;
+  color: #625c54;
+}
+.brand-slot {
+  font-family: "Courier New", monospace;
+  font-size: clamp(7px, .8vw, 10px);
+  letter-spacing: .22em;
+  color: #6f695f;
+  opacity: .72;
+}
+.channel-knob,
+.volume-knob {
+  position: relative;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 28%, #ece7dc 0 8%, transparent 9%),
+    conic-gradient(from 20deg, #c3bcaf, #e8e3d7, #a9a194, #d6d0c4, #b7afa2);
+  border: 2px solid #716a61;
+  box-shadow: 0 4px 8px rgba(0,0,0,.22), inset 0 0 0 2px rgba(255,255,255,.2);
+}
+.channel-knob { width: clamp(54px, 6.5vw, 80px); aspect-ratio: 1; }
+.volume-knob { width: clamp(33px, 4.2vw, 48px); aspect-ratio: 1; }
+.channel-knob span,
+.volume-knob span {
+  position: absolute;
+  left: 50%;
+  top: 10%;
+  width: 2px;
+  height: 38%;
+  transform: translateX(-50%) rotate(34deg);
+  transform-origin: bottom;
+  background: #655e56;
+  border-radius: 999px;
+}
+.console-buttons { display: flex; gap: clamp(4px, .55vw, 7px); }
+.console-buttons i {
+  width: clamp(10px, 1.35vw, 16px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #afa79a;
+  border: 1px solid #716a60;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.35);
+}
+.speaker-grille {
+  width: 74%;
+  display: grid;
+  gap: clamp(3px, .5vw, 6px);
+  margin-top: clamp(2px, .4vw, 6px);
+}
+.speaker-grille i {
+  display: block;
+  height: clamp(2px, .35vw, 4px);
+  border-radius: 999px;
+  background: #5e5951;
+  opacity: .82;
+}
+.power-lamp {
+  width: clamp(9px, 1.3vw, 15px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #b95339;
+  box-shadow: 0 0 0 2px #8e7f6c, 0 0 9px rgba(201, 77, 48, .35);
+}
+
+.sticker {
+  position: absolute;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  color: #242129;
+  font-weight: 900;
+  line-height: 1;
+  user-select: none;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.18));
+}
+.sticker-mark { font-size: 1.18em; }
+.sticker-copy { font-size: .36em; margin-top: 2px; letter-spacing: .04em; }
+.sticker-moon {
+  left: clamp(4px, .7vw, 10px);
+  top: clamp(18px, 2.4vw, 31px);
+  width: clamp(35px, 4.6vw, 53px);
+  aspect-ratio: 1;
+  border-radius: 52% 48% 50% 44%;
+  transform: rotate(-8deg);
+  background: #f4d3dc;
+  border: 2px solid #8a6a7b;
+  color: #6a4861;
+}
+.sticker-ranma {
+  left: clamp(7px, .9vw, 13px);
+  bottom: clamp(23px, 3vw, 40px);
+  width: clamp(38px, 5vw, 58px);
+  height: clamp(28px, 3.7vw, 42px);
+  border-radius: 9px;
+  transform: rotate(5deg);
+  background: #f6e4de;
+  border: 2px solid #a96c6a;
+  color: #9a4649;
+}
+.sticker-db {
+  right: clamp(70px, 9vw, 112px);
+  bottom: clamp(8px, 1.2vw, 16px);
+  width: clamp(32px, 4vw, 46px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #e8a13a;
+  border: 2px solid #7d4e20;
+  color: #6e291f;
+}
+
+.tv-feet {
+  position: relative;
+  z-index: -1;
+  width: 76%;
+  height: 22px;
+  margin-top: -7px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10%;
+}
+.tv-feet span {
+  width: 13%;
+  height: 18px;
+  border-radius: 0 0 12px 12px;
+  background: #777168;
+  box-shadow: 0 5px 10px rgba(0,0,0,.35);
+}
+
+.tv-scene::after {
+  content: "";
+  position: absolute;
+  z-index: -3;
+  width: 72%;
+  height: 32px;
+  bottom: 54px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.58);
+  filter: blur(14px);
+}
+
+.floating-controls {
+  margin-top: clamp(16px, 2.5vw, 28px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 999px;
+  background: rgba(29, 30, 36, .66);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 12px 28px rgba(0,0,0,.32);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.control-button {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 50%;
+  background: rgba(255,255,255,.055);
+  color: #f4f5f7;
+  cursor: pointer;
+  transition: transform .16s ease, background .16s ease, border-color .16s ease;
+  font-size: 20px;
+}
+.control-button:hover {
+  transform: translateY(-1px);
+  background: rgba(255,255,255,.095);
+  border-color: rgba(255,255,255,.15);
+}
+.control-button:active { transform: translateY(0) scale(.96); }
+.control-primary { background: rgba(213,154,174,.13); border-color: rgba(213,154,174,.28); }
+
+#audioMount { display: none; }
+
+@keyframes staticShift {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(2%, -1%); }
+  100% { transform: translate(-1%, 2%); }
+}
+
+/* Tablet / portrait Activity */
+@media (max-width: 760px) {
+  .stage { padding: 12px; align-items: start; padding-top: max(16px, env(safe-area-inset-top)); }
+  .tv-scene { width: min(100%, 680px); margin-top: 7vh; }
+  .tv-shell {
+    grid-template-columns: minmax(0, 1fr) 74px;
+    gap: 9px;
+    padding: 14px;
+    border-radius: 28px;
+  }
+  .screen-bezel { padding: 8px; border-radius: 22px; }
+  .player { border-radius: 16px / 13px; }
+  .tv-console { gap: 7px; }
+  .brand-slot { display: none; }
+  .channel-knob { width: 48px; }
+  .volume-knob { width: 31px; }
+  .speaker-grille { width: 70%; gap: 3px; }
+  .sticker-copy { display: none; }
+  .floating-controls { margin-top: 18px; }
+}
+
+/* The Discord call-grid tile can shrink the Activity to a small square. */
+@media (max-width: 420px), (max-height: 360px) {
+  body { overflow: hidden; }
+  .stage {
+    min-height: 100vh;
+    height: 100vh;
+    padding: 6px;
+    place-items: center;
+  }
+  .tv-scene {
+    width: min(96vw, 96vh, 380px);
+    margin: 0;
+  }
+  .antenna { display: none; }
+  .tv-shell {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 5px;
+    padding: 8px;
+    border-radius: 18px;
+    box-shadow: 0 12px 28px rgba(0,0,0,.48), inset 0 0 0 1px rgba(255,255,255,.1);
+  }
+  .screen-bezel { padding: 5px; border-radius: 14px; }
+  .player { border-radius: 10px / 8px; }
+  .tv-console { gap: 4px; }
+  .brand-slot, .console-buttons { display: none; }
+  .channel-knob { width: 28px; border-width: 1px; }
+  .volume-knob { width: 18px; border-width: 1px; }
+  .speaker-grille { width: 74%; gap: 2px; }
+  .speaker-grille i { height: 2px; }
+  .power-lamp { width: 6px; box-shadow: 0 0 0 1px #8e7f6c; }
+  .sticker { transform: scale(.64); transform-origin: center; }
+  .sticker-moon { left: -5px; top: 4px; }
+  .sticker-ranma { display: none; }
+  .sticker-db { right: 31px; bottom: -2px; }
+  .osd-bottom, .osd-room { display: none; }
+  .osd-top { top: 5px; left: 6px; right: 6px; font-size: 6px; }
+  .osd-channel, .osd-state { padding: 1px 3px; }
+  .crt-overlay { opacity: .18; }
+  .floating-controls, .tv-feet { display: none; }
+  .tv-scene::after { bottom: -7px; height: 14px; }
+}
+
+/* Very tiny Discord tiles: show almost only the TV and gameplay. */
+@media (max-width: 260px), (max-height: 230px) {
+  .stage { padding: 3px; }
+  .tv-scene { width: min(99vw, 99vh); }
+  .tv-shell { grid-template-columns: 1fr 30px; padding: 5px; gap: 3px; border-radius: 12px; }
+  .screen-bezel { padding: 3px; border-radius: 9px; }
+  .tv-console { gap: 2px; }
+  .channel-knob { width: 19px; }
+  .volume-knob { width: 12px; }
+  .speaker-grille { gap: 1px; }
+  .speaker-grille i { height: 1px; }
+  .power-lamp { width: 4px; }
+  .sticker { display: none; }
+  .osd-state { display: none; }
+  .osd-top { justify-content: flex-start; font-size: 5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .noise { animation: none; }
+  .control-button { transition: none; }
 }
