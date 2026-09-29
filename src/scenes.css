@@ -581,12 +581,12 @@
   height: clamp(42px, 4.6vw, 72px);
   background-size: contain;
   background-position: center;
-  filter: drop-shadow(0 1px 2px #000b);
+  filter: brightness(.78) saturate(.8) drop-shadow(0 2px 3px #000d);
 }
-.home-mode .sticker-ball { background-image: url('/stickers/ranma.webp'); }
-.home-mode .sticker-ranma { background-image: url('/stickers/sailor-happy.webp'); }
-.home-mode .sticker-sailor-face { background-image: url('/stickers/sailor-tongue.webp'); }
-.home-mode .sticker-sailor-happy { background-image: url('/stickers/dragonball.webp'); }
+.home-mode .sticker-ball { background-image: url('/stickers/cris-ranma.png'); }
+.home-mode .sticker-ranma { background-image: url('/stickers/cris-sailor-happy.png'); }
+.home-mode .sticker-sailor-face { background-image: url('/stickers/cris-sailor-tongue.png'); }
+.home-mode .sticker-sailor-happy { background-image: url('/stickers/cris-sailor-sleepy.png'); }
 
 .n64-display { display: none; pointer-events: none; user-select: none; }
 @media (orientation: portrait) and (min-height: 430px) {
@@ -607,11 +607,11 @@
     position: absolute;
     z-index: 8;
     left: 50%;
-    top: 72%;
-    width: min(82vw, 360px);
+    top: 61.5%;
+    width: min(68vw, 270px);
     height: auto;
     transform: translateX(-50%);
-    filter: brightness(.7) drop-shadow(0 8px 8px #000b);
+    filter: brightness(.64) drop-shadow(0 5px 6px #000b);
   }
   .arcade-screen {
     top: 17.1%;
@@ -623,15 +623,17 @@
 @media (orientation: landscape) and (min-height: 361px) {
   .home-mode .tv-scene,
   .home-mode .tv-scene.aspect-4x3 {
-    width: max(112vw, calc(112dvh * 1672 / 941));
+    width: max(105vw, calc(105dvh * 1672 / 941));
   }
-  .arcade-art {
-    top: calc(50% - min(69vw, 146dvh));
-    width: min(104vw, 220dvh);
-  }
+  .arcade-art { display: none; }
   .arcade-screen {
-    width: min(81.5vw, 172.5dvh);
-    height: min(48vw, 102dvh);
+    left: calc(50% + 34px);
+    top: 50%;
+    width: min(calc(100vw - 128px), calc(94dvh * 16 / 9));
+    height: auto;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    box-shadow: 0 0 0 2px #232b32, 0 0 30px rgba(36, 91, 112, .17);
   }
 }
 .arcade-screen .video-mount video { object-fit: cover; }
