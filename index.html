@@ -9,80 +9,92 @@
   <body>
     <div id="app">
       <main class="stage" aria-label="Transmisión de Switch">
-        <div class="tv-scene">
-          <div class="antenna" aria-hidden="true">
-            <span class="antenna-left"></span>
-            <span class="antenna-right"></span>
+        <div class="room-scene">
+          <div class="tv-scene">
+            <section class="tv-shell" aria-label="Televisor retro gris">
+              <div class="sticker sticker-sailor" aria-hidden="true">
+                <span class="sailor-buns"><i></i><i></i></span>
+                <span class="sailor-moon">☾</span>
+                <small>SAILOR</small>
+              </div>
+
+              <div class="sticker sticker-ranma" aria-hidden="true">
+                <span class="ranma-face">👩🏻‍🦰</span>
+                <small>½</small>
+              </div>
+
+              <div class="sticker sticker-goku" aria-hidden="true">
+                <span>悟</span>
+              </div>
+
+              <div class="sticker sticker-balls" aria-hidden="true">
+                <i class="ball ball-1">★</i>
+                <i class="ball ball-2">★★</i>
+                <i class="ball ball-4">★★★★</i>
+              </div>
+
+              <div class="screen-column">
+                <div class="screen-bezel">
+                  <section id="player" class="player">
+                    <div id="emptyState" class="empty-state">
+                      <div class="noise" aria-hidden="true"></div>
+                      <div class="no-signal-copy">
+                        <strong>SIN SEÑAL</strong>
+                        <span>AV1</span>
+                      </div>
+                    </div>
+
+                    <div id="videoMount" class="video-mount"></div>
+                    <div class="crt-overlay" aria-hidden="true"></div>
+                    <div class="screen-glare" aria-hidden="true"></div>
+
+                    <div class="osd osd-top">
+                      <span class="osd-channel">AV1</span>
+                      <span id="liveBadge" class="osd-state">STANDBY</span>
+                    </div>
+
+                    <div class="osd osd-bottom">
+                      <span id="statusText" class="osd-status">CONECTANDO…</span>
+                      <span id="roomText" class="osd-room"></span>
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              <aside class="tv-console" aria-label="Controles del televisor">
+                <div class="speaker speaker-top" aria-hidden="true"></div>
+                <div class="channel-knob" aria-hidden="true"><span></span></div>
+                <div class="volume-knob" aria-hidden="true"><span></span></div>
+                <div class="console-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+                <div class="speaker speaker-bottom" aria-hidden="true"></div>
+                <div class="power-row">
+                  <span class="power-lamp" aria-hidden="true"></span>
+                  <button id="audioButton" class="physical-button" hidden title="Activar audio" aria-label="Activar audio">🔊</button>
+                  <button id="retryButton" class="physical-button" hidden title="Reconectar" aria-label="Reconectar">↻</button>
+                </div>
+              </aside>
+            </section>
+
+            <div class="tv-feet" aria-hidden="true"><span></span><span></span></div>
           </div>
 
-          <section class="tv-shell" aria-label="Televisor retro">
-            <div class="sticker sticker-moon" aria-hidden="true">
-              <span class="sticker-mark">☾</span>
-              <span class="sticker-copy">SAILOR</span>
-            </div>
-            <div class="sticker sticker-ranma" aria-hidden="true">
-              <span class="sticker-mark">½</span>
-              <span class="sticker-copy">RANMA</span>
-            </div>
-            <div class="sticker sticker-db" aria-hidden="true">
-              <span class="sticker-mark">★</span>
-              <span class="sticker-copy">DB</span>
-            </div>
-
-            <div class="screen-bezel">
-              <section id="player" class="player">
-                <div id="emptyState" class="empty-state">
-                  <div class="noise" aria-hidden="true"></div>
-                  <div class="no-signal-copy">
-                    <strong>SIN SEÑAL</strong>
-                    <span>AV1</span>
-                  </div>
+          <section class="retro-table" aria-label="Mesa retro con Nintendo 64">
+            <div class="table-top">
+              <div class="n64" aria-label="Nintendo 64 decorativa">
+                <div class="n64-cart"><span>N64</span></div>
+                <div class="n64-body">
+                  <span class="n64-logo">N</span>
+                  <i class="n64-port p1"></i><i class="n64-port p2"></i><i class="n64-port p3"></i><i class="n64-port p4"></i>
+                  <i class="n64-led"></i>
                 </div>
-
-                <div id="videoMount" class="video-mount"></div>
-
-                <div class="crt-overlay" aria-hidden="true"></div>
-                <div class="screen-glare" aria-hidden="true"></div>
-
-                <div class="osd osd-top">
-                  <span class="osd-channel">AV1</span>
-                  <span id="liveBadge" class="osd-state">STANDBY</span>
-                </div>
-
-                <div class="osd osd-bottom">
-                  <div id="statusText" class="osd-status">CONECTANDO…</div>
-                  <div id="roomText" class="osd-room"></div>
-                </div>
-              </section>
-            </div>
-
-            <aside class="tv-console" aria-hidden="true">
-              <div class="brand-slot">COLOR</div>
-              <div class="channel-knob"><span></span></div>
-              <div class="volume-knob"><span></span></div>
-              <div class="console-buttons">
-                <i></i><i></i><i></i>
               </div>
-              <div class="speaker-grille">
-                <i></i><i></i><i></i><i></i><i></i><i></i>
+              <div class="n64-controller" aria-hidden="true">
+                <i class="handle left"></i><i class="handle center"></i><i class="handle right"></i>
+                <span class="stick"></span><span class="a-button">A</span><span class="b-button">B</span>
               </div>
-              <div class="power-lamp"></div>
-            </aside>
+            </div>
+            <div class="table-legs" aria-hidden="true"><span></span><span></span></div>
           </section>
-
-          <div class="tv-feet" aria-hidden="true"><span></span><span></span></div>
-
-          <nav class="floating-controls" aria-label="Controles de reproducción">
-            <button id="audioButton" class="control-button" hidden title="Activar audio" aria-label="Activar audio">
-              <span aria-hidden="true">🔊</span>
-            </button>
-            <button id="retryButton" class="control-button" hidden title="Reconectar" aria-label="Reconectar">
-              <span aria-hidden="true">↻</span>
-            </button>
-            <button id="fullscreenButton" class="control-button control-primary" title="Pantalla completa" aria-label="Pantalla completa">
-              <span aria-hidden="true">⛶</span>
-            </button>
-          </nav>
         </div>
 
         <div id="audioMount" aria-hidden="true"></div>
