@@ -389,7 +389,10 @@
   .home-mode .tv-scene.aspect-4x3 { bottom: 69.2%; }
 }
 @media (orientation: landscape) and (min-height: 361px) {
-  .stage.home-mode { background: #090e16 url('/den-landscape.webp') center / cover no-repeat; }
+  .stage.home-mode {
+    background: #090e16 url('/den-landscape-seated.webp') center top / auto 112% no-repeat;
+  }
+  .stage.home-mode:has(.aspect-4x3) { background-size: auto 109%; }
   .stage.arcade-mode {
     background:
       radial-gradient(ellipse at 50% 56%, #172733 0%, #0a111a 61%, #04070b 100%);
