@@ -1,6 +1,7 @@
 import { DiscordSDK, RPCCloseCodes } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import './style.css';
+import './scenes.css';
 
 type AppConfig = {
   discordClientId: string;
@@ -24,6 +25,12 @@ const retryButton = document.querySelector<HTMLButtonElement>('#retryButton')!;
 const tvScene = document.querySelector<HTMLDivElement>('#tvScene')!;
 const aspectButton = document.querySelector<HTMLButtonElement>('#aspectButton')!;
 const exitButton = document.querySelector<HTMLButtonElement>('#exitButton')!;
+const stage = document.querySelector<HTMLElement>('#stage')!;
+const player = document.querySelector<HTMLElement>('#player')!;
+const homeScreenMount = document.querySelector<HTMLDivElement>('#homeScreenMount')!;
+const arcadeScene = document.querySelector<HTMLDivElement>('#arcadeScene')!;
+const arcadeScreen = document.querySelector<HTMLDivElement>('#arcadeScreen')!;
+const modeButton = document.querySelector<HTMLButtonElement>('#modeButton')!;
 
 let room: Room | null = null;
 let config: AppConfig | null = null;
@@ -43,6 +50,25 @@ function setAspect(mode: AspectMode) {
   try { localStorage.setItem('shis-tv-aspect', mode); } catch { /* Session-only fallback. */ }
 }
 setAspect(aspectMode);
+
+type SceneMode = 'home' | 'arcade';
+let sceneMode: SceneMode = 'home';
+try {
+  if (localStorage.getItem('shis-scene') === 'arcade') sceneMode = 'arcade';
+} catch { /* Session-only fallback. */ }
+
+function setScene(mode: SceneMode) {
+  sceneMode = mode;
+  stage.classList.toggle('home-mode', mode === 'home');
+  stage.classList.toggle('arcade-mode', mode === 'arcade');
+  arcadeScene.hidden = mode !== 'arcade';
+  (mode === 'arcade' ? arcadeScreen : homeScreenMount).appendChild(player);
+  modeButton.textContent = mode === 'arcade' ? 'Casa' : 'Arcade';
+  modeButton.setAttribute('aria-label', mode === 'arcade' ? 'Cambiar a modo casa' : 'Cambiar a modo arcade');
+  videoMount.querySelector('video')?.play().catch(() => {});
+  try { localStorage.setItem('shis-scene', mode); } catch { /* Session-only fallback. */ }
+}
+setScene(sceneMode);
 
 function isInsideDiscord() {
   const params = new URLSearchParams(window.location.search);
@@ -156,6 +182,7 @@ async function boot() {
   }
 }
 
+modeButton.addEventListener('click', () => setScene(sceneMode === 'home' ? 'arcade' : 'home'));
 aspectButton.addEventListener('click', () => setAspect(aspectMode === '4:3' ? '16:9' : '4:3'));
 exitButton.addEventListener('click', () => discordSdk?.close(RPCCloseCodes.CLOSE_NORMAL, 'Salió de Shis Stream'));
 
