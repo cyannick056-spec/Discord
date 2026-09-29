@@ -266,3 +266,83 @@
 @media (orientation: landscape) and (min-height: 361px) {
   .home-mode .tv-scene.aspect-4x3 { width: min(88vw, calc(90dvh * 1.25)); }
 }
+
+/* Physical contact: both TV feet land on the alcove's front shelf edge. */
+@media (orientation: portrait) and (min-height: 430px) {
+  .home-mode .tv-scene,
+  .home-mode .tv-scene.aspect-4x3 { bottom: 65.2%; }
+  .scene-controls {
+    bottom: max(145px, calc(env(safe-area-inset-bottom) + 140px));
+  }
+}
+@media (orientation: landscape) and (min-height: 361px) {
+  .stage.home-mode,
+  .stage.arcade-mode {
+    background: #0b1018 url('/game-room-landscape.webp') center / cover no-repeat;
+  }
+  .scene-controls {
+    left: max(12px, env(safe-area-inset-left));
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 10px;
+  }
+  /* Crop the already-generated upright cabinet around its real screen aperture. */
+  .arcade-scene { left: 0; width: 100vw; height: 100dvh; transform: none; }
+  .arcade-art {
+    position: absolute;
+    left: 50%;
+    top: calc(50% - min(62.4vw, 132.8dvh));
+    width: min(94vw, 200dvh);
+    height: auto;
+    max-width: none;
+    transform: translateX(-50%);
+    object-fit: contain;
+  }
+  .arcade-screen {
+    left: 50%;
+    top: 50%;
+    width: min(73.7vw, 156.8dvh);
+    height: min(43.47vw, 92.5dvh);
+    transform: translate(-50%, -50%);
+    border-radius: 1%;
+    box-shadow: 0 0 0 3px #111820, 0 0 22px rgba(44,112,143,.19);
+  }
+}
+/* Round scene controls remain legible without taking space from the picture. */
+.scene-controls button,
+.scene-controls #exitButton {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 50px;
+  width: 50px;
+  height: 50px;
+  min-height: 50px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0;
+  line-height: 1;
+  text-align: center;
+  white-space: normal;
+  background: rgba(20, 27, 34, .9);
+  border-color: rgba(173, 191, 202, .55);
+  backdrop-filter: blur(4px);
+}
+.scene-controls button::before { display: block; font: 600 19px/1 system-ui, sans-serif; }
+.scene-controls button::after { display: block; margin-top: 2px; font: 600 8px/1 system-ui, sans-serif; letter-spacing: .02em; }
+#modeButton::before { content: "▣"; }
+#modeButton::after { content: "Arcade"; }
+.stage.arcade-mode #modeButton::before { content: "⌂"; font-size: 22px; }
+.stage.arcade-mode #modeButton::after { content: "Casa"; }
+#filterButton::before { content: "CRT"; font-size: 13px; letter-spacing: .04em; }
+#filterButton::after { content: "Retro"; }
+#exitButton::before { content: "×"; font-size: 24px; }
+#exitButton::after { content: "Salir"; }
+#retryButton::before { content: "↻"; }
+#retryButton::after { content: "Reintentar"; font-size: 7px; }
+#audioButton::before { content: "♪"; }
+#audioButton::after { content: "Audio"; }
