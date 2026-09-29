@@ -10,6 +10,7 @@
     <div id="app">
       <main id="stage" class="stage home-mode" aria-label="Transmisión de Switch">
         <div class="room-scene">
+          <div id="ambientGlow" class="ambient-glow" aria-hidden="true"></div>
           <img class="home-wall-unit" src="/den-portrait.webp" alt="" aria-hidden="true" />
           <div id="tvScene" class="tv-scene">
             <section class="tv-shell" aria-label="Televisor CRT de grafito">
@@ -21,7 +22,7 @@
                 <div id="homeScreenMount" class="screen-wrap">
                   <section id="player" class="player">
                     <div id="emptyState" class="empty-state">
-                      <div class="noise" aria-hidden="true"></div>
+                      <canvas id="staticNoise" class="noise" width="320" height="180" aria-hidden="true"></canvas>
                       <div class="no-signal-copy">
                         <strong>SIN SEÑAL</strong>
                         <span>AV1</span>
@@ -56,12 +57,6 @@
                   <span class="power-lamp" aria-hidden="true"></span>
                 </div>
 
-                <div class="sticker-layer" aria-hidden="true">
-                  <div class="sticker sticker-ball"></div>
-                  <div class="sticker sticker-ranma"></div>
-                  <div class="sticker sticker-sailor-face"></div>
-                  <div class="sticker sticker-sailor-happy"></div>
-                </div>
               </div>
             </section>
           </div>
@@ -72,13 +67,20 @@
             <img class="arcade-art" src="/arcade-silver-black.webp" alt="" aria-hidden="true" />
             <div id="arcadeScreen" class="arcade-screen"></div>
           </div>
+          <div id="decorationLayer" class="decoration-layer" aria-hidden="true"></div>
         </div>
 
         <nav class="scene-controls" aria-label="Controles de la actividad">
-          <button id="modeButton" type="button" aria-label="Cambiar a modo arcade">Arcade</button>
-          <button id="aspectButton" type="button" aria-label="Cambiar proporción de la TV a 4:3" title="Cambiar tamaño de la TV">16:9</button>
-          <button id="filterButton" type="button" aria-pressed="false" title="Activar efecto de TV antigua">TV retro</button>
-          <button id="smoothingButton" type="button" aria-pressed="false" title="Suavizar bordes dentados">Bordes</button>
+          <div id="settingsControl" class="settings-control">
+            <button id="settingsButton" type="button" aria-label="Abrir ajustes" aria-expanded="false" aria-controls="settingsPanel" title="Ajustes">Ajustes</button>
+            <div id="settingsPanel" class="settings-panel" hidden>
+              <button id="modeButton" type="button" aria-label="Cambiar a modo arcade">Arcade</button>
+              <button id="aspectButton" type="button" aria-label="Cambiar proporción de la TV a 4:3" title="Cambiar tamaño de la TV">16:9</button>
+              <button id="filterButton" type="button" aria-pressed="false" title="Activar efecto de TV antigua">TV retro</button>
+              <button id="smoothingButton" type="button" aria-pressed="false" title="Suavizar bordes dentados">Bordes</button>
+              <button id="editorButton" type="button" title="Editar decoración">Decorar</button>
+            </div>
+          </div>
           <div class="volume-control" id="volumeControl">
             <button id="volumeButton" type="button" aria-label="Abrir volumen" aria-expanded="false" aria-controls="volumePanel" title="Volumen">Volumen</button>
             <div id="volumePanel" class="volume-panel" hidden>
@@ -90,6 +92,43 @@
           <button id="retryButton" type="button" hidden title="Reconectar">↻</button>
           <button id="exitButton" type="button" hidden title="Salir de la actividad">Salir</button>
         </nav>
+        <section id="decorEditor" class="decor-editor" role="dialog" aria-modal="true" aria-label="Editor de decoración" hidden>
+          <header class="editor-header">
+            <strong>Decorar Shis Stream</strong>
+            <button id="editorClose" type="button" aria-label="Cerrar editor">×</button>
+          </header>
+          <div id="editorAuth" class="editor-auth">
+            <p>Introduce tu clave de edición para cambiar la decoración compartida.</p>
+            <label>Clave <input id="editorKey" type="password" autocomplete="off" /></label>
+            <button id="editorUnlock" type="button">Entrar al editor</button>
+          </div>
+          <div id="editorWorkspace" class="editor-workspace" hidden>
+            <div class="editor-toolbar">
+              <label>Escena <select id="editorScene"><option value="home">Casa</option><option value="arcade">Arcade</option></select></label>
+              <label>Vista <select id="editorView"><option value="landscape">Horizontal</option><option value="portrait">Vertical</option><option value="window">Ventana</option></select></label>
+              <label class="editor-upload">Añadir imagen<input id="editorUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /></label>
+            </div>
+            <div class="editor-body">
+              <div id="previewFrame" class="preview-frame"><iframe id="editorPreview" title="Vista previa para colocar decoración"></iframe></div>
+              <div class="editor-sidebar">
+                <label>Decoración <select id="editorItem" size="5" aria-label="Seleccionar decoración"></select></label>
+                <div id="editorProperties" class="editor-properties" hidden>
+                  <label>Izquierda % <input id="decorX" type="number" min="0" max="100" step="0.1" /></label>
+                  <label>Arriba % <input id="decorY" type="number" min="0" max="100" step="0.1" /></label>
+                  <label>Ancho % <input id="decorWidth" type="number" min="1" max="80" step="0.1" /></label>
+                  <label>Giro ° <input id="decorRotation" type="number" min="-180" max="180" step="1" /></label>
+                  <label>Opacidad % <input id="decorOpacity" type="number" min="0" max="100" step="1" /></label>
+                  <label>Capa <input id="decorZ" type="number" min="0" max="99" step="1" /></label>
+                  <label class="editor-check"><input id="decorHidden" type="checkbox" /> Ocultar en esta vista</label>
+                  <button id="decorCopy" type="button">Copiar a las otras vistas</button>
+                  <button id="decorRemove" type="button">Quitar decoración</button>
+                </div>
+                <button id="editorSave" type="button">Guardar para todos</button>
+                <span id="editorStatus" role="status"></span>
+              </div>
+            </div>
+          </div>
+        </section>
         <div id="audioMount" aria-hidden="true"></div>
       </main>
     </div>

@@ -1,5 +1,6 @@
 import { DiscordSDK, RPCCloseCodes } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
+import { initDecorations } from './decorations';
 import './style.css';
 import './scenes.css';
 
@@ -20,6 +21,7 @@ const liveBadge = document.querySelector<HTMLSpanElement>('#liveBadge')!;
 const videoMount = document.querySelector<HTMLDivElement>('#videoMount')!;
 const audioMount = document.querySelector<HTMLDivElement>('#audioMount')!;
 const emptyState = document.querySelector<HTMLDivElement>('#emptyState')!;
+const staticNoise = document.querySelector<HTMLCanvasElement>('#staticNoise')!;
 const audioButton = document.querySelector<HTMLButtonElement>('#audioButton')!;
 const retryButton = document.querySelector<HTMLButtonElement>('#retryButton')!;
 const tvScene = document.querySelector<HTMLDivElement>('#tvScene')!;
@@ -32,6 +34,9 @@ const arcadeScene = document.querySelector<HTMLDivElement>('#arcadeScene')!;
 const arcadeScreen = document.querySelector<HTMLDivElement>('#arcadeScreen')!;
 const modeButton = document.querySelector<HTMLButtonElement>('#modeButton')!;
 const filterButton = document.querySelector<HTMLButtonElement>('#filterButton')!;
+const settingsControl = document.querySelector<HTMLDivElement>('#settingsControl')!;
+const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButton')!;
+const settingsPanel = document.querySelector<HTMLDivElement>('#settingsPanel')!;
 const smoothingButton = document.querySelector<HTMLButtonElement>('#smoothingButton')!;
 const volumeControl = document.querySelector<HTMLDivElement>('#volumeControl')!;
 const volumeButton = document.querySelector<HTMLButtonElement>('#volumeButton')!;
@@ -42,6 +47,7 @@ const volumeValue = document.querySelector<HTMLOutputElement>('#volumeValue')!;
 let room: Room | null = null;
 let config: AppConfig | null = null;
 let discordSdk: DiscordSDK | null = null;
+const editorPreviewMode = new URLSearchParams(location.search).has('editorPreview');
 
 type AspectMode = '16:9' | '4:3';
 let aspectMode: AspectMode = '16:9';
@@ -54,7 +60,7 @@ function setAspect(mode: AspectMode) {
   tvScene.classList.toggle('aspect-4x3', mode === '4:3');
   aspectButton.textContent = mode;
   aspectButton.setAttribute('aria-label', `Cambiar proporción de la TV a ${mode === '4:3' ? '16:9' : '4:3'}`);
-  try { localStorage.setItem('shis-tv-aspect', mode); } catch { /* Session-only fallback. */ }
+  if (!editorPreviewMode) try { localStorage.setItem('shis-tv-aspect', mode); } catch { /* Session-only fallback. */ }
 }
 setAspect(aspectMode);
 
@@ -63,6 +69,7 @@ let sceneMode: SceneMode = 'home';
 try {
   if (localStorage.getItem('shis-scene') === 'arcade') sceneMode = 'arcade';
 } catch { /* Session-only fallback. */ }
+if (editorPreviewMode) sceneMode = new URLSearchParams(location.search).get('scene') === 'arcade' ? 'arcade' : 'home';
 
 function setScene(mode: SceneMode) {
   sceneMode = mode;
@@ -76,7 +83,8 @@ function setScene(mode: SceneMode) {
   modeButton.textContent = mode === 'arcade' ? 'Casa' : 'Arcade';
   modeButton.setAttribute('aria-label', mode === 'arcade' ? 'Cambiar a modo casa' : 'Cambiar a modo arcade');
   videoMount.querySelector('video')?.play().catch(() => {});
-  try { localStorage.setItem('shis-scene', mode); } catch { /* Session-only fallback. */ }
+  window.dispatchEvent(new Event('shis-scene-change'));
+  if (!editorPreviewMode) try { localStorage.setItem('shis-scene', mode); } catch { /* Session-only fallback. */ }
 }
 setScene(sceneMode);
 
@@ -142,8 +150,62 @@ function setStatus(text: string) {
 function setLive(isLive: boolean) {
   liveBadge.textContent = isLive ? 'PLAY' : 'STANDBY';
   liveBadge.classList.toggle('live', isLive);
+  stage.classList.toggle('has-signal', isLive);
   emptyState.style.display = isLive ? 'none' : 'flex';
 }
+
+const noiseContext = staticNoise.getContext('2d', { alpha: false });
+const noiseFrame = noiseContext?.createImageData(staticNoise.width, staticNoise.height);
+const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let noiseSeed = 0x6a09e667;
+let lastNoiseFrame = 0;
+function drawStatic(now: number) {
+  if (noiseContext && noiseFrame && !document.hidden && !stage.classList.contains('has-signal') &&
+      (lastNoiseFrame === 0 || (!prefersReducedMotion.matches && now - lastNoiseFrame > 75))) {
+    lastNoiseFrame = now;
+    const width = staticNoise.width;
+    const band = Math.floor((now / 31) % staticNoise.height);
+    for (let i = 0; i < noiseFrame.data.length; i += 4) {
+      noiseSeed ^= noiseSeed << 13;
+      noiseSeed ^= noiseSeed >>> 17;
+      noiseSeed ^= noiseSeed << 5;
+      const value = noiseSeed & 255;
+      const y = Math.floor(i / 4 / width);
+      const grain = Math.min(255, value + (Math.abs(y - band) < 3 ? 35 : 0));
+      noiseFrame.data[i] = grain;
+      noiseFrame.data[i + 1] = grain;
+      noiseFrame.data[i + 2] = Math.min(255, grain + 3);
+      noiseFrame.data[i + 3] = 255;
+    }
+    noiseContext.putImageData(noiseFrame, 0, 0);
+    stage.style.setProperty('--glow-rgb', '116, 146, 169');
+    stage.style.setProperty('--glow-strength', String(prefersReducedMotion.matches ? .18 : .13 + (noiseSeed & 31) / 700));
+  }
+  setTimeout(() => drawStatic(performance.now()), 80);
+}
+drawStatic(performance.now());
+
+const glowCanvas = document.createElement('canvas');
+glowCanvas.width = 12;
+glowCanvas.height = 7;
+const glowContext = glowCanvas.getContext('2d', { willReadFrequently: true });
+let glowColor = [116, 146, 169];
+setInterval(() => {
+  const video = videoMount.querySelector('video');
+  if (!video || video.readyState < 2 || document.hidden || !glowContext || !stage.classList.contains('has-signal')) return;
+  try {
+    glowContext.drawImage(video, 0, 0, glowCanvas.width, glowCanvas.height);
+    const pixels = glowContext.getImageData(0, 0, glowCanvas.width, glowCanvas.height).data;
+    const rgb = [0, 0, 0];
+    for (let i = 0; i < pixels.length; i += 4) {
+      rgb[0] += pixels[i]; rgb[1] += pixels[i + 1]; rgb[2] += pixels[i + 2];
+    }
+    const count = pixels.length / 4;
+    glowColor = rgb.map((sum, channel) => Math.round(glowColor[channel] * .68 + sum / count * .32));
+    stage.style.setProperty('--glow-rgb', glowColor.join(', '));
+    stage.style.setProperty('--glow-strength', '.22');
+  } catch { /* The video may forbid canvas sampling; retain the last safe light. */ }
+}, 300);
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: 'no-store' });
@@ -245,12 +307,20 @@ async function boot() {
 }
 
 modeButton.addEventListener('click', () => setScene(sceneMode === 'home' ? 'arcade' : 'home'));
+settingsButton.addEventListener('click', () => {
+  settingsPanel.hidden = !settingsPanel.hidden;
+  settingsButton.setAttribute('aria-expanded', String(!settingsPanel.hidden));
+  volumePanel.hidden = true;
+  volumeButton.setAttribute('aria-expanded', 'false');
+});
 filterButton.addEventListener('click', () => setRetroLevel(retroLevel === 'off' ? 'normal' : retroLevel === 'normal' ? 'immersive' : 'off'));
 smoothingButton.addEventListener('click', () => setSmoothing(!smoothing));
 aspectButton.addEventListener('click', () => setAspect(aspectMode === '4:3' ? '16:9' : '4:3'));
 volumeButton.addEventListener('click', () => {
   volumePanel.hidden = !volumePanel.hidden;
   volumeButton.setAttribute('aria-expanded', String(!volumePanel.hidden));
+  settingsPanel.hidden = true;
+  settingsButton.setAttribute('aria-expanded', 'false');
 });
 volumeSlider.addEventListener('input', () => setVolume(Number(volumeSlider.value)));
 document.addEventListener('pointerdown', (event) => {
@@ -258,12 +328,21 @@ document.addEventListener('pointerdown', (event) => {
     volumePanel.hidden = true;
     volumeButton.setAttribute('aria-expanded', 'false');
   }
+  if (!settingsControl.contains(event.target as Node)) {
+    settingsPanel.hidden = true;
+    settingsButton.setAttribute('aria-expanded', 'false');
+  }
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !volumePanel.hidden) {
     volumePanel.hidden = true;
     volumeButton.setAttribute('aria-expanded', 'false');
     volumeButton.focus();
+  }
+  if (event.key === 'Escape' && !settingsPanel.hidden) {
+    settingsPanel.hidden = true;
+    settingsButton.setAttribute('aria-expanded', 'false');
+    settingsButton.focus();
   }
 });
 exitButton.addEventListener('click', () => discordSdk?.close(RPCCloseCodes.CLOSE_NORMAL, 'Salió de Shis Stream'));
@@ -292,4 +371,5 @@ retryButton.addEventListener('click', () => {
   }
 });
 
-boot();
+initDecorations();
+if (!editorPreviewMode) boot();

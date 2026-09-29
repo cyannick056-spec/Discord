@@ -12,7 +12,7 @@ Switch Android 10
   -> friends watching inside Discord
 ```
 
-The Node server does **not** relay video. It only serves the Activity and signs short-lived LiveKit tokens. Media travels through LiveKit, so the web host stays lightweight.
+The Node server does **not** relay video. It serves the Activity, signs short-lived LiveKit tokens, and stores the shared decorations. Media travels through LiveKit.
 
 ## Environment
 
@@ -26,6 +26,14 @@ Required:
 - `LIVEKIT_API_SECRET`: server-only LiveKit API secret.
 - `STREAM_KEY`: private password used by the Switch APK to obtain a publisher token.
 - `DEFAULT_STREAM`: normally `cris`.
+- `DECORATION_DATA_DIR`: writable persistent directory for decorations (Railway mounts a volume at `/data`, so use `/data/decorations`).
+- `DECORATION_EDIT_KEY`: optional private editor password; falls back to `STREAM_KEY` when absent.
+
+## Decorations
+
+In the Activity, open **Ajustes → Decorar** and enter the editor password. Upload PNG, JPG, WebP or GIF images (up to 2 MB), place them by dragging, then fine-tune position, size, rotation, opacity and layer in the numeric fields. **Guardar para todos** makes the arrangement visible to viewers. The editor stores separate placements for Casa/Arcade in horizontal, vertical and compact window views. You can copy a placement to the other views and adjust each one afterward. New images start in the selected view; select them in another view to place them there as well.
+
+The editor password stays in page memory only. Viewers can see decorations without it; upload and save require the password. In production, mount persistent storage before adding images, or uploads will disappear on redeploy.
 
 ## Local development
 

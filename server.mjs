@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import express from 'express';
 import { AccessToken } from 'livekit-server-sdk';
+import { installDecorations } from './decorations.mjs';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -13,6 +14,10 @@ const distDir = path.join(__dirname, 'dist');
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
+installDecorations(app, {
+  directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),
+  editKey: process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY,
+});
 
 function required(name) {
   const value = process.env[name];
