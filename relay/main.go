@@ -29,13 +29,16 @@ const (
 	kindVideo  byte = 1
 	kindAudio  byte = 2
 	maxPayload      = 0x60000
+
+	videoFPS          = 30
+	videoJitterFrames = 3
+	videoQueueDepth   = 120
+	audioQueueDepth   = 256
 )
 
-// SysDVR's GRC encoder is fixed at 1280x720@30 and emits constrained-high H.264.
-// Chromium/WebRTC advertises constrained-high level 3.1 (640c1f). The original
-// SysDVR SPS declares level 3.2 (640c20), even though 720p30 fits level 3.1, so
-// rewrite only level_idc when we inject/forward SPS to keep the bitstream and SDP
-// consistent for WebRTC decoders.
+const videoFrameDuration = time.Second / videoFPS
+const videoBufferDelay = videoFrameDuration * videoJitterFrames
+
 var webRTCSPS = []byte{
 	0x00, 0x00, 0x00, 0x01,
 	0x67, 0x64, 0x0c, 0x1f,
@@ -53,6 +56,17 @@ type frameHeader struct {
 	Flags       byte
 	TimestampUS uint64
 	PayloadLen  uint32
+}
+
+type videoFrame struct {
+	data        []byte
+	timestampUS uint64
+	idr         bool
+}
+
+type audioFrame struct {
+	pcm         []int16
+	timestampUS uint64
 }
 
 var connectionID atomic.Uint64
@@ -161,9 +175,6 @@ func handleConnection(conn net.Conn) {
 		},
 		lksdk.NewRoomCallback(),
 		lksdk.WithAutoSubscribe(false),
-		// Keep enough sent RTP packets around to answer NACKs. With H.264 each
-		// 720p frame is fragmented into many RTP packets, so losing only one can
-		// make the browser wait for another keyframe.
 		lksdk.WithRetransmitBufferSize(4096),
 	)
 	if err != nil {
@@ -172,6 +183,9 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 	defer room.Disconnect()
+
+	var waitForIDR atomic.Bool
+	waitForIDR.Store(true)
 
 	videoTrack, err := lksdk.NewLocalSampleTrack(
 		webrtc.RTPCodecCapability{
@@ -182,9 +196,11 @@ func handleConnection(conn net.Conn) {
 		lksdk.WithRTCPHandler(func(packet rtcp.Packet) {
 			switch packet.(type) {
 			case *rtcp.PictureLossIndication:
-				log.Printf("[%d] RTCP PLI: subscriber requested a fresh H264 keyframe", id)
+				waitForIDR.Store(true)
+				log.Printf("[%d] RTCP PLI: pausing P-frames until the next H264 keyframe", id)
 			case *rtcp.FullIntraRequest:
-				log.Printf("[%d] RTCP FIR: subscriber requested a fresh H264 keyframe", id)
+				waitForIDR.Store(true)
+				log.Printf("[%d] RTCP FIR: pausing P-frames until the next H264 keyframe", id)
 			}
 		}),
 	)
@@ -204,8 +220,6 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
-	// SysDVR produces 48 kHz stereo PCM16. The Go SDK currently behaves best
-	// with mono PCM input, so the relay downmixes stereo to mono before Opus encoding.
 	audioTrack, err := lkmedia.NewPCMLocalTrack(48000, 1, logger.GetLogger())
 	if err != nil {
 		log.Printf("[%d] audio track: %v", id, err)
@@ -227,12 +241,28 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 	_ = conn.SetDeadline(time.Time{})
-	log.Printf("[%d] publishing to %s", id, roomName)
+	log.Printf("[%d] publishing to %s (smooth %dfps, jitter buffer %d frames)", id, roomName, videoFPS, videoJitterFrames)
+
+	videoCh := make(chan videoFrame, videoQueueDepth)
+	audioCh := make(chan audioFrame, audioQueueDepth)
+	done := make(chan struct{})
+	workerErr := make(chan error, 2)
+	defer close(done)
+
+	go runVideoPacer(id, videoTrack, videoCh, done, &waitForIDR, workerErr)
+	go runAudioPacer(id, audioTrack, audioCh, done, workerErr)
 
 	var previousVideoTS uint64
 	var videoPackets uint64
-	var videoAccessUnits uint64
+
 	for {
+		select {
+		case werr := <-workerErr:
+			log.Printf("[%d] media worker: %v", id, werr)
+			return
+		default:
+		}
+
 		h, err := readFrameHeader(reader)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
@@ -255,38 +285,45 @@ func handleConnection(conn net.Conn) {
 			previousVideoTS = h.TimestampUS
 
 			videoPackets++
+			isIDR := h.Flags&1 != 0
 			if videoPackets <= 8 || videoPackets%300 == 0 {
-				log.Printf("[%d] video #%d ts_us=%d delta_us=%d bytes=%d idr=%t nal=%d", id, videoPackets, h.TimestampUS, deltaUS, len(payload), h.Flags&1 != 0, firstH264NALType(payload))
+				log.Printf("[%d] video #%d ts_us=%d delta_us=%d bytes=%d idr=%t nal=%d", id, videoPackets, h.TimestampUS, deltaUS, len(payload), isIDR, firstH264NALType(payload))
 			}
 
-			// LiveKit expects one complete encoded access unit per WriteSample. Do
-			// not send SysDVR's standalone SPS/PPS packet as a separate frame.
-			// Instead, include patched SPS/PPS with every IDR/keyframe.
-			accessUnit, hasVCL := normalizeH264AccessUnit(payload, h.Flags&1 != 0)
+			accessUnit, hasVCL := normalizeH264AccessUnit(payload, isIDR)
 			if !hasVCL {
-				if videoPackets <= 8 || videoPackets%300 == 0 {
-					log.Printf("[%d] video #%d parameter-only H264 packet cached/skipped", id, videoPackets)
-				}
 				continue
 			}
-			videoAccessUnits++
 
-			if err := videoTrack.WriteSample(pionmedia.Sample{
-				Data:     accessUnit,
-				Duration: time.Second / 30,
-			}, nil); err != nil {
-				log.Printf("[%d] video write: %v", id, err)
-				return
+			if waitForIDR.Load() && !isIDR {
+				continue
 			}
+
+			frame := videoFrame{data: accessUnit, timestampUS: h.TimestampUS, idr: isIDR}
+			select {
+			case videoCh <- frame:
+			default:
+				waitForIDR.Store(true)
+				drainVideoQueue(videoCh)
+				if isIDR {
+					select {
+					case videoCh <- frame:
+					default:
+					}
+				}
+				log.Printf("[%d] video jitter queue overflow: resyncing on IDR", id)
+			}
+
 		case kindAudio:
 			mono, err := stereoPCM16ToMono(payload)
 			if err != nil {
 				log.Printf("[%d] bad PCM packet: %v", id, err)
 				continue
 			}
-			if err := audioTrack.WriteSample(msdk.PCM16Sample(mono)); err != nil {
-				log.Printf("[%d] audio write: %v", id, err)
-				return
+			select {
+			case audioCh <- audioFrame{pcm: mono, timestampUS: h.TimestampUS}:
+			default:
+				log.Printf("[%d] audio queue overflow: dropping one PCM packet", id)
 			}
 		default:
 			log.Printf("[%d] unknown frame kind %d", id, h.Kind)
@@ -294,10 +331,123 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-// normalizeH264AccessUnit makes SysDVR's fixed H.264 stream match WebRTC's
-// negotiated constrained-high 3.1 format. GRC emits one VCL NAL per displayed
-// frame and SysDVR sometimes prepends SPS/PPS to an IDR. Parameter-set-only
-// packets are not access units and must not be written as independent frames.
+func runVideoPacer(id uint64, track *lksdk.LocalSampleTrack, in <-chan videoFrame, done <-chan struct{}, waitForIDR *atomic.Bool, errs chan<- error) {
+	ticker := time.NewTicker(videoFrameDuration)
+	defer ticker.Stop()
+
+	queue := make([]videoFrame, 0, 16)
+	started := false
+	var sent uint64
+
+	for {
+		select {
+		case <-done:
+			return
+		case frame := <-in:
+			queue = append(queue, frame)
+		case <-ticker.C:
+			if !started {
+				if len(queue) < videoJitterFrames {
+					continue
+				}
+				started = true
+				log.Printf("[%d] video pacer primed with %d frames (~%s)", id, videoJitterFrames, videoBufferDelay)
+			}
+
+			if waitForIDR.Load() {
+				idx := -1
+				for i := range queue {
+					if queue[i].idr {
+						idx = i
+						break
+					}
+				}
+				if idx < 0 {
+					queue = queue[:0]
+					continue
+				}
+				queue = queue[idx:]
+			}
+
+			if len(queue) == 0 {
+				continue
+			}
+
+			frame := queue[0]
+			queue = queue[1:]
+			if waitForIDR.Load() && !frame.idr {
+				continue
+			}
+			if frame.idr {
+				waitForIDR.Store(false)
+			}
+
+			if err := track.WriteSample(pionmedia.Sample{Data: frame.data, Duration: videoFrameDuration}, nil); err != nil {
+				reportWorkerErr(errs, fmt.Errorf("video write: %w", err))
+				return
+			}
+			sent++
+			if sent%900 == 0 {
+				log.Printf("[%d] video pacer sent %d frames, buffered=%d", id, sent, len(queue))
+			}
+		}
+	}
+}
+
+func runAudioPacer(id uint64, track *lkmedia.PCMLocalTrack, in <-chan audioFrame, done <-chan struct{}, errs chan<- error) {
+	var baseTimestamp uint64
+	var baseWall time.Time
+
+	for {
+		select {
+		case <-done:
+			return
+		case frame := <-in:
+			if baseTimestamp == 0 {
+				baseTimestamp = frame.timestampUS
+				baseWall = time.Now().Add(videoBufferDelay)
+			}
+
+			if frame.timestampUS >= baseTimestamp {
+				target := baseWall.Add(time.Duration(frame.timestampUS-baseTimestamp) * time.Microsecond)
+				if delay := time.Until(target); delay > 0 {
+					timer := time.NewTimer(delay)
+					select {
+					case <-done:
+						if !timer.Stop() {
+							<-timer.C
+						}
+						return
+					case <-timer.C:
+					}
+				}
+			}
+
+			if err := track.WriteSample(msdk.PCM16Sample(frame.pcm)); err != nil {
+				reportWorkerErr(errs, fmt.Errorf("audio write: %w", err))
+				return
+			}
+		}
+	}
+}
+
+func reportWorkerErr(ch chan<- error, err error) {
+	select {
+	case ch <- err:
+	default:
+	}
+}
+
+func drainVideoQueue(ch <-chan videoFrame) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
+}
+
 func normalizeH264AccessUnit(data []byte, isIDR bool) ([]byte, bool) {
 	out := append([]byte(nil), data...)
 	hasSPS := false
@@ -325,7 +475,6 @@ func normalizeH264AccessUnit(data []byte, isIDR bool) ([]byte, bool) {
 			hasVCL = true
 		case 7:
 			hasSPS = true
-			// profile_idc=0x64, constraints=0x0c, original level_idc=0x20.
 			if nalPos+3 < len(out) && out[nalPos] == 0x67 && out[nalPos+1] == 0x64 && out[nalPos+2] == 0x0c && out[nalPos+3] == 0x20 {
 				out[nalPos+3] = 0x1f
 			}
