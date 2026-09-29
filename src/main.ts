@@ -13,16 +13,14 @@ type ViewerCredentials = {
   roomName: string;
 };
 
-const statusText = document.querySelector<HTMLDivElement>('#statusText')!;
-const roomText = document.querySelector<HTMLDivElement>('#roomText')!;
+const statusText = document.querySelector<HTMLSpanElement>('#statusText')!;
+const roomText = document.querySelector<HTMLSpanElement>('#roomText')!;
 const liveBadge = document.querySelector<HTMLSpanElement>('#liveBadge')!;
 const videoMount = document.querySelector<HTMLDivElement>('#videoMount')!;
 const audioMount = document.querySelector<HTMLDivElement>('#audioMount')!;
 const emptyState = document.querySelector<HTMLDivElement>('#emptyState')!;
 const audioButton = document.querySelector<HTMLButtonElement>('#audioButton')!;
-const fullscreenButton = document.querySelector<HTMLButtonElement>('#fullscreenButton')!;
 const retryButton = document.querySelector<HTMLButtonElement>('#retryButton')!;
-const player = document.querySelector<HTMLElement>('#player')!;
 
 let room: Room | null = null;
 let config: AppConfig | null = null;
@@ -59,9 +57,6 @@ async function initDiscord(clientId: string) {
 function getLiveKitConnectUrl(serverUrl: string) {
   if (!isInsideDiscord()) return serverUrl;
 
-  // Discord Activities run behind a sandbox proxy. Connecting to the mapped
-  // /livekit path directly avoids external CSP blocks and also prevents
-  // LiveKit Cloud's regional failover from escaping the Discord proxy.
   const proxyUrl = new URL('/livekit', window.location.origin);
   proxyUrl.protocol = serverUrl.startsWith('ws:') ? 'ws:' : 'wss:';
   return proxyUrl.toString().replace(/\/$/, '');
@@ -98,9 +93,6 @@ async function connectViewer(stream: string) {
   const credentials = await fetchJson<ViewerCredentials>(`/api/viewer-token?stream=${encodeURIComponent(stream)}`);
   roomText.textContent = credentials.roomName;
 
-  // SHIS publishes one native H.264 layer from SysDVR. Adaptive stream can
-  // request quality/layer changes that do not exist on this single-layer track,
-  // so keep the subscription continuous for the lowest-latency stable path.
   const nextRoom = new Room({ adaptiveStream: false });
   room = nextRoom;
 
@@ -150,18 +142,17 @@ audioButton.addEventListener('click', async () => {
   audioButton.hidden = true;
 });
 
-fullscreenButton.addEventListener('click', () => {
-  player.requestFullscreen?.().catch(() => undefined);
-});
-
 retryButton.addEventListener('click', () => {
-  if (config) connectViewer(config.defaultStream).catch((error) => {
-    console.error(error);
-    setLive(false);
-    setStatus('ERROR DE SEÑAL');
-    retryButton.hidden = false;
-  });
-  else boot();
+  if (config) {
+    connectViewer(config.defaultStream).catch((error) => {
+      console.error(error);
+      setLive(false);
+      setStatus('ERROR DE SEÑAL');
+      retryButton.hidden = false;
+    });
+  } else {
+    boot();
+  }
 });
 
 boot();
