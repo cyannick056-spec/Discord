@@ -8,8 +8,9 @@
   </head>
   <body>
     <div id="app">
-      <main class="stage" aria-label="Transmisión de Switch">
+      <main id="stage" class="stage home-mode" aria-label="Transmisión de Switch">
         <div class="room-scene">
+          <img class="home-wall-unit" src="/home-wall-unit.webp" alt="" aria-hidden="true" />
           <div id="tvScene" class="tv-scene">
             <section class="tv-shell" aria-label="Televisor retro gris">
               <div class="tv-face">
@@ -17,7 +18,7 @@
                   <div class="speaker-grid"></div>
                 </aside>
 
-                <div class="screen-wrap">
+                <div id="homeScreenMount" class="screen-wrap">
                   <section id="player" class="player">
                     <div id="emptyState" class="empty-state">
                       <div class="noise" aria-hidden="true"></div>
@@ -54,9 +55,6 @@
                   <span class="sensor-dot" aria-hidden="true"></span>
                   <span class="power-lamp" aria-hidden="true"></span>
                   <button id="aspectButton" class="tv-action" type="button" aria-label="Cambiar proporción de la TV a 4:3" title="Cambiar proporción">16:9</button>
-                  <button id="exitButton" class="tv-action" type="button" hidden aria-label="Salir de la actividad" title="Salir de la actividad">Salir</button>
-                  <button id="audioButton" class="physical-button" hidden title="Activar audio" aria-label="Activar audio">🔊</button>
-                  <button id="retryButton" class="physical-button" hidden title="Reconectar" aria-label="Reconectar">↻</button>
                 </div>
 
                 <div class="sticker-layer" aria-hidden="true">
@@ -69,11 +67,18 @@
             </section>
           </div>
 
-          <section class="retro-table" aria-label="Mueble de madera abierto y Nintendo 64 en el suelo">
-            <img class="cabinet-image" src="/n64-open-shelf.webp" alt="Mueble de madera con repisas vacías; Nintendo 64 y control conectados en el suelo, con ilustración en el cartucho" />
-          </section>
+          <div id="arcadeScene" class="arcade-scene" hidden aria-label="Máquina arcade vertical">
+            <img class="arcade-art" src="/arcade-cabinet.webp" alt="" aria-hidden="true" />
+            <div id="arcadeScreen" class="arcade-screen"></div>
+          </div>
         </div>
 
+        <nav class="scene-controls" aria-label="Controles de la actividad">
+          <button id="modeButton" type="button" aria-label="Cambiar a modo arcade">Arcade</button>
+          <button id="audioButton" type="button" hidden title="Activar audio">🔊 Audio</button>
+          <button id="retryButton" type="button" hidden title="Reconectar">↻</button>
+          <button id="exitButton" type="button" hidden title="Salir de la actividad">Salir</button>
+        </nav>
         <div id="audioMount" aria-hidden="true"></div>
       </main>
     </div>
