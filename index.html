@@ -10,7 +10,7 @@
     <div id="app">
       <main id="stage" class="stage home-mode" aria-label="Transmisión de Switch">
         <div class="room-scene">
-          <img class="home-wall-unit" src="/home-wall-unit.webp" alt="" aria-hidden="true" />
+          <img class="home-wall-unit" src="/home-floor-room.webp" alt="" aria-hidden="true" />
           <div id="tvScene" class="tv-scene">
             <section class="tv-shell" aria-label="Televisor retro gris">
               <div class="tv-face">
@@ -68,13 +68,23 @@
           </div>
 
           <div id="arcadeScene" class="arcade-scene" hidden aria-label="Máquina arcade vertical">
-            <img class="arcade-art" src="/arcade-cabinet.webp" alt="" aria-hidden="true" />
-            <div id="arcadeScreen" class="arcade-screen"></div>
+            <div class="arcade-cabinet">
+              <div class="arcade-marquee"><span>SHIS</span><i></i></div>
+              <div class="arcade-speaker" aria-hidden="true"><i></i><i></i><i></i></div>
+              <div id="arcadeScreen" class="arcade-screen"></div>
+              <div class="arcade-deck" aria-hidden="true">
+                <div class="arcade-stick"><i></i></div>
+                <div class="arcade-keys"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              </div>
+              <div class="arcade-front" aria-hidden="true"><span class="coin-slot"></span><span class="arcade-mark">SHIS / 01</span></div>
+              <div class="arcade-base" aria-hidden="true"></div>
+            </div>
           </div>
         </div>
 
         <nav class="scene-controls" aria-label="Controles de la actividad">
           <button id="modeButton" type="button" aria-label="Cambiar a modo arcade">Arcade</button>
+          <button id="filterButton" type="button" aria-pressed="false" title="Activar filtro retro">Filtro retro</button>
           <button id="audioButton" type="button" hidden title="Activar audio">🔊 Audio</button>
           <button id="retryButton" type="button" hidden title="Reconectar">↻</button>
           <button id="exitButton" type="button" hidden title="Salir de la actividad">Salir</button>
