@@ -156,13 +156,9 @@ function setLive(isLive: boolean) {
 
 const noiseContext = staticNoise.getContext('2d', { alpha: false });
 const noiseFrame = noiseContext?.createImageData(staticNoise.width, staticNoise.height);
-const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let noiseSeed = 0x6a09e667;
-let lastNoiseFrame = 0;
 function drawStatic(now: number) {
-  if (noiseContext && noiseFrame && !document.hidden && !stage.classList.contains('has-signal') &&
-      (lastNoiseFrame === 0 || (!prefersReducedMotion.matches && now - lastNoiseFrame > 75))) {
-    lastNoiseFrame = now;
+  if (noiseContext && noiseFrame && !stage.classList.contains('has-signal')) {
     const width = staticNoise.width;
     const band = Math.floor((now / 31) % staticNoise.height);
     for (let i = 0; i < noiseFrame.data.length; i += 4) {
@@ -179,9 +175,9 @@ function drawStatic(now: number) {
     }
     noiseContext.putImageData(noiseFrame, 0, 0);
     stage.style.setProperty('--glow-rgb', '116, 146, 169');
-    stage.style.setProperty('--glow-strength', String(prefersReducedMotion.matches ? .18 : .13 + (noiseSeed & 31) / 700));
+    stage.style.setProperty('--glow-strength', String(.13 + (noiseSeed & 31) / 700));
   }
-  setTimeout(() => drawStatic(performance.now()), 80);
+  setTimeout(() => drawStatic(performance.now()), 42);
 }
 drawStatic(performance.now());
 

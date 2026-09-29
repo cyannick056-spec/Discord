@@ -873,7 +873,6 @@
 }
 .no-signal-copy { z-index: 2; }
 @keyframes signalRoll { from { transform: translateY(-35%); } to { transform: translateY(35%); } }
-@media (prefers-reduced-motion: reduce) { .empty-state::after { animation: none; } }
 
 .decor-editor {
   position: fixed;
