@@ -96,6 +96,7 @@
   box-shadow: 0 2px 8px rgba(0,0,0,.38);
   cursor: pointer;
 }
+.scene-controls #exitButton { position: static; right: auto; }
 .scene-controls button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .scene-controls button[hidden] { display: none !important; }
 .arcade-mode .osd-top { font-size: 9px; }
