@@ -197,11 +197,12 @@ func handleConnection(conn net.Conn) {
 		lksdk.WithRTCPHandler(func(packet rtcp.Packet) {
 			switch p := packet.(type) {
 			case *rtcp.PictureLossIndication:
-				waitForIDR.Store(true)
-				log.Printf("[%d] RTCP PLI: pausing P-frames until the next H264 keyframe", id)
+				// SysDVR owns the encoder; this relay cannot request an earlier IDR.
+				// A viewer PLI must not stall the publisher (and other viewers) by
+				// suppressing every dependent frame until the next periodic keyframe.
+				log.Printf("[%d] RTCP PLI: awaiting source keyframe without pausing publisher", id)
 			case *rtcp.FullIntraRequest:
-				waitForIDR.Store(true)
-				log.Printf("[%d] RTCP FIR: pausing P-frames until the next H264 keyframe", id)
+				log.Printf("[%d] RTCP FIR: awaiting source keyframe without pausing publisher", id)
 			case *rtcp.TransportLayerNack:
 				if len(p.Nacks) != 0 {
 					log.Printf("[%d] RTCP NACK: %d lost packet group(s), retransmit buffer active", id, len(p.Nacks))
