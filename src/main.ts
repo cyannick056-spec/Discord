@@ -77,9 +77,9 @@ function setRetroFilter(enabled: boolean) {
   retroFilter = enabled;
   stage.classList.toggle('retro-strong', enabled);
   filterButton.setAttribute('aria-pressed', String(enabled));
-  filterButton.textContent = enabled ? 'CRT inmersivo ✓' : 'Filtro retro';
-  filterButton.setAttribute('aria-label', enabled ? 'Desactivar efecto CRT inmersivo' : 'Activar efecto CRT inmersivo');
-  filterButton.title = enabled ? 'Quitar efecto CRT' : 'Activar efecto CRT inmersivo';
+  filterButton.textContent = enabled ? 'TV retro ✓' : 'TV retro';
+  filterButton.setAttribute('aria-label', enabled ? 'Desactivar efecto de TV antigua' : 'Activar efecto de TV antigua');
+  filterButton.title = enabled ? 'Ver imagen limpia' : 'Activar efecto de TV antigua';
   try { localStorage.setItem('shis-retro-filter', enabled ? 'on' : 'off'); } catch { /* Session-only fallback. */ }
 }
 setRetroFilter(retroFilter);
