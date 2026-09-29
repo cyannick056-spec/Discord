@@ -1,91 +1,96 @@
 <!doctype html>
 <html lang="es">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#0b0c10" />
-<title>SHIS Stream</title>
-</head>
-<body>
-<div id="app">
-<main class="stage" aria-label="Transmisión de Switch">
-  <div class="room-scene">
-    <div class="tv-scene">
-      <section class="tv-shell" aria-label="Televisor retro plateado">
-        <img class="sticker sticker-dragonball" src="/stickers/dragonball.webp" alt="" aria-hidden="true" />
-        <img class="sticker sticker-ranma" src="/stickers/ranma.webp" alt="" aria-hidden="true" />
-        <img class="sticker sticker-sailor-happy" src="/stickers/sailor-happy.webp" alt="" aria-hidden="true" />
-        <img class="sticker sticker-sailor-tongue" src="/stickers/sailor-tongue.webp" alt="" aria-hidden="true" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#08090c" />
+    <title>SHIS Stream</title>
+  </head>
+  <body>
+    <div id="app">
+      <main class="stage" aria-label="Transmisión de Switch">
+        <div class="room-scene">
+          <div class="tv-scene">
+            <section class="tv-shell" aria-label="Televisor retro gris">
+              <div class="tv-face">
+                <aside class="speaker-column speaker-left" aria-hidden="true">
+                  <div class="speaker-grid"></div>
+                </aside>
 
-        <div class="tv-face">
-          <aside class="tv-speaker tv-speaker-left" aria-hidden="true"><div class="speaker-grille"></div></aside>
+                <div class="screen-wrap">
+                  <section id="player" class="player">
+                    <div id="emptyState" class="empty-state">
+                      <div class="noise" aria-hidden="true"></div>
+                      <div class="no-signal-copy">
+                        <strong>SIN SEÑAL</strong>
+                        <span>AV1</span>
+                      </div>
+                    </div>
 
-          <div class="screen-column">
-            <div class="screen-bezel">
-              <section id="player" class="player">
-                <div id="emptyState" class="empty-state">
-                  <div class="noise" aria-hidden="true"></div>
-                  <div class="no-signal-copy">
-                    <strong>SIN SEÑAL</strong>
-                    <span>AV1</span>
+                    <div id="videoMount" class="video-mount"></div>
+                    <div class="crt-overlay" aria-hidden="true"></div>
+                    <div class="screen-glare" aria-hidden="true"></div>
+
+                    <div class="osd osd-top">
+                      <span class="osd-channel">AV1</span>
+                      <span id="liveBadge" class="osd-state">STANDBY</span>
+                    </div>
+
+                    <div class="osd osd-bottom">
+                      <span id="statusText" class="osd-status">CONECTANDO…</span>
+                      <span id="roomText" class="osd-room"></span>
+                    </div>
+                  </section>
+                </div>
+
+                <aside class="speaker-column speaker-right" aria-hidden="true">
+                  <div class="speaker-grid"></div>
+                </aside>
+
+                <div class="bottom-bar" aria-label="Controles del televisor">
+                  <div class="bottom-buttons" aria-hidden="true">
+                    <i></i><i></i><i></i><i></i><i></i>
                   </div>
+                  <span class="sensor-dot" aria-hidden="true"></span>
+                  <span class="power-lamp" aria-hidden="true"></span>
+                  <button id="audioButton" class="physical-button" hidden title="Activar audio" aria-label="Activar audio">🔊</button>
+                  <button id="retryButton" class="physical-button" hidden title="Reconectar" aria-label="Reconectar">↻</button>
                 </div>
-                <div id="videoMount" class="video-mount"></div>
-                <div class="crt-overlay" aria-hidden="true"></div>
-                <div class="screen-glare" aria-hidden="true"></div>
-                <div class="osd osd-top">
-                  <span class="osd-channel">AV1</span>
-                  <span id="liveBadge" class="osd-state">STANDBY</span>
+
+                <div class="sticker-layer" aria-hidden="true">
+                  <img class="sticker sticker-ball" src="data:image/jpeg;base64,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" alt="" />
+                  <img class="sticker sticker-ranma" src="data:image/jpeg;base64,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" alt="" />
+                  <img class="sticker sticker-sailor-face" src="data:image/jpeg;base64,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" alt="" />
+                  <img class="sticker sticker-sailor-happy" src="data:image/jpeg;base64,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" alt="" />
                 </div>
-                <div class="osd osd-bottom">
-                  <span id="statusText" class="osd-status">CONECTANDO…</span>
-                  <span id="roomText" class="osd-room"></span>
+              </div>
+            </section>
+          </div>
+
+          <section class="retro-table" aria-label="Mesa con Nintendo 64">
+            <div class="table-top">
+              <div class="n64-console" aria-label="Nintendo 64 decorativa con cartucho">
+                <div class="n64-cartridge">
+                  <div class="cart-label">N64</div>
                 </div>
-              </section>
+                <div class="n64-shell">
+                  <div class="n64-top-ridge"></div>
+                  <div class="n64-logo" aria-hidden="true"><span>N</span></div>
+                  <div class="n64-ports" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+                  <div class="n64-led" aria-hidden="true"></div>
+                  <div class="n64-foot left"></div>
+                  <div class="n64-foot right"></div>
+                </div>
+              </div>
             </div>
-          </div>
-
-          <aside class="tv-speaker tv-speaker-right" aria-hidden="true"><div class="speaker-grille"></div></aside>
+            <div class="table-legs" aria-hidden="true"><span></span><span></span></div>
+          </section>
         </div>
 
-        <div class="tv-control-strip">
-          <div class="control-cluster" aria-hidden="true">
-            <i></i><i></i><i></i><i></i><i></i>
-            <span class="control-led"></span>
-            <span class="control-notch"></span>
-            <span class="control-knob"><b></b></span>
-          </div>
-          <div class="physical-controls">
-            <button id="audioButton" class="physical-button" hidden title="Activar audio" aria-label="Activar audio">🔊</button>
-            <button id="retryButton" class="physical-button" hidden title="Reconectar" aria-label="Reconectar">↻</button>
-          </div>
-        </div>
-      </section>
-
-      <div class="tv-feet" aria-hidden="true"><span></span><span></span></div>
+        <div id="audioMount" aria-hidden="true"></div>
+      </main>
     </div>
 
-    <section class="retro-table" aria-label="Mesa retro con Nintendo 64">
-      <div class="table-top">
-        <div class="n64" aria-label="Nintendo 64 decorativa">
-          <div class="n64-cart"><span>N64</span></div>
-          <div class="n64-body">
-            <span class="n64-logo">N</span>
-            <i class="n64-port p1"></i><i class="n64-port p2"></i><i class="n64-port p3"></i><i class="n64-port p4"></i>
-            <i class="n64-led"></i>
-          </div>
-        </div>
-        <div class="n64-controller" aria-hidden="true">
-          <i class="handle left"></i><i class="handle center"></i><i class="handle right"></i>
-          <span class="stick"></span><span class="a-button">A</span><span class="b-button">B</span>
-        </div>
-      </div>
-      <div class="table-legs" aria-hidden="true"><span></span><span></span></div>
-    </section>
-  </div>
-  <div id="audioMount" aria-hidden="true"></div>
-</main>
-</div>
-<script type="module" src="/src/main.ts"></script>
-</body>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>
