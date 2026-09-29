@@ -577,6 +577,8 @@
 
 /* Individual transparent files avoid the seams and stray pixels in the sheet. */
 .home-mode .sticker-layer .sticker {
+  width: clamp(42px, 4.6vw, 72px);
+  height: clamp(42px, 4.6vw, 72px);
   background-size: contain;
   background-position: center;
   filter: drop-shadow(0 1px 2px #000b);
@@ -588,6 +590,14 @@
 
 .n64-display { display: none; pointer-events: none; user-select: none; }
 @media (orientation: portrait) and (min-height: 430px) {
+  .home-mode .sticker-layer .sticker {
+    width: clamp(40px, 10vw, 60px);
+    height: clamp(40px, 10vw, 60px);
+  }
+  .home-mode .tv-scene.aspect-4x3 .sticker-ball,
+  .home-mode .tv-scene.aspect-4x3 .sticker-sailor-face { left: 13%; }
+  .home-mode .tv-scene.aspect-4x3 .sticker-ranma,
+  .home-mode .tv-scene.aspect-4x3 .sticker-sailor-happy { right: 13%; }
   .home-mode .tv-scene,
   .home-mode .tv-scene.aspect-4x3 {
     width: max(106vw, calc(106dvh * 940 / 1672));
