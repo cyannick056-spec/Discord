@@ -413,3 +413,152 @@
   background: radial-gradient(ellipse at 35% 8%, rgba(194,221,238,.15), transparent 59%);
 }
 .stage.retro-strong .player { box-shadow: inset 0 0 24px rgba(0,0,0,.6); }
+
+/* New photographed room and CRT. Both the backdrop and the cut-out foreground
+   use the same asset, so the real bezel occludes the video at its glass edge. */
+.stage.home-mode { background: #080e17; }
+.home-mode .home-wall-unit { display: none !important; }
+.home-mode .tv-scene,
+.home-mode .tv-scene.aspect-4x3 {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  bottom: auto;
+  left: 50%;
+  width: max(100vw, calc(100dvh * 1672 / 941));
+  height: auto;
+  max-height: none;
+  aspect-ratio: 1672 / 941;
+  transform: translate(-50%, -50%);
+  display: block;
+}
+.home-mode .tv-shell,
+.home-mode .tv-scene.aspect-4x3 .tv-shell {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: inherit;
+}
+.home-mode .tv-face,
+.home-mode .tv-scene.aspect-4x3 .tv-face {
+  --room-art: url('/crt-room-wide.webp');
+  --glass-x: 19.1%;
+  --glass-y: 15.5%;
+  --glass-w: 61.9%;
+  --glass-h: 55.9%;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--room-art) center / 100% 100% no-repeat;
+  box-shadow: none;
+  filter: none;
+}
+.home-mode .tv-scene.aspect-4x3 .tv-face {
+  --room-art: url('/crt-room-4x3.webp');
+  --glass-x: 27.2%;
+  --glass-y: 14.1%;
+  --glass-w: 47.6%;
+  --glass-h: 58.2%;
+}
+.home-mode .tv-face::after {
+  content: '';
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  pointer-events: none;
+  background: var(--room-art) center / 100% 100% no-repeat;
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-size: 100% 100%, var(--glass-w) var(--glass-h);
+  -webkit-mask-position: 0 0, var(--glass-x) var(--glass-y);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-size: 100% 100%, var(--glass-w) var(--glass-h);
+  mask-position: 0 0, var(--glass-x) var(--glass-y);
+  mask-repeat: no-repeat;
+  mask-composite: exclude;
+}
+.home-mode .screen-wrap,
+.home-mode .tv-scene.aspect-4x3 .screen-wrap {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  left: var(--glass-x);
+  top: var(--glass-y);
+  width: var(--glass-w);
+  height: var(--glass-h);
+  padding: 0;
+  border: 0;
+  border-radius: 2.5% / 4%;
+  background: #000;
+  box-shadow: none;
+  overflow: hidden;
+}
+.home-mode .screen-wrap::after { display: none; }
+.home-mode .screen-wrap .player { border-radius: inherit; box-shadow: none; }
+.home-mode .video-mount,
+.home-mode .video-mount video { width: 100%; height: 100%; }
+.home-mode .video-mount video,
+.home-mode .tv-scene.aspect-4x3 .video-mount video { object-fit: cover; }
+.home-mode .speaker-column,
+.home-mode .bottom-bar { display: none !important; }
+.home-mode .sticker-layer .sticker { width: clamp(27px, 3vw, 50px); height: clamp(27px, 3vw, 50px); }
+.home-mode .sticker-ball { left: 12%; top: 9%; }
+.home-mode .sticker-ranma { right: 12%; top: 9%; }
+.home-mode .sticker-sailor-face { left: 12%; bottom: 18%; }
+.home-mode .sticker-sailor-happy { right: 12%; bottom: 18%; }
+.home-mode .tv-scene.aspect-4x3 .sticker-ball,
+.home-mode .tv-scene.aspect-4x3 .sticker-sailor-face { left: 23%; }
+.home-mode .tv-scene.aspect-4x3 .sticker-ranma,
+.home-mode .tv-scene.aspect-4x3 .sticker-sailor-happy { right: 23%; }
+
+@media (orientation: portrait) and (min-height: 430px) {
+  .home-mode .tv-scene,
+  .home-mode .tv-scene.aspect-4x3 {
+    width: max(100vw, calc(100dvh * 940 / 1672));
+    aspect-ratio: 940 / 1672;
+  }
+  .home-mode .tv-face,
+  .home-mode .tv-scene.aspect-4x3 .tv-face {
+    --room-art: url('/crt-room-portrait-wide.webp');
+    --glass-x: 16%;
+    --glass-y: 16.5%;
+    --glass-w: 68.5%;
+    --glass-h: 19.8%;
+  }
+  .home-mode .tv-scene.aspect-4x3 .tv-face {
+    --room-art: url('/crt-room-portrait-4x3.webp');
+    --glass-x: 19.5%;
+    --glass-y: 13.2%;
+    --glass-w: 61%;
+    --glass-h: 25.6%;
+  }
+  .home-mode .sticker-layer .sticker { width: clamp(24px, 5vw, 42px); height: clamp(24px, 5vw, 42px); }
+  .home-mode .sticker-ball { left: 8%; top: 13%; }
+  .home-mode .sticker-ranma { right: 8%; top: 13%; }
+  .home-mode .sticker-sailor-face { left: 8%; bottom: 56%; }
+  .home-mode .sticker-sailor-happy { right: 8%; bottom: 56%; }
+  .home-mode .tv-scene.aspect-4x3 .sticker-ball,
+  .home-mode .tv-scene.aspect-4x3 .sticker-sailor-face { top: 10%; }
+  .home-mode .tv-scene.aspect-4x3 .sticker-ranma,
+  .home-mode .tv-scene.aspect-4x3 .sticker-sailor-happy { top: 10%; }
+}
+
+/* Static phosphor/scanline layers sit below crisp channel labels. The mild
+   video-only blur mimics analog bandwidth; there is no animated filter. */
+.stage.retro-strong .video-mount video { filter: blur(.42px) saturate(1.06) contrast(1.06); }
+.stage.retro-strong .crt-overlay,
+.stage.retro-strong .player:has(.video-mount video) .crt-overlay {
+  opacity: .7;
+  background:
+    repeating-linear-gradient(to bottom, rgba(0,0,0,.22) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(to right, rgba(211,77,65,.012) 0 1px, rgba(79,192,115,.012) 1px 2px, rgba(71,108,205,.014) 2px 3px),
+    radial-gradient(ellipse at center, transparent 57%, rgba(0,0,0,.48) 100%);
+}
+.stage.retro-strong .screen-glare {
+  opacity: .35;
+  background: radial-gradient(ellipse at 30% 10%, rgba(205,222,241,.15), transparent 54%);
+}
