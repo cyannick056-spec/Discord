@@ -15,7 +15,7 @@ type ViewerCredentials = {
 
 const statusText = document.querySelector<HTMLDivElement>('#statusText')!;
 const roomText = document.querySelector<HTMLDivElement>('#roomText')!;
-const liveBadge = document.querySelector<HTMLDivElement>('#liveBadge')!;
+const liveBadge = document.querySelector<HTMLSpanElement>('#liveBadge')!;
 const videoMount = document.querySelector<HTMLDivElement>('#videoMount')!;
 const audioMount = document.querySelector<HTMLDivElement>('#audioMount')!;
 const emptyState = document.querySelector<HTMLDivElement>('#emptyState')!;
@@ -37,7 +37,7 @@ function setStatus(text: string) {
 }
 
 function setLive(isLive: boolean) {
-  liveBadge.textContent = isLive ? '● EN VIVO' : 'ESPERANDO';
+  liveBadge.textContent = isLive ? 'PLAY' : 'STANDBY';
   liveBadge.classList.toggle('live', isLive);
   emptyState.style.display = isLive ? 'none' : 'flex';
 }
@@ -75,7 +75,7 @@ function attachTrack(track: RemoteTrack) {
     element.setAttribute('playsinline', 'true');
     videoMount.replaceChildren(element);
     setLive(true);
-    setStatus('Viendo la Switch de Cris');
+    setStatus('SEÑAL RECIBIDA');
   } else if (track.kind === Track.Kind.Audio) {
     element.style.display = 'none';
     audioMount.appendChild(element);
@@ -87,7 +87,7 @@ function attachTrack(track: RemoteTrack) {
 
 async function connectViewer(stream: string) {
   retryButton.hidden = true;
-  setStatus('Entrando al stream…');
+  setStatus('SINTONIZANDO…');
   setLive(false);
 
   if (room) {
@@ -109,26 +109,26 @@ async function connectViewer(stream: string) {
     track.detach().forEach((element) => element.remove());
     if (videoMount.childElementCount === 0) {
       setLive(false);
-      setStatus('Esperando a la Switch…');
+      setStatus('SIN SEÑAL');
     }
   });
   nextRoom.on(RoomEvent.ParticipantConnected, () => {
-    if (videoMount.childElementCount === 0) setStatus('Switch conectada, esperando imagen…');
+    if (videoMount.childElementCount === 0) setStatus('SEÑAL DETECTADA…');
   });
   nextRoom.on(RoomEvent.ParticipantDisconnected, () => {
     if (videoMount.childElementCount === 0) {
       setLive(false);
-      setStatus('La Switch dejó de transmitir');
+      setStatus('SEÑAL PERDIDA');
     }
   });
   nextRoom.on(RoomEvent.Disconnected, () => {
     setLive(false);
-    setStatus('Desconectado');
+    setStatus('DESCONECTADO');
   });
 
   const connectUrl = getLiveKitConnectUrl(credentials.serverUrl);
   await nextRoom.connect(connectUrl, credentials.token, { autoSubscribe: true });
-  if (videoMount.childElementCount === 0) setStatus('Esperando a la Switch…');
+  if (videoMount.childElementCount === 0) setStatus('BUSCANDO SEÑAL…');
 }
 
 async function boot() {
@@ -138,7 +138,8 @@ async function boot() {
     await connectViewer(config.defaultStream);
   } catch (error) {
     console.error(error);
-    setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    setLive(false);
+    setStatus('ERROR DE SEÑAL');
     retryButton.hidden = false;
   }
 }
@@ -155,7 +156,9 @@ fullscreenButton.addEventListener('click', () => {
 
 retryButton.addEventListener('click', () => {
   if (config) connectViewer(config.defaultStream).catch((error) => {
-    setStatus(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(error);
+    setLive(false);
+    setStatus('ERROR DE SEÑAL');
     retryButton.hidden = false;
   });
   else boot();
