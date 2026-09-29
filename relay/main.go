@@ -152,8 +152,9 @@ func handleConnection(conn net.Conn) {
 	defer room.Disconnect()
 
 	videoTrack, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
-		MimeType:  webrtc.MimeTypeH264,
-		ClockRate: 90000,
+		MimeType:    webrtc.MimeTypeH264,
+		ClockRate:   90000,
+		SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=64001f",
 	})
 	if err != nil {
 		log.Printf("[%d] video track: %v", id, err)
