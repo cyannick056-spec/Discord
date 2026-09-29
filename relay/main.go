@@ -34,7 +34,7 @@ const (
 	videoJitterFrames    = 6
 	videoQueueDepth      = 180
 	audioQueueDepth      = 384
-	videoDiscontinuityUS = 55000
+	videoDiscontinuityUS = 500000
 )
 
 const videoFrameDuration = time.Second / videoFPS
@@ -295,13 +295,12 @@ func handleConnection(conn net.Conn) {
 				log.Printf("[%d] video #%d ts_us=%d delta_us=%d bytes=%d idr=%t nal=%d", id, videoPackets, h.TimestampUS, deltaUS, len(payload), isIDR, firstH264NALType(payload))
 			}
 
-			// A timestamp jump means one or more reference frames vanished before
-			// reaching the relay. Do not forward the following dependent P-frames;
-			// wait for the next IDR so the browser never decodes a broken chain.
+			// Do not force an IDR for short source-side gaps. SysDVR can occasionally
+			// skip one or a few timestamps while the decoder remains perfectly usable.
+			// PLI/FIR remains the authority for real decoder loss; only log very large
+			// source gaps so we can diagnose them without creating our own stutters.
 			if deltaUS > videoDiscontinuityUS {
-				waitForIDR.Store(true)
-				drainVideoQueue(videoCh)
-				log.Printf("[%d] video discontinuity: delta_us=%d, waiting for next IDR", id, deltaUS)
+				log.Printf("[%d] large source video gap: delta_us=%d (letting decoder/PLI decide recovery)", id, deltaUS)
 			}
 
 			accessUnit, hasVCL := normalizeH264AccessUnit(payload, isIDR)
@@ -384,9 +383,8 @@ func runVideoPacer(id uint64, track *lksdk.LocalSampleTrack, in <-chan videoFram
 			}
 
 			if len(queue) == 0 {
-				// Re-prime instead of repeatedly missing ticker slots. One controlled
-				// rebuffer is visually smoother than a run of irregular 30fps stalls.
-				started = false
+				// Keep the pacer clock running. Re-priming the full 200 ms buffer after
+				// every tiny underrun caused the visible periodic hitches we were seeing.
 				continue
 			}
 
