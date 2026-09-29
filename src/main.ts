@@ -1,4 +1,4 @@
-import { DiscordSDK } from '@discord/embedded-app-sdk';
+import { DiscordSDK, RPCCloseCodes } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import './style.css';
 
@@ -21,9 +21,28 @@ const audioMount = document.querySelector<HTMLDivElement>('#audioMount')!;
 const emptyState = document.querySelector<HTMLDivElement>('#emptyState')!;
 const audioButton = document.querySelector<HTMLButtonElement>('#audioButton')!;
 const retryButton = document.querySelector<HTMLButtonElement>('#retryButton')!;
+const tvScene = document.querySelector<HTMLDivElement>('#tvScene')!;
+const aspectButton = document.querySelector<HTMLButtonElement>('#aspectButton')!;
+const exitButton = document.querySelector<HTMLButtonElement>('#exitButton')!;
 
 let room: Room | null = null;
 let config: AppConfig | null = null;
+let discordSdk: DiscordSDK | null = null;
+
+type AspectMode = '16:9' | '4:3';
+let aspectMode: AspectMode = '16:9';
+try {
+  if (localStorage.getItem('shis-tv-aspect') === '4:3') aspectMode = '4:3';
+} catch { /* Embedded browsers may deny storage. */ }
+
+function setAspect(mode: AspectMode) {
+  aspectMode = mode;
+  tvScene.classList.toggle('aspect-4x3', mode === '4:3');
+  aspectButton.textContent = mode;
+  aspectButton.setAttribute('aria-label', `Cambiar proporción de la TV a ${mode === '4:3' ? '16:9' : '4:3'}`);
+  try { localStorage.setItem('shis-tv-aspect', mode); } catch { /* Session-only fallback. */ }
+}
+setAspect(aspectMode);
 
 function isInsideDiscord() {
   const params = new URLSearchParams(window.location.search);
@@ -50,8 +69,9 @@ async function fetchJson<T>(url: string): Promise<T> {
 async function initDiscord(clientId: string) {
   if (!isInsideDiscord() || !clientId) return;
 
-  const discordSdk = new DiscordSDK(clientId);
+  discordSdk = new DiscordSDK(clientId);
   await discordSdk.ready();
+  exitButton.hidden = false;
 }
 
 function getLiveKitConnectUrl(serverUrl: string) {
@@ -135,6 +155,9 @@ async function boot() {
     retryButton.hidden = false;
   }
 }
+
+aspectButton.addEventListener('click', () => setAspect(aspectMode === '4:3' ? '16:9' : '4:3'));
+exitButton.addEventListener('click', () => discordSdk?.close(RPCCloseCodes.CLOSE_NORMAL, 'Salió de Shis Stream'));
 
 audioButton.addEventListener('click', async () => {
   const audioElements = [...audioMount.querySelectorAll('audio')];
