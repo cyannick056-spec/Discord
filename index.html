@@ -3,41 +3,89 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0d0f14" />
+    <meta name="theme-color" content="#0b0c10" />
     <title>SHIS Stream</title>
   </head>
   <body>
     <div id="app">
-      <header class="topbar">
-        <div>
-          <div class="eyebrow">SHIS STREAM</div>
-          <h1>Switch de Cris</h1>
+      <main class="stage" aria-label="Transmisión de Switch">
+        <div class="tv-scene">
+          <div class="antenna" aria-hidden="true">
+            <span class="antenna-left"></span>
+            <span class="antenna-right"></span>
+          </div>
+
+          <section class="tv-shell" aria-label="Televisor retro">
+            <div class="sticker sticker-moon" aria-hidden="true">
+              <span class="sticker-mark">☾</span>
+              <span class="sticker-copy">SAILOR</span>
+            </div>
+            <div class="sticker sticker-ranma" aria-hidden="true">
+              <span class="sticker-mark">½</span>
+              <span class="sticker-copy">RANMA</span>
+            </div>
+            <div class="sticker sticker-db" aria-hidden="true">
+              <span class="sticker-mark">★</span>
+              <span class="sticker-copy">DB</span>
+            </div>
+
+            <div class="screen-bezel">
+              <section id="player" class="player">
+                <div id="emptyState" class="empty-state">
+                  <div class="noise" aria-hidden="true"></div>
+                  <div class="no-signal-copy">
+                    <strong>SIN SEÑAL</strong>
+                    <span>AV1</span>
+                  </div>
+                </div>
+
+                <div id="videoMount" class="video-mount"></div>
+
+                <div class="crt-overlay" aria-hidden="true"></div>
+                <div class="screen-glare" aria-hidden="true"></div>
+
+                <div class="osd osd-top">
+                  <span class="osd-channel">AV1</span>
+                  <span id="liveBadge" class="osd-state">STANDBY</span>
+                </div>
+
+                <div class="osd osd-bottom">
+                  <div id="statusText" class="osd-status">CONECTANDO…</div>
+                  <div id="roomText" class="osd-room"></div>
+                </div>
+              </section>
+            </div>
+
+            <aside class="tv-console" aria-hidden="true">
+              <div class="brand-slot">COLOR</div>
+              <div class="channel-knob"><span></span></div>
+              <div class="volume-knob"><span></span></div>
+              <div class="console-buttons">
+                <i></i><i></i><i></i>
+              </div>
+              <div class="speaker-grille">
+                <i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+              <div class="power-lamp"></div>
+            </aside>
+          </section>
+
+          <div class="tv-feet" aria-hidden="true"><span></span><span></span></div>
+
+          <nav class="floating-controls" aria-label="Controles de reproducción">
+            <button id="audioButton" class="control-button" hidden title="Activar audio" aria-label="Activar audio">
+              <span aria-hidden="true">🔊</span>
+            </button>
+            <button id="retryButton" class="control-button" hidden title="Reconectar" aria-label="Reconectar">
+              <span aria-hidden="true">↻</span>
+            </button>
+            <button id="fullscreenButton" class="control-button control-primary" title="Pantalla completa" aria-label="Pantalla completa">
+              <span aria-hidden="true">⛶</span>
+            </button>
+          </nav>
         </div>
-        <div id="liveBadge" class="badge">ESPERANDO</div>
-      </header>
 
-      <main>
-        <section id="player" class="player">
-          <div id="emptyState" class="empty-state">
-            <div class="controller">🎮</div>
-            <strong>Esperando transmisión</strong>
-            <span>Cuando la Switch empiece a publicar aparecerá aquí automáticamente.</span>
-          </div>
-          <div id="videoMount" class="video-mount"></div>
-          <div id="audioMount" aria-hidden="true"></div>
-        </section>
-
-        <section class="controls">
-          <div>
-            <div id="statusText" class="status">Conectando…</div>
-            <div id="roomText" class="substatus"></div>
-          </div>
-          <div class="buttons">
-            <button id="audioButton" hidden>🔊 Activar audio</button>
-            <button id="fullscreenButton">⛶ Pantalla completa</button>
-            <button id="retryButton" hidden>↻ Reconectar</button>
-          </div>
-        </section>
+        <div id="audioMount" aria-hidden="true"></div>
       </main>
     </div>
 
