@@ -77,8 +77,9 @@ function setRetroFilter(enabled: boolean) {
   retroFilter = enabled;
   stage.classList.toggle('retro-strong', enabled);
   filterButton.setAttribute('aria-pressed', String(enabled));
-  filterButton.textContent = enabled ? 'Retro ✓' : 'Filtro retro';
-  filterButton.title = enabled ? 'Quitar filtro retro' : 'Activar filtro retro';
+  filterButton.textContent = enabled ? 'CRT inmersivo ✓' : 'Filtro retro';
+  filterButton.setAttribute('aria-label', enabled ? 'Desactivar efecto CRT inmersivo' : 'Activar efecto CRT inmersivo');
+  filterButton.title = enabled ? 'Quitar efecto CRT' : 'Activar efecto CRT inmersivo';
   try { localStorage.setItem('shis-retro-filter', enabled ? 'on' : 'off'); } catch { /* Session-only fallback. */ }
 }
 setRetroFilter(retroFilter);
