@@ -1,111 +1,206 @@
-/* Scene assets are decorations. The one LiveKit player moves between mounts. */
+/* The same LiveKit player moves between the television and arcade screen. */
 .stage { position: relative; padding: 0; }
 .room-scene { position: relative; width: 100%; height: 100%; overflow: hidden; }
 .home-wall-unit { display: none; }
 .arcade-scene[hidden] { display: none !important; }
 
 @media (orientation: portrait) and (min-height: 430px) {
-  .stage.home-mode {
-    background:
-      radial-gradient(ellipse at 50% 26%, rgba(195,147,99,.18), transparent 55%),
-      linear-gradient(#272523 0 73%, #1c1513 73% 100%);
-  }
+  .stage.home-mode { background: #0c0b0c; }
   .home-mode .room-scene { display: block; padding: 0; }
   .home-mode .home-wall-unit {
     display: block;
     position: absolute;
     z-index: 0;
-    width: min(140vw, 940px);
-    max-width: none;
-    height: auto;
-    top: -33vw;
+    top: 3dvh;
     left: 50%;
+    width: 100%;
+    max-width: 1024px;
+    height: auto;
     transform: translateX(-50%);
     pointer-events: none;
   }
   .home-mode .tv-scene {
     position: absolute;
     z-index: 1;
-    top: 11dvh;
+    top: 3.5dvh;
     left: 50%;
     transform: translateX(-50%);
-    width: min(75vw, 510px);
+    width: min(97vw, 650px);
     max-height: none;
   }
-  .home-mode .tv-scene.aspect-4x3 { width: min(70vw, 470px); }
+  .home-mode .tv-scene.aspect-4x3 { width: min(86vw, 580px); }
   .home-mode .retro-table { display: none !important; }
 }
 
 .stage.arcade-mode {
-  background: #101018;
+  background: radial-gradient(ellipse at 50% 30%, #202126 0, #101115 42%, #08090c 85%);
 }
 .arcade-mode .room-scene { display: block; padding: 0; }
 .arcade-mode .tv-scene,
 .arcade-mode .home-wall-unit,
 .arcade-mode .retro-table { display: none !important; }
-.arcade-scene {
+
+.arcade-scene { position: absolute; inset: 0; overflow: hidden; }
+.arcade-cabinet {
   position: absolute;
-  width: calc(100dvh * 2 / 3);
-  height: 100dvh;
-  max-width: none;
   top: 0;
   left: 50%;
+  width: min(97vw, 700px);
+  height: calc(100dvh - 54px);
   transform: translateX(-50%);
+  border: 1px solid #3b3d42;
+  border-radius: 24px 24px 7px 7px;
+  background: linear-gradient(90deg, #090a0d 0%, #202227 4%, #0e1013 9%, #101216 91%, #2b2d32 97%, #070809 100%);
+  box-shadow: inset 6px 0 8px #36393f45, inset -8px 0 12px #000, 0 14px 28px #000a;
 }
-.arcade-art {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  pointer-events: none;
+.arcade-cabinet::before,
+.arcade-cabinet::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 15%;
+  bottom: 4%;
+  width: 3%;
+  background: linear-gradient(90deg, #3b3d42, #0a0c0f 45%, #010203);
 }
+.arcade-cabinet::before { left: 1%; transform: skewY(3deg); }
+.arcade-cabinet::after { right: 1%; transform: skewY(-3deg) scaleX(-1); }
+.arcade-marquee {
+  position: absolute;
+  top: 2%;
+  left: 6%;
+  width: 88%;
+  height: 11%;
+  display: grid;
+  place-items: center;
+  border: 5px solid #050608;
+  border-radius: 12px 12px 3px 3px;
+  background: linear-gradient(135deg, #121419, #22262b 45%, #0b0c10);
+  box-shadow: 0 3px 4px #000, inset 0 0 25px #5898a523;
+  color: #c4d5d7;
+  font: 800 clamp(18px, 5vw, 38px)/1 system-ui, sans-serif;
+  letter-spacing: .42em;
+  text-indent: .42em;
+  text-shadow: 0 0 8px #7dd6df88;
+  animation: arcadeGlow 4s ease-in-out infinite alternate;
+}
+.arcade-marquee i {
+  position: absolute;
+  right: 4%;
+  bottom: 12%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #a6dddd;
+  box-shadow: 0 0 8px #75e8f4;
+}
+.arcade-speaker {
+  position: absolute;
+  top: 14.2%;
+  left: 22%;
+  width: 56%;
+  height: 1.5%;
+  display: flex;
+  justify-content: space-around;
+}
+.arcade-speaker i { width: 18%; height: 50%; border-radius: 9px; background: #050608; box-shadow: inset 0 1px 2px #34383d; }
 .arcade-screen {
   position: absolute;
-  left: 22.6%;
-  top: 17.9%;
-  width: 54.8%;
-  height: 22.3%;
+  z-index: 2;
+  top: 17%;
+  left: 8%;
+  width: 84%;
+  aspect-ratio: 1.36;
   overflow: hidden;
-  border-radius: 2.5%;
-  background: #030507;
-  box-shadow: inset 0 0 20px #000;
+  border: clamp(5px, 1.3vw, 11px) solid #060708;
+  border-radius: 12px;
+  background: #020304;
+  box-shadow: 0 0 0 2px #42474c, 0 10px 18px #000c, inset 0 0 20px #000;
 }
-.arcade-screen .player {
-  width: 100%;
-  height: 100%;
-  border-radius: 3%;
-}
+.arcade-screen .player { width: 100%; height: 100%; border-radius: 3px; }
 .arcade-screen .video-mount video { object-fit: contain; }
+.arcade-deck {
+  position: absolute;
+  z-index: 3;
+  top: 54%;
+  left: 3%;
+  width: 94%;
+  height: 12%;
+  clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
+  background: linear-gradient(170deg, #31343a 0%, #1a1c21 45%, #0a0b0e 100%);
+  border-top: 2px solid #5a5e63;
+  box-shadow: 0 10px 14px #000;
+}
+.arcade-stick { position: absolute; left: 22%; top: 12%; width: 12%; height: 65%; }
+.arcade-stick::before { content: ""; position: absolute; left: 38%; top: 26%; width: 22%; height: 65%; border-radius: 3px; background: linear-gradient(90deg, #585b60, #a1a5a8, #35383d); transform: rotate(-12deg); }
+.arcade-stick::after { content: ""; position: absolute; left: 20%; bottom: 0; width: 60%; height: 12%; border-radius: 50%; background: #050608; box-shadow: 0 0 0 4px #3c4045; }
+.arcade-stick i { position: absolute; z-index: 1; left: 25%; top: 0; width: 50%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 25%, #5c6268, #16191e 60%, #08090b); box-shadow: 1px 3px 4px #000; }
+.arcade-keys { position: absolute; right: 18%; top: 20%; width: 32%; height: 64%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8%; transform: rotate(-8deg); }
+.arcade-keys i { width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 25%, #707c80, #242a2d 42%, #0b1012 75%); box-shadow: 0 3px 0 #020304, 0 0 0 2px #555c60; }
+.arcade-front {
+  position: absolute;
+  top: 66%;
+  bottom: 2%;
+  left: 5%;
+  width: 90%;
+  border: 1px solid #36383c;
+  border-radius: 3px 3px 8px 8px;
+  background: linear-gradient(115deg, #121417, #1d2024 42%, #101215 70%, #070809);
+  box-shadow: inset 6px 0 10px #ffffff0b, inset -9px 0 12px #0009;
+}
+.coin-slot { position: absolute; top: 18%; left: 43%; width: 14%; height: 19%; border: 3px solid #43474b; border-radius: 5px; background: #070809; box-shadow: 0 3px 8px #000; }
+.coin-slot::after { content: ""; position: absolute; top: 32%; left: 40%; width: 20%; height: 35%; border-radius: 2px; background: #1e292a; box-shadow: 0 0 5px #87d9dc66; }
+.arcade-mark { position: absolute; bottom: 10%; left: 0; width: 100%; text-align: center; color: #718083; font: 600 9px/1 monospace; letter-spacing: .3em; opacity: .45; }
+.arcade-base { position: absolute; bottom: 0; left: 2%; width: 96%; height: 2%; border-radius: 2px; background: linear-gradient(#1d2024, #050607); }
 
 .scene-controls {
   position: absolute;
-  z-index: 20;
-  right: max(8px, env(safe-area-inset-right));
-  top: max(8px, env(safe-area-inset-top));
+  z-index: 30;
+  left: 50%;
+  bottom: max(72px, calc(env(safe-area-inset-bottom) + 66px));
+  transform: translateX(-50%);
   display: flex;
-  gap: 5px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  max-width: calc(100vw - 16px);
+  white-space: nowrap;
 }
-.scene-controls button {
-  min-height: 28px;
-  border: 1px solid #92979b;
-  border-radius: 5px;
-  padding: 3px 8px;
-  color: #f1f2f1;
-  background: rgba(26,29,33,.88);
-  font: 600 11px/1 system-ui, sans-serif;
-  box-shadow: 0 2px 8px rgba(0,0,0,.38);
+.scene-controls button,
+.scene-controls #exitButton {
+  position: static;
+  right: auto;
+  min-height: 36px;
+  border: 1px solid #777d83;
+  border-radius: 9px;
+  padding: 7px 12px;
+  color: #f0f2f1;
+  background: rgba(25, 28, 32, .92);
+  font: 600 12px/1 system-ui, sans-serif;
+  box-shadow: 0 3px 12px #0009;
   cursor: pointer;
 }
-.scene-controls #exitButton { position: static; right: auto; }
 .scene-controls button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .scene-controls button[hidden] { display: none !important; }
+#filterButton[aria-pressed="true"] { border-color: #9fbdad; background: #33443d; }
+
+/* Optional static effect: no extra video decoding or animated filter. */
+.stage.retro-strong .video-mount video { filter: saturate(.82) contrast(1.12) brightness(.95) sepia(.08); }
+.stage.retro-strong .crt-overlay {
+  opacity: .72;
+  background:
+    repeating-linear-gradient(180deg, #0008 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, transparent 48%, #0008 100%);
+}
+.stage.retro-strong .screen-glare { opacity: .55; }
 .arcade-mode .osd-top { font-size: 9px; }
 .arcade-mode .osd-bottom { font-size: 8px; }
+@keyframes arcadeGlow { from { text-shadow: 0 0 5px #7dd6df55; } to { text-shadow: 0 0 13px #7dd6dfb0; } }
 
 @media (orientation: landscape) {
   .home-mode .home-wall-unit { display: none; }
   .home-mode .tv-scene { position: relative; top: auto; left: auto; transform: none; }
-  .arcade-scene { width: min(100vw, calc(100dvh * 2 / 3)); }
+  .arcade-cabinet { width: min(90vw, 54dvh); }
 }
 @media (max-width: 520px) and (max-height: 360px) {
   .home-mode .home-wall-unit { display: none !important; }
@@ -114,8 +209,10 @@
     width: 100%; height: 100%; max-height: none;
   }
   .scene-controls { display: none; }
-  .arcade-scene { width: 100%; height: 100%; }
-  .arcade-art { display: none; }
-  .arcade-screen { inset: 0; width: 100%; height: 100%; border-radius: 0; }
+  .arcade-cabinet { width: 100%; height: 100%; border: 0; border-radius: 0; }
+  .arcade-cabinet::before, .arcade-cabinet::after,
+  .arcade-marquee, .arcade-speaker, .arcade-deck, .arcade-front, .arcade-base { display: none; }
+  .arcade-screen { inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border: 0; border-radius: 0; box-shadow: none; }
   .arcade-screen .player { border-radius: 0; }
 }
+@media (prefers-reduced-motion: reduce) { .arcade-marquee { animation: none; } }
