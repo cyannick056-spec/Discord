@@ -46,6 +46,7 @@ try {
 function setAspect(mode: AspectMode) {
   aspectMode = mode;
   tvScene.classList.toggle('aspect-4x3', mode === '4:3');
+  stage.classList.toggle('aspect-4x3', mode === '4:3');
   aspectButton.textContent = mode;
   aspectButton.setAttribute('aria-label', `Cambiar proporción de la TV a ${mode === '4:3' ? '16:9' : '4:3'}`);
   try { localStorage.setItem('shis-tv-aspect', mode); } catch { /* Session-only fallback. */ }
@@ -134,7 +135,7 @@ function attachTrack(track: RemoteTrack) {
   } else if (track.kind === Track.Kind.Audio) {
     element.style.display = 'none';
     audioMount.appendChild(element);
-    element.play().catch(() => {
+    element.play().then(() => { audioButton.hidden = true; }).catch(() => {
       audioButton.hidden = false;
     });
   }
@@ -159,6 +160,7 @@ async function connectViewer(stream: string) {
   nextRoom.on(RoomEvent.TrackSubscribed, (track) => attachTrack(track));
   nextRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
     track.detach().forEach((element) => element.remove());
+    if (track.kind === Track.Kind.Audio) audioButton.hidden = true;
     if (videoMount.childElementCount === 0) {
       setLive(false);
       setStatus('SIN SEÑAL');
@@ -203,8 +205,13 @@ exitButton.addEventListener('click', () => discordSdk?.close(RPCCloseCodes.CLOSE
 
 audioButton.addEventListener('click', async () => {
   const audioElements = [...audioMount.querySelectorAll('audio')];
-  await Promise.allSettled(audioElements.map((element) => element.play()));
-  audioButton.hidden = true;
+  if (audioElements.length === 0) return;
+  const results = await Promise.allSettled([
+    ...audioElements.map((element) => element.play()),
+    room?.startAudio() ?? Promise.resolve(),
+  ]);
+  audioButton.hidden = results.every((result) => result.status === 'fulfilled');
+  if (!audioButton.hidden) audioButton.title = 'El audio sigue bloqueado; toca de nuevo para activarlo';
 });
 
 retryButton.addEventListener('click', () => {

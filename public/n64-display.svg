@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 240" role="img" aria-label="Nintendo 64 con cartucho negro y control conectado">
+  <defs>
+    <linearGradient id="body" x2="0" y2="1"><stop stop-color="#787984"/><stop offset=".48" stop-color="#454650"/><stop offset="1" stop-color="#24252d"/></linearGradient>
+    <linearGradient id="cart" x2="0" y2="1"><stop stop-color="#34353c"/><stop offset="1" stop-color="#090a0e"/></linearGradient>
+    <linearGradient id="pad" x2="0" y2="1"><stop stop-color="#797985"/><stop offset="1" stop-color="#363740"/></linearGradient>
+    <filter id="shadow"><feGaussianBlur stdDeviation="8"/></filter>
+  </defs>
+  <ellipse cx="191" cy="179" rx="166" ry="20" fill="#000" opacity=".5" filter="url(#shadow)"/>
+  <ellipse cx="405" cy="194" rx="94" ry="15" fill="#000" opacity=".5" filter="url(#shadow)"/>
+  <path d="M78 104 Q65 109 54 143 Q48 169 88 174 H288 Q327 169 322 142 Q315 111 297 105 Q249 76 185 77 Q118 77 78 104Z" fill="url(#body)" stroke="#191b21" stroke-width="4"/>
+  <path d="M89 105 Q183 71 290 105 Q278 124 188 125 Q99 124 89 105Z" fill="#53545e" stroke="#22242b" stroke-width="2"/>
+  <path d="M130 93 Q190 78 248 93 L234 113 Q188 119 144 113Z" fill="#292b34" opacity=".9"/>
+  <path d="M171 31 Q190 26 209 31 L216 92 H164Z" fill="url(#cart)" stroke="#111217" stroke-width="3"/>
+  <path d="M176 37 H203 V62 H176Z" fill="#16171c" stroke="#50515c"/>
+  <path d="M161 88 Q189 82 219 88" fill="none" stroke="#1b1c22" stroke-width="5"/>
+  <path d="M77 142 Q187 152 300 142" fill="none" stroke="#24252d" stroke-width="4"/>
+  <path d="M140 131 H235 Q244 131 244 145 Q242 156 232 158 H144 Q132 155 131 145 Q131 134 140 131Z" fill="#24262d"/>
+  <text x="187" y="151" text-anchor="middle" fill="#c4b945" font-family="system-ui" font-weight="900" font-size="18">N</text>
+  <g fill="#17191f" stroke="#92949b" stroke-width="3">
+    <circle cx="107" cy="151" r="11"/><circle cx="137" cy="151" r="11"/><circle cx="239" cy="151" r="11"/><circle cx="268" cy="151" r="11"/>
+  </g>
+  <path d="M102 151h10m-5-5v10m128-5h9" stroke="#646771" stroke-width="2"/>
+  <circle cx="293" cy="136" r="3" fill="#a23b37"/>
+  <path d="M107 165 C102 213 300 206 331 179 Q345 167 361 176" fill="none" stroke="#16181e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M370 165 Q390 147 411 160 Q430 147 450 166 L473 172 Q485 179 474 190 L459 202 Q452 205 442 199 L423 193 L413 222 Q409 232 400 222 L387 193 L369 199 Q357 207 349 197 L338 188 Q332 181 344 174Z" fill="url(#pad)" stroke="#202128" stroke-width="4"/>
+  <path d="M372 172v21m-10-11h20" stroke="#202128" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="444" cy="176" r="5" fill="#dbc239"/><circle cx="457" cy="185" r="5" fill="#c5ae33"/>
+  <circle cx="403" cy="177" r="9" fill="#282a31" stroke="#6a6c75" stroke-width="3"/>
+  <path d="M402 168v18m-9-9h18" stroke="#43454d" stroke-width="2"/>
+</svg>
