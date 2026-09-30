@@ -218,12 +218,19 @@ async function initDiscord(clientId: string) {
       id: person.id, name: person.nickname || person.global_name || person.username, avatar: avatarUrl(person),
     })));
   };
-  try {
-    await discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, updateParticipants);
-    updateParticipants(await discordSdk.commands.getInstanceConnectedParticipants());
-  } catch (error) {
-    console.warn('No se pudo mostrar la lista de participantes:', error);
-  }
+  const refreshParticipants = async () => {
+    try {
+      updateParticipants(await discordSdk!.commands.getActivityInstanceConnectedParticipants());
+    } catch (error) {
+      console.warn('No se pudo consultar la lista de participantes:', error);
+    }
+  };
+  // A client may not support the update event. The initial query and periodic
+  // refresh still work independently of that subscription.
+  void discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, updateParticipants)
+    .catch((error) => console.warn('No se pudo seguir cambios de participantes:', error));
+  void refreshParticipants();
+  setInterval(() => { if (!document.hidden) void refreshParticipants(); }, 8000);
 }
 
 function getLiveKitConnectUrl(serverUrl: string) {
