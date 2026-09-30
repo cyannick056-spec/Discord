@@ -1,3 +1,5 @@
+import { setDecorationLights, setRoomAmbient, type DecorationLight } from './lighting';
+
 type Scene = 'home' | 'arcade';
 type View = 'landscape' | 'portrait' | 'window';
 type Aspect = '16:9' | '4:3';
@@ -15,12 +17,13 @@ type Placement = {
   x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
   foreground?: boolean; anchor?: 'scene' | 'frame';
   brightness?: number; saturation?: number; hue?: number; shadow?: number;
+  light?: { color: string; intensity: number; radius: number; x?: number; y?: number };
 };
 type Decoration = {
-  id: string; asset: string; name: string; kind?: 'viewer-slot';
+  id: string; asset: string; name: string; kind?: 'viewer-slot' | 'light';
   placements: Partial<Record<PlacementKey, Placement>>;
 };
-type Manifest = { items: Decoration[] };
+type Manifest = { items: Decoration[]; ambient?: number };
 
 const previewMode = new URLSearchParams(location.search).has('editorPreview');
 const activityTicket = new URLSearchParams(location.search).get('ticket') || '';
@@ -64,6 +67,17 @@ const filters = filterIds.map((id) => document.querySelector<HTMLInputElement>(`
 const filterOutputs = filterIds.map((id) => document.querySelector<HTMLOutputElement>(`#${id}Value`)!);
 const decorHidden = document.querySelector<HTMLInputElement>('#decorHidden')!;
 const decorForeground = document.querySelector<HTMLInputElement>('#decorForeground')!;
+const editorAddLight = document.querySelector<HTMLButtonElement>('#editorAddLight')!;
+const editorAmbient = document.querySelector<HTMLInputElement>('#editorAmbient')!;
+const editorAmbientValue = document.querySelector<HTMLOutputElement>('#editorAmbientValue')!;
+const decorEmitLight = document.querySelector<HTMLInputElement>('#decorEmitLight')!;
+const decorLightColor = document.querySelector<HTMLInputElement>('#decorLightColor')!;
+const decorLightIntensity = document.querySelector<HTMLInputElement>('#decorLightIntensity')!;
+const decorLightRadius = document.querySelector<HTMLInputElement>('#decorLightRadius')!;
+const decorLightIntensityValue = document.querySelector<HTMLOutputElement>('#decorLightIntensityValue')!;
+const decorLightRadiusValue = document.querySelector<HTMLOutputElement>('#decorLightRadiusValue')!;
+const decorLightX = document.querySelector<HTMLInputElement>('#decorLightX')!;
+const decorLightY = document.querySelector<HTMLInputElement>('#decorLightY')!;
 
 let saved: Manifest = { items: [] };
 let draft: Manifest = { items: [] };
@@ -166,6 +180,8 @@ function ambientFilter(placement: Placement): string {
 function render(manifest: Manifest, sceneName: Scene, view: View, editable: boolean) {
   lastRender = { manifest, sceneName, view, editable };
   layer.replaceChildren();
+  const lights: DecorationLight[] = [];
+  setRoomAmbient(manifest.ambient ?? 62);
   for (const item of manifest.items) {
     const placement = placementFor(item, sceneName, view, currentAspect());
     if (!placement || placement.hidden) continue;
@@ -194,6 +210,12 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       } else disc.textContent = String(slotIndex + 1);
       figure.append(disc);
       box.append(figure);
+    } else if (item.kind === 'light') {
+      const bulb = document.createElement('div');
+      bulb.className = 'decor-light-bulb';
+      bulb.style.setProperty('--bulb-color', placement.light?.color ?? '#555555');
+      bulb.classList.toggle('is-off', !placement.light || placement.light.intensity === 0);
+      box.append(bulb);
     } else {
       const image = document.createElement('img');
       image.className = 'decoration';
@@ -214,7 +236,11 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       attachDrag(box, placement, sceneName, view);
     }
     layer.append(box);
+    if (placement.light && placement.opacity > 0 && placement.light.intensity > 0) {
+      lights.push({ id: item.id, ...placement.light, intensity: placement.light.intensity * placement.opacity });
+    }
   }
+  setDecorationLights(lights);
 }
 
 function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View) {
@@ -427,6 +453,14 @@ function refreshFields() {
     .forEach((value, index) => { filters[index].value = String(value); filterOutputs[index].value = `${value}${index === 2 ? '°' : '%'}`; });
   decorHidden.checked = placement.hidden;
   decorForeground.checked = placement.foreground === true;
+  decorEmitLight.checked = Boolean(placement.light);
+  decorLightColor.value = placement.light?.color ?? '#ffc68a';
+  decorLightIntensity.value = String(placement.light?.intensity ?? 80);
+  decorLightRadius.value = String(placement.light?.radius ?? 6);
+  decorLightX.value = String(placement.light?.x ?? 50);
+  decorLightY.value = String(placement.light?.y ?? 50);
+  decorLightIntensityValue.value = `${decorLightIntensity.value}%`;
+  decorLightRadiusValue.value = `${decorLightRadius.value}× el ancho`;
 }
 
 function selectItem(id: string) {
@@ -586,7 +620,26 @@ export function initDecorations() {
     } catch (error) { status(error instanceof Error ? error.message : 'No se pudo subir'); }
   });
 
-  [...inputs, ...filters, decorHidden, decorForeground].forEach((input) => input.addEventListener('input', () => {
+  editorAmbient.addEventListener('input', () => {
+    draft.ambient = Number(editorAmbient.value);
+    editorAmbientValue.value = `${draft.ambient}%`;
+    sendPreview();
+  });
+  editorAddLight.addEventListener('click', () => {
+    if (draft.items.filter((item) => item.kind !== 'viewer-slot').length >= 60)
+      return status('Máximo 60 decoraciones. Quita alguna antes de añadir otra.');
+    const item: Decoration = { id: crypto.randomUUID(), asset: '', kind: 'light', name: 'Luz nueva',
+      placements: { [activeKey()]: { ...defaultPlacement(), anchor: 'scene', x: 20, y: 25, width: 4,
+        light: { color: '#ffc68a', intensity: 80, radius: 6 } } } };
+    draft.items.push(item);
+    selected = item.id;
+    refreshItemList();
+    sendPreview();
+    status('Luz añadida. Ajusta color, intensidad y alcance; guarda para todos.');
+  });
+
+  [...inputs, ...filters, decorHidden, decorForeground, decorEmitLight, decorLightColor,
+    decorLightIntensity, decorLightRadius, decorLightX, decorLightY].forEach((input) => input.addEventListener('input', () => {
     const placement = selectedItem()?.placements[activeKey()];
     if (!placement) return;
     const values = inputs.map((field) => Number(field.value));
@@ -603,6 +656,12 @@ export function initDecorations() {
     placement.saturation = Number(filters[1].value);
     placement.hue = Number(filters[2].value);
     placement.shadow = Number(filters[3].value);
+    if (decorEmitLight.checked) placement.light = { color: decorLightColor.value,
+      intensity: Number(decorLightIntensity.value), radius: Number(decorLightRadius.value),
+      x: clamp(Number(decorLightX.value), 0, 100), y: clamp(Number(decorLightY.value), 0, 100) };
+    else delete placement.light;
+    decorLightIntensityValue.value = `${decorLightIntensity.value}%`;
+    decorLightRadiusValue.value = `${decorLightRadius.value}× el ancho`;
     filters.forEach((field, index) => { filterOutputs[index].value = `${field.value}${index === 2 ? '°' : '%'}`; });
     sendPreview();
   }));
@@ -705,6 +764,8 @@ function openWorkspace() {
   editorAuth.hidden = true;
   editorWorkspace.hidden = false;
   draft = copyManifest(saved);
+  editorAmbient.value = String(draft.ambient ?? 62);
+  editorAmbientValue.value = `${editorAmbient.value}%`;
   selected = null;
   editorScene.value = scene();
   editorView.value = currentView();

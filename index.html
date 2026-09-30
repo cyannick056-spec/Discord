@@ -65,6 +65,10 @@
             <div id="arcadeScreen" class="arcade-screen"></div>
           </div>
           <div id="decorationLayer" class="decoration-layer" aria-hidden="true"></div>
+          <div class="room-lighting" aria-hidden="true">
+            <canvas id="roomShade"></canvas>
+            <canvas id="roomTint"></canvas>
+          </div>
         </div>
 
         <nav class="scene-controls" aria-label="Controles de la actividad">
@@ -107,6 +111,8 @@
               <label>Vista <select id="editorView"><option value="landscape">Horizontal</option><option value="portrait">Vertical</option><option value="window">Ventana</option></select></label>
               <label id="editorAspectLabel">Tamaño TV <select id="editorAspect"><option value="16:9">16:9</option><option value="4:3">4:3</option></select></label>
               <label class="editor-upload">Añadir imagen<input id="editorUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /></label>
+              <button id="editorAddLight" type="button">Añadir luz</button>
+              <label>Ambiente <input id="editorAmbient" type="range" min="25" max="100" value="62" /><output id="editorAmbientValue">62%</output></label>
             </div>
             <div class="editor-body">
               <div id="previewFrame" class="preview-frame">
@@ -141,6 +147,13 @@
                   <label>Tono <input id="decorHue" type="range" min="-60" max="60" step="1" /><output id="decorHueValue"></output></label>
                   <label>Sombra <input id="decorShadow" type="range" min="0" max="100" step="1" /><output id="decorShadowValue"></output></label>
                   <label class="editor-check"><input id="decorHidden" type="checkbox" /> Ocultar en esta vista</label>
+                  <strong class="editor-wide">Iluminar el entorno</strong>
+                  <label class="editor-check"><input id="decorEmitLight" type="checkbox" /> Emitir luz</label>
+                  <label>Color de luz <input id="decorLightColor" type="color" value="#ffc68a" /></label>
+                  <label>Intensidad <input id="decorLightIntensity" type="range" min="0" max="100" value="80" /><output id="decorLightIntensityValue"></output></label>
+                  <label class="editor-wide">Alcance <input id="decorLightRadius" type="range" min="1" max="12" step="0.5" value="6" /><output id="decorLightRadiusValue"></output></label>
+                  <label>Origen luz X % <input id="decorLightX" type="number" min="0" max="100" value="50" /></label>
+                  <label>Origen luz Y % <input id="decorLightY" type="number" min="0" max="100" value="50" /></label>
                   <button id="decorCopy" type="button">Copiar a las otras vistas</button>
                   <button id="decorCopyAspect" type="button">Copiar al otro tamaño TV</button>
                   <button id="decorRemove" type="button">Quitar decoración</button>

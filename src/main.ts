@@ -2,6 +2,7 @@ import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import { initDecorations, setDecorationViewers } from './decorations';
 import { CloudflareViewer } from './cloudflare';
+import { initRoomLighting } from './lighting';
 import './style.css';
 import './scenes.css';
 
@@ -662,5 +663,6 @@ retryButton.addEventListener('click', async () => {
   }
 });
 
+initRoomLighting();
 initDecorations();
 if (!editorPreviewMode) boot();

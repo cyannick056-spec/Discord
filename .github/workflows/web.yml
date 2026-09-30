@@ -8,6 +8,11 @@ on:
       - 'src/**'
       - 'server.mjs'
       - 'cloudflare.mjs'
+      - 'decorations.mjs'
+      - 'index.html'
+      - 'public/crt-room-neutral*'
+      - 'tests/**'
+      - 'package.json'
       - '.github/workflows/**'
   push:
     branches: [main]
@@ -24,4 +29,5 @@ jobs:
           cache-dependency-path: package.json
       - run: npm install
       - run: npx tsc --noEmit
+      - run: npm test
       - run: npm run build
