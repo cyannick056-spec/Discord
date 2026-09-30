@@ -299,25 +299,41 @@ async function initDiscord(clientId: string) {
     showParticipants();
     let step = 'permiso de Discord';
     try {
-      let code: string;
-      ({ code } = await discordSdk!.commands.authorize({
-        client_id: clientId, response_type: 'code', scope: ['identify'], prompt: 'none', state: '',
-      }));
-      step = 'canje del código';
-      const response = await fetch('/api/discord-token', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
-      });
-      const body = await response.json() as { access_token?: string; error?: string };
-      if (!response.ok || !body.access_token) throw new Error(body.error || 'Discord rechazó el acceso');
+      let accessToken = '';
+      try { accessToken = sessionStorage.getItem('shis-discord-access') || ''; } catch { /* Retry OAuth. */ }
       step = 'lectura del perfil';
-      const auth = await discordSdk!.commands.authenticate({ access_token: body.access_token });
-      discordAccessToken = body.access_token;
-      selfUser = { ...auth.user, bot: false, flags: auth.user.public_flags };
+      let auth;
+      if (accessToken) {
+        try { auth = await discordSdk!.commands.authenticate({ access_token: accessToken }); }
+        catch {
+          accessToken = '';
+          try { sessionStorage.removeItem('shis-discord-access'); } catch { /* No storage. */ }
+        }
+      }
+      if (!accessToken) {
+        step = 'permiso de Discord';
+        const { code } = await discordSdk!.commands.authorize({
+          client_id: clientId, response_type: 'code', scope: ['identify'], prompt: 'none', state: '',
+        });
+        step = 'canje del código';
+        const response = await fetch('/api/discord-token', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
+        });
+        const body = await response.json() as { access_token?: string; error?: string };
+        if (!response.ok || !body.access_token) throw new Error(body.error || 'Discord rechazó el acceso');
+        accessToken = body.access_token;
+        step = 'lectura del perfil';
+        auth = await discordSdk!.commands.authenticate({ access_token: accessToken });
+        try { sessionStorage.setItem('shis-discord-access', accessToken); } catch { /* Session only. */ }
+      }
+      discordAccessToken = accessToken;
+      selfUser = { ...auth!.user, bot: false, flags: auth!.user.public_flags };
       authState = 'sí';
       showParticipants();
       void refreshParticipants();
     } catch (error) {
       discordAccessToken = '';
+      try { sessionStorage.removeItem('shis-discord-access'); } catch { /* No storage. */ }
       authState = '×';
       const rpcError = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : null;
       const code = typeof rpcError?.code === 'number' ? String(rpcError.code) : '';
@@ -459,7 +475,10 @@ async function connectViewer(stream: string) {
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401) discordAccessToken = '';
+    if (response.status === 401) {
+      discordAccessToken = '';
+      try { sessionStorage.removeItem('shis-discord-access'); } catch { /* No storage. */ }
+    }
     throw new Error(body.error || `HTTP ${response.status}`);
   }
   const credentials = body as ViewerCredentials;
