@@ -66,8 +66,40 @@ app.get('/api/config', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({
     discordClientId: process.env.DISCORD_CLIENT_ID || '',
+    discordAuthAvailable: Boolean(process.env.DISCORD_CLIENT_SECRET),
     defaultStream: normalizeStream(process.env.DEFAULT_STREAM || 'cris'),
   });
+});
+
+app.post('/api/discord-token', async (req, res) => {
+  const code = req.body?.code;
+  if (typeof code !== 'string' || code.length < 10 || code.length > 512 || /\s/.test(code)) {
+    return res.status(400).json({ error: 'Código de autorización inválido' });
+  }
+  if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
+    return res.status(503).json({ error: 'Autorización de Discord sin configurar' });
+  }
+  try {
+    const response = await fetch('https://discord.com/api/v10/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const token = await response.json();
+    if (!response.ok || typeof token.access_token !== 'string') {
+      return res.status(502).json({ error: 'Discord no aceptó la autorización' });
+    }
+    res.set('Cache-Control', 'no-store').json({ access_token: token.access_token });
+  } catch (error) {
+    console.error('Discord token exchange failed:', error);
+    res.status(502).json({ error: 'No se pudo autorizar con Discord' });
+  }
 });
 
 app.get('/api/publisher-token', async (req, res) => {

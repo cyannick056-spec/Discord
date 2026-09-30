@@ -6,6 +6,7 @@ import './scenes.css';
 
 type AppConfig = {
   discordClientId: string;
+  discordAuthAvailable: boolean;
   defaultStream: string;
 };
 
@@ -217,14 +218,16 @@ async function initDiscord(clientId: string) {
     `https://cdn.discordapp.com/embed/avatars/${(BigInt(user.id) >> 22n) % 6n}.png`;
   let activityPeople: Participant[] = [];
   let channelPeople: Participant[] = [];
+  let selfUser: Participant | null = null;
   let activityOk = false;
   let channelOk = false;
+  let authState = config?.discordAuthAvailable ? '…' : 'sin clave';
   let populatedAt = 0;
   const showParticipants = () => {
     // Keep the Activity's own list first. Voice states cover clients where the
     // instance command omits the local user, without creating duplicate bases.
     const byId = new Map<string, Participant>();
-    for (const person of [...activityPeople, ...channelPeople]) {
+    for (const person of [...activityPeople, ...channelPeople, ...(selfUser ? [selfUser] : [])]) {
       if (!person.bot && !byId.has(person.id)) byId.set(person.id, person);
     }
     const people = [...byId.values()];
@@ -234,8 +237,8 @@ async function initDiscord(clientId: string) {
     setDecorationViewers(participantOrder.map((id) => byId.get(id)!).filter(Boolean).map((person) => ({
       id: person.id, name: person.nickname || person.global_name || person.username, avatar: avatarUrl(person),
     })));
-    viewerStatus.textContent = `${people.length} visibles · A:${activityOk ? activityPeople.length : '×'} V:${channelOk ? channelPeople.length : '×'}`;
-    viewerStatus.title = 'A = participantes de la Activity; V = personas en la llamada; × = Discord no permitió leer esa lista';
+    viewerStatus.textContent = `${people.length} visibles · A:${activityOk ? activityPeople.length : '×'} V:${channelOk ? channelPeople.length : '×'} · acceso:${authState}`;
+    viewerStatus.title = 'A = Activity; V = llamada; × = consulta rechazada. Acceso = autorización de tu perfil de Discord.';
   };
   const onActivityUpdate = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
     activityOk = true;
@@ -243,6 +246,27 @@ async function initDiscord(clientId: string) {
     if (updated.length || Date.now() - populatedAt > 30000) activityPeople = updated;
     if (updated.length) populatedAt = Date.now();
     showParticipants();
+  };
+  const authenticateDiscord = async () => {
+    try {
+      const { code } = await discordSdk!.commands.authorize({
+        client_id: clientId, response_type: 'code', scope: ['identify', 'guilds'], prompt: 'none', state: '',
+      });
+      const response = await fetch('/api/discord-token', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
+      });
+      const body = await response.json() as { access_token?: string; error?: string };
+      if (!response.ok || !body.access_token) throw new Error(body.error || 'Discord rechazó el acceso');
+      const auth = await discordSdk!.commands.authenticate({ access_token: body.access_token });
+      selfUser = { ...auth.user, bot: false, flags: auth.user.public_flags };
+      authState = 'sí';
+      showParticipants();
+      void refreshParticipants();
+    } catch (error) {
+      authState = '×';
+      showParticipants();
+      console.warn('No se pudo autorizar el perfil de Discord:', error);
+    }
   };
   let refreshInFlight = false;
   const refreshParticipants = async () => {
@@ -286,6 +310,7 @@ async function initDiscord(clientId: string) {
   void discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, onActivityUpdate)
     .catch((error) => console.warn('No se pudo seguir cambios de participantes:', error));
   void refreshParticipants();
+  if (config?.discordAuthAvailable) void authenticateDiscord();
   setInterval(() => { if (!document.hidden) void refreshParticipants(); }, 8000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshParticipants(); });
 }

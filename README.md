@@ -48,6 +48,8 @@ New decorations are anchored to the TV glass (or arcade cabinet/screen) so their
 
 The editor also includes five fixed viewer slots with red, blue, green, yellow and black pedestals. Position and style each one in every composition just like a decoration. Inside Discord, the first five connected participants occupy the slots in the order observed by the Activity; a slot disappears when no participant occupies it. The editor shows numbered placeholders, including outside Discord. People watching in a normal browser are not counted as Discord participants.
 
+For reliable viewer avatars in Discord, add `DISCORD_CLIENT_SECRET` to the Activity service's server environment (from its Discord Developer Portal OAuth2 page). Keep it out of source control and the browser. The Activity exchanges a short-lived authorization code on the server and requests only `identify` and `guilds`; `identify` supplies the current viewer's profile and `guilds` allows the channel roster in guild voice calls. The video continues to work if authorization is unavailable, but the viewer slots then depend on the unauthenticated Activity roster. The status in Ajustes shows `A` (Activity), `V` (call), and `acceso` (profile authorization).
+
 The editor password stays in page memory only. Viewers can see decorations without it; upload and save require the password. Mount persistent storage in production so images survive redeployments.
 
 ## Local Activity development
