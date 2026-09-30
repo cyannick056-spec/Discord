@@ -41,6 +41,17 @@ Native relay (`relay/`), deployed separately from the Activity:
 
 Set the Switch's `relay_host` and `relay_port` to the TCP proxy endpoint, and keep `stream_key` private. They are **not** the HTTPS address or port of the Activity server. The `stream` value must match the Activity's chosen stream; rooms are named `shis-<stream>`.
 
+## Cloudflare migration preview
+
+The code can switch the transport with `STREAM_PROVIDER=cloudflare` on **both** the Activity and native relay. LiveKit remains the default until a live test succeeds. This is **Cloudflare Realtime SFU**, not RealtimeKit or Cloudflare Stream.
+
+1. In [Cloudflare Realtime > Serverless SFU](https://dash.cloudflare.com/?to=/:account/realtime/sfu), create an SFU app. Add its `CLOUDFLARE_SFU_APP_ID` and `CLOUDFLARE_SFU_APP_SECRET` **only** to the Activity server's environment.
+2. Set `SHIS_ACTIVITY_URL` on the relay to the Activity HTTPS origin (without a trailing slash). The relay authenticates its SFU signaling with the existing `STREAM_KEY`. Leave `STREAM_PROVIDER=livekit` on both services until test time.
+3. With the Switch off and Activity closed, set `STREAM_PROVIDER=cloudflare` on both services and deploy. Start the Switch and verify video, game audio, signal-loss behavior and mobile Discord playback. Keep LiveKit credentials available so both services can switch back together.
+4. Keep both services on Railway and compare their actual usage with Cloudflare Realtime egress during the test. The existing Railway volume continues to hold decorations.
+
+The Activity verifies each viewer through Discord before creating a Cloudflare SFU session. The SFU secret stays on the Activity backend. A short relay heartbeat lets viewers find the current Switch publication and removes it after the stream stops. The Cloudflare path is new and requires a live test with an SFU account before replacing the production transport.
+
 ## Decorations
 
 In the Activity, open **Ajustes → Decorar** and enter the editor password. Upload PNG, JPG, WebP or GIF images (up to 2 MB). Drag an image to move it; use its corner handle to resize and its round handle to rotate. Hold Shift while dragging for finer motion. Numeric position, size, rotation, opacity and layer controls remain available, alongside light, saturation, hue and shadow sliders that help the art match the room.

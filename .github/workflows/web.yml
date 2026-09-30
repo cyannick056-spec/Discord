@@ -2,6 +2,13 @@ name: Build Discord Activity
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'relay/**'
+      - 'src/**'
+      - 'server.mjs'
+      - 'cloudflare.mjs'
+      - '.github/workflows/**'
   push:
     branches: [main]
 
@@ -16,4 +23,5 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
       - run: npm install
+      - run: npx tsc --noEmit
       - run: npm run build
