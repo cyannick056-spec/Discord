@@ -852,6 +852,7 @@
 }
 .stage.arcade-mode .arcade-scene { z-index: 2; }
 .stage.arcade-mode .ambient-glow { opacity: calc(var(--glow-strength, .15) * .7); }
+.stage.has-signal .osd-bottom { display: none; }
 .empty-state { background: radial-gradient(ellipse at 50% 48%, #1a1d20 0, #080a0d 75%, #020304 100%); }
 .empty-state .noise {
   inset: 0;

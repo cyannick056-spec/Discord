@@ -47,6 +47,7 @@ const volumeValue = document.querySelector<HTMLOutputElement>('#volumeValue')!;
 let room: Room | null = null;
 let config: AppConfig | null = null;
 let discordSdk: DiscordSDK | null = null;
+let signalLostTimer: ReturnType<typeof setTimeout> | null = null;
 const editorPreviewMode = new URLSearchParams(location.search).has('editorPreview');
 
 type AspectMode = '16:9' | '4:3';
@@ -148,10 +149,24 @@ function setStatus(text: string) {
 }
 
 function setLive(isLive: boolean) {
+  if (isLive && signalLostTimer) {
+    clearTimeout(signalLostTimer);
+    signalLostTimer = null;
+  }
   liveBadge.textContent = isLive ? 'PLAY' : 'STANDBY';
   liveBadge.classList.toggle('live', isLive);
   stage.classList.toggle('has-signal', isLive);
   emptyState.style.display = isLive ? 'none' : 'flex';
+}
+
+function signalLost() {
+  if (signalLostTimer) clearTimeout(signalLostTimer);
+  setLive(false);
+  setStatus('SEÑAL PERDIDA');
+  signalLostTimer = setTimeout(() => {
+    signalLostTimer = null;
+    if (!stage.classList.contains('has-signal')) setStatus('ESPERANDO SEÑAL…');
+  }, 2000);
 }
 
 const noiseContext = staticNoise.getContext('2d', { alpha: false });
@@ -234,7 +249,7 @@ function attachTrack(track: RemoteTrack) {
     element.setAttribute('playsinline', 'true');
     videoMount.replaceChildren(element);
     setLive(true);
-    setStatus('SEÑAL RECIBIDA');
+    setStatus('');
   } else if (track.kind === Track.Kind.Audio) {
     element.style.display = 'none';
     element.volume = volume / 100;
@@ -246,6 +261,10 @@ function attachTrack(track: RemoteTrack) {
 }
 
 async function connectViewer(stream: string) {
+  if (signalLostTimer) {
+    clearTimeout(signalLostTimer);
+    signalLostTimer = null;
+  }
   retryButton.hidden = true;
   setStatus('SINTONIZANDO…');
   setLive(false);
@@ -265,23 +284,16 @@ async function connectViewer(stream: string) {
   nextRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
     track.detach().forEach((element) => element.remove());
     if (track.kind === Track.Kind.Audio) audioButton.hidden = true;
-    if (videoMount.childElementCount === 0) {
-      setLive(false);
-      setStatus('SIN SEÑAL');
-    }
+    if (track.kind === Track.Kind.Video && videoMount.childElementCount === 0) signalLost();
   });
   nextRoom.on(RoomEvent.ParticipantConnected, () => {
     if (videoMount.childElementCount === 0) setStatus('SEÑAL DETECTADA…');
   });
   nextRoom.on(RoomEvent.ParticipantDisconnected, () => {
-    if (videoMount.childElementCount === 0) {
-      setLive(false);
-      setStatus('SEÑAL PERDIDA');
-    }
+    if (videoMount.childElementCount === 0) signalLost();
   });
   nextRoom.on(RoomEvent.Disconnected, () => {
-    setLive(false);
-    setStatus('DESCONECTADO');
+    signalLost();
   });
 
   const connectUrl = getLiveKitConnectUrl(credentials.serverUrl);
