@@ -249,7 +249,11 @@ async function initDiscord(clientId: string) {
     throw new Error('Abre Shis Stream desde la actividad de Discord');
   }
 
-  discordSdk = new DiscordSDK(clientId);
+  type AuthUser = Awaited<ReturnType<DiscordSDK['commands']['authenticate']>>['user'];
+  const gateSession = (window as Window & { __shisDiscordSession?: {
+    sdk: DiscordSDK; user: AuthUser; accessToken: string;
+  } }).__shisDiscordSession;
+  discordSdk = gateSession?.sdk ?? new DiscordSDK(clientId);
   await discordSdk.ready();
   exitButton.hidden = false;
   type Participant = Types.GetActivityInstanceConnectedParticipantsResponse['participants'][number];
@@ -263,6 +267,11 @@ async function initDiscord(clientId: string) {
   let authState = config?.discordAuthAvailable ? '…' : 'sin clave';
   let authProblem = '';
   let authInFlight = false;
+  if (gateSession) {
+    discordAccessToken = gateSession.accessToken;
+    selfUser = { ...gateSession.user, bot: false, flags: gateSession.user.public_flags };
+    authState = 'sí';
+  }
   const showParticipants = () => {
     // A voice call can outlive the Activity. Only its instance roster belongs
     // on the TV; the authenticated local viewer covers mobile roster gaps.
@@ -381,7 +390,7 @@ async function initDiscord(clientId: string) {
     .catch((error) => console.warn('No se pudo seguir cambios de participantes:', error));
   void refreshParticipants();
   if (!config?.discordAuthAvailable) throw new Error('Falta configurar la autorización de Discord');
-  await authenticateDiscord();
+  if (!discordAccessToken) await authenticateDiscord();
   if (!discordAccessToken) throw new Error('Autoriza tu perfil en Discord para ver la transmisión');
   setInterval(() => { if (!document.hidden) void refreshParticipants(); }, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshParticipants(); });
