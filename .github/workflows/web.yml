@@ -8,6 +8,8 @@ on:
       - 'src/**'
       - 'server.mjs'
       - 'cloudflare.mjs'
+      - 'deploy/**'
+      - '.dockerignore'
       - '.github/workflows/**'
   push:
     branches: [main]
@@ -25,3 +27,9 @@ jobs:
       - run: npm install
       - run: npx tsc --noEmit
       - run: npm run build
+      - name: Validate VPS configuration
+        run: |
+          cp deploy/vps.env.example deploy/.env
+          docker compose --env-file deploy/.env -f deploy/compose.yaml config --quiet
+      - name: Build VPS web image
+        run: docker build -f deploy/Dockerfile.web -t shis-activity:ci .
