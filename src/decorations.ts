@@ -299,6 +299,12 @@ function initPreviewGestures() {
   };
   stage.addEventListener('touchend', end, true);
   stage.addEventListener('touchcancel', end, true);
+  stage.addEventListener('wheel', (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    parent.postMessage({ type: 'decor-wheel-zoom', x: event.clientX, y: event.clientY,
+      deltaY: event.deltaY }, location.origin);
+  }, { passive: false });
 }
 
 function sendPreview() {
@@ -365,6 +371,21 @@ function sizePreview() {
 
 function changeZoom(next: number) {
   previewZoom = clamp(next, 1, 4);
+  if (previewZoom === 1) { previewPanX = 0; previewPanY = 0; }
+  sizePreview();
+}
+
+function zoomAt(next: number, x: number, y: number) {
+  const view = editorView.value as View;
+  const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
+  const baseScale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1);
+  const before = baseScale * previewZoom;
+  const sceneX = (x - (previewFrame.clientWidth - width * before) / 2 - previewPanX) / before;
+  const sceneY = (y - (previewFrame.clientHeight - height * before) / 2 - previewPanY) / before;
+  previewZoom = clamp(next, 1, 4);
+  const after = baseScale * previewZoom;
+  previewPanX = x - sceneX * after - (previewFrame.clientWidth - width * after) / 2;
+  previewPanY = y - sceneY * after - (previewFrame.clientHeight - height * after) / 2;
   if (previewZoom === 1) { previewPanX = 0; previewPanY = 0; }
   sizePreview();
 }
@@ -507,6 +528,12 @@ export function initDecorations() {
   zoomOut.addEventListener('click', () => changeZoom(previewZoom / 1.4));
   zoomIn.addEventListener('click', () => changeZoom(previewZoom * 1.4));
   zoomReset.addEventListener('click', () => changeZoom(1));
+  previewFrame.addEventListener('wheel', (event) => {
+    if (!event.ctrlKey || (event.target as HTMLElement).closest('.preview-zoom')) return;
+    event.preventDefault();
+    const bounds = previewFrame.getBoundingClientRect();
+    zoomAt(previewZoom * Math.exp(-event.deltaY * .002), event.clientX - bounds.left, event.clientY - bounds.top);
+  }, { passive: false });
   editorNudge.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-dx], button[data-dy]');
     const placement = selectedItem()?.placements[activeKey()];
@@ -617,6 +644,15 @@ export function initDecorations() {
   });
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
+    if (event.data?.type === 'decor-wheel-zoom') {
+      const x = Number(event.data.x), y = Number(event.data.y), deltaY = Number(event.data.deltaY);
+      if (![x, y, deltaY].every(Number.isFinite)) return;
+      const frame = previewFrame.getBoundingClientRect();
+      const iframe = preview.getBoundingClientRect();
+      zoomAt(previewZoom * Math.exp(-deltaY * .002), iframe.left - frame.left + x * iframe.width / preview.clientWidth,
+        iframe.top - frame.top + y * iframe.height / preview.clientHeight);
+      return;
+    }
     if (event.data?.type === 'decor-zoom-start') {
       const view = editorView.value as View;
       const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
