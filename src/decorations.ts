@@ -40,6 +40,10 @@ const editorItem = document.querySelector<HTMLSelectElement>('#editorItem')!;
 const editorProperties = document.querySelector<HTMLDivElement>('#editorProperties')!;
 const previewFrame = document.querySelector<HTMLDivElement>('#previewFrame')!;
 const preview = document.querySelector<HTMLIFrameElement>('#editorPreview')!;
+const zoomOut = document.querySelector<HTMLButtonElement>('#previewZoomOut')!;
+const zoomReset = document.querySelector<HTMLButtonElement>('#previewZoomReset')!;
+const zoomIn = document.querySelector<HTMLButtonElement>('#previewZoomIn')!;
+const editorNudge = document.querySelector<HTMLDivElement>('#editorNudge')!;
 const editorStatus = document.querySelector<HTMLSpanElement>('#editorStatus')!;
 const editorSave = document.querySelector<HTMLButtonElement>('#editorSave')!;
 const decorCopy = document.querySelector<HTMLButtonElement>('#decorCopy')!;
@@ -60,6 +64,10 @@ let editKey = '';
 let previewReady = false;
 let lastRender: { manifest: Manifest; sceneName: Scene; view: View; editable: boolean } | null = null;
 let viewers: Viewer[] = [];
+let previewZoom = 1;
+let previewPanX = 0;
+let previewPanY = 0;
+let gestureStart: { zoom: number; targetX: number; targetY: number; x: number; y: number } | null = null;
 
 function currentView(): View {
   if (innerWidth <= 520 && innerHeight <= 360) return 'window';
@@ -224,6 +232,7 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
     box.setPointerCapture(event.pointerId);
     parent.postMessage({ type: 'decor-select', id: box.dataset.id }, location.origin);
     const move = (e: PointerEvent) => {
+      if (previewPinching) return;
       const dx = e.clientX - origin.x;
       const dy = e.clientY - origin.y;
       const fine = e.shiftKey ? .2 : 1;
@@ -254,6 +263,39 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
     box.addEventListener('pointercancel', end);
     box.addEventListener('lostpointercapture', end);
   });
+}
+
+let previewPinching = false;
+function initPreviewGestures() {
+  let start: { distance: number; midX: number; midY: number } | null = null;
+  const midpoint = (touches: TouchList) => ({
+    x: (touches[0].screenX + touches[1].screenX) / 2,
+    y: (touches[0].screenY + touches[1].screenY) / 2,
+    distance: Math.hypot(touches[0].screenX - touches[1].screenX, touches[0].screenY - touches[1].screenY),
+  });
+  stage.addEventListener('touchstart', (event) => {
+    if (event.touches.length < 2 || start) return;
+    event.preventDefault();
+    previewPinching = true;
+    const point = midpoint(event.touches);
+    start = { distance: Math.max(point.distance, 1), midX: point.x, midY: point.y };
+    parent.postMessage({ type: 'decor-zoom-start', x: (event.touches[0].clientX + event.touches[1].clientX) / 2,
+      y: (event.touches[0].clientY + event.touches[1].clientY) / 2 }, location.origin);
+  }, { passive: false, capture: true });
+  stage.addEventListener('touchmove', (event) => {
+    if (!start || event.touches.length < 2) return;
+    event.preventDefault();
+    const point = midpoint(event.touches);
+    parent.postMessage({ type: 'decor-zoom-move', ratio: point.distance / start.distance,
+      dx: point.x - start.midX, dy: point.y - start.midY }, location.origin);
+  }, { passive: false, capture: true });
+  const end = (event: TouchEvent) => {
+    if (event.touches.length > 0) return;
+    start = null;
+    previewPinching = false;
+  };
+  stage.addEventListener('touchend', end, true);
+  stage.addEventListener('touchcancel', end, true);
 }
 
 function sendPreview() {
@@ -304,16 +346,30 @@ function migrateLegacyInView() {
 function sizePreview() {
   const view = editorView.value as View;
   const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
-  const scale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1);
+  const baseScale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1);
+  const scale = baseScale * previewZoom;
+  previewPanX = clamp(previewPanX, -Math.max(0, (width * scale - previewFrame.clientWidth) / 2),
+    Math.max(0, (width * scale - previewFrame.clientWidth) / 2));
+  previewPanY = clamp(previewPanY, -Math.max(0, (height * scale - previewFrame.clientHeight) / 2),
+    Math.max(0, (height * scale - previewFrame.clientHeight) / 2));
   preview.style.width = `${width}px`;
   preview.style.height = `${height}px`;
   preview.style.transform = `scale(${scale})`;
-  preview.style.left = `${(previewFrame.clientWidth - width * scale) / 2}px`;
-  preview.style.top = `${(previewFrame.clientHeight - height * scale) / 2}px`;
+  preview.style.left = `${(previewFrame.clientWidth - width * scale) / 2 + previewPanX}px`;
+  preview.style.top = `${(previewFrame.clientHeight - height * scale) / 2 + previewPanY}px`;
+  zoomReset.textContent = `${Math.round(previewZoom * 100)}%`;
+}
+
+function changeZoom(next: number) {
+  previewZoom = clamp(next, 1, 4);
+  if (previewZoom === 1) { previewPanX = 0; previewPanY = 0; }
+  sizePreview();
 }
 
 function reloadPreview() {
   previewReady = false;
+  gestureStart = null;
+  changeZoom(1);
   sizePreview();
   const params = new URLSearchParams({ editorPreview: '1', scene: editorScene.value, aspect: editorAspect.value });
   preview.src = `/?${params}`;
@@ -336,6 +392,7 @@ function refreshFields() {
   const item = selectedItem();
   const placement = item?.placements[activeKey()];
   editorProperties.hidden = !placement;
+  editorNudge.hidden = !placement;
   if (!placement) return;
   decorRemove.hidden = item?.kind === 'viewer-slot';
   [placement.x, placement.y, placement.width, placement.rotation, placement.opacity * 100, placement.z]
@@ -381,6 +438,7 @@ async function loadDecorations() {
 export function initDecorations() {
   if (previewMode) {
     stage.classList.add('preview-mode');
+    initPreviewGestures();
     window.addEventListener('message', (event) => {
       if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'decor-preview') return;
       selected = typeof event.data.selected === 'string' ? event.data.selected : null;
@@ -437,6 +495,18 @@ export function initDecorations() {
   preview.addEventListener('load', () => {
     previewReady = preview.src !== 'about:blank';
     if (previewReady) migrateLegacyInView();
+    sendPreview();
+  });
+  zoomOut.addEventListener('click', () => changeZoom(previewZoom / 1.4));
+  zoomIn.addEventListener('click', () => changeZoom(previewZoom * 1.4));
+  zoomReset.addEventListener('click', () => changeZoom(1));
+  editorNudge.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-dx], button[data-dy]');
+    const placement = selectedItem()?.placements[activeKey()];
+    if (!button || !placement) return;
+    placement.x = Math.round(clamp(placement.x + Number(button.dataset.dx || 0), -30, 130) * 10) / 10;
+    placement.y = Math.round(clamp(placement.y + Number(button.dataset.dy || 0), -35, 145) * 10) / 10;
+    refreshFields();
     sendPreview();
   });
   new ResizeObserver(sizePreview).observe(previewFrame);
@@ -539,6 +609,29 @@ export function initDecorations() {
   });
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
+    if (event.data?.type === 'decor-zoom-start') {
+      const view = editorView.value as View;
+      const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
+      const scale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1) * previewZoom;
+      const x = Number(event.data.x), y = Number(event.data.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      gestureStart = { zoom: previewZoom, x, y,
+        targetX: (previewFrame.clientWidth - width * scale) / 2 + previewPanX + x * scale,
+        targetY: (previewFrame.clientHeight - height * scale) / 2 + previewPanY + y * scale };
+      return;
+    }
+    if (event.data?.type === 'decor-zoom-move' && gestureStart) {
+      const ratio = Number(event.data.ratio), dx = Number(event.data.dx), dy = Number(event.data.dy);
+      if (![ratio, dx, dy].every(Number.isFinite)) return;
+      const view = editorView.value as View;
+      const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
+      previewZoom = clamp(gestureStart.zoom * ratio, 1, 4);
+      const scale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1) * previewZoom;
+      previewPanX = gestureStart.targetX + dx - (previewFrame.clientWidth - width * scale) / 2 - gestureStart.x * scale;
+      previewPanY = gestureStart.targetY + dy - (previewFrame.clientHeight - height * scale) / 2 - gestureStart.y * scale;
+      sizePreview();
+      return;
+    }
     if (event.data?.type === 'decor-select') {
       selected = String(event.data.id);
       const item = selectedItem();

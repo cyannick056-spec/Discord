@@ -806,32 +806,9 @@
   .volume-control, .settings-control { flex-basis: 42px; }
 }
 
-/* In Discord's smallest tile, only the tucked-away volume control remains. */
+/* Discord's smallest call tile shows the scene without Activity controls. */
 @media (max-width: 520px) and (max-height: 360px) {
-  .scene-controls {
-    display: flex !important;
-    top: auto;
-    right: auto;
-    bottom: max(5px, env(safe-area-inset-bottom));
-    left: max(5px, env(safe-area-inset-left));
-    transform: none;
-  }
-  .volume-control, .settings-control { flex-basis: 30px; }
-  .scene-controls #volumeButton,
-  .scene-controls #settingsButton,
-  .scene-controls #exitButton { width: 30px; height: 30px; min-height: 30px; flex-basis: 30px; }
-  #volumeButton::before, #settingsButton::before, #exitButton::before { font-size: 17px; }
-  #volumeButton::after, #settingsButton::after, #exitButton::after { display: none; }
-  .scene-controls > #audioButton, .scene-controls > #retryButton { display: none !important; }
-  .settings-panel { top: auto; bottom: calc(100% + 5px); left: 0; }
-  .volume-panel {
-    top: auto;
-    bottom: calc(100% + 5px);
-    left: 0;
-    transform: none;
-    width: 136px;
-    padding: 7px 9px;
-  }
+  .scene-controls { display: none !important; }
 }
 
 /* Decorations may follow the screen body or the full scene; JS measures the
@@ -896,6 +873,7 @@
   box-shadow: inset 0 1px 0 #ffffff65, 0 2px 4px #0009;
 }
 .preview-mode .decoration-box { pointer-events: auto; touch-action: none; cursor: grab; }
+.preview-mode { touch-action: none; }
 .preview-mode .decoration-box:active { cursor: grabbing; }
 .preview-mode .decoration-box.is-selected { outline: 1px dashed #c2e6ee; outline-offset: 3px; }
 .decor-handle { display: none; }
@@ -979,7 +957,14 @@
 .editor-body { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 12px; flex: 1; min-height: 0; }
 .preview-frame { position: relative; min-height: 0; overflow: hidden; border: 1px solid #536772; background: #05080c; }
 .preview-frame iframe { position: absolute; border: 0; transform-origin: top left; }
+.preview-zoom { position: absolute; z-index: 2; right: 7px; bottom: 7px; display: flex; gap: 3px; padding: 3px; border-radius: 9px; background: #08121bdc; box-shadow: 0 2px 8px #0009; }
+.preview-zoom button { min-width: 35px; min-height: 35px; padding: 4px; font-size: 16px; }
+.preview-zoom #previewZoomReset { min-width: 52px; font-size: 12px; }
 .editor-sidebar { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; }
+.editor-nudge { display: flex; gap: 5px; align-items: center; }
+.editor-nudge[hidden] { display: none; }
+.editor-nudge span { margin-right: auto; }
+.editor-nudge button { min-width: 35px; min-height: 35px; padding: 3px; font-size: 17px; }
 .editor-sidebar > label { align-items: stretch; flex-direction: column; }
 .editor-sidebar select[size] { width: 100%; min-height: 84px; }
 .editor-properties { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
@@ -1006,14 +991,21 @@
   .home-mode .tv-scene,
   .home-mode .tv-scene.aspect-4x3 { top: 52%; }
   .home-mode .tv-face::before,
-  .home-mode .tv-face::after { filter: brightness(.56) saturate(.82); }
+  .home-mode .tv-face::after { filter: brightness(.66) saturate(.86); }
 }
 @media (max-width: 670px) {
-  .decor-editor { padding: 8px; gap: 6px; }
+  .decor-editor { padding: 8px; gap: 6px; font-size: 13px; }
   .editor-body { display: flex; flex-direction: column; }
-  .preview-frame { flex: 0 0 43%; }
+  .preview-frame { flex: 0 0 43%; touch-action: none; }
   .editor-sidebar { flex: 1; }
-  .editor-properties { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .editor-properties .editor-wide, .editor-properties .editor-check, .editor-properties button { grid-column: span 3; }
-  .editor-toolbar { gap: 5px; }
+  .editor-properties { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .editor-properties .editor-wide, .editor-properties .editor-check, .editor-properties button { grid-column: span 2; }
+  .editor-properties label { font-size: 12px; }
+  .editor-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .editor-toolbar label { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+  .editor-toolbar select, .editor-toolbar .editor-upload { width: 100%; box-sizing: border-box; }
+  .decor-editor button, .decor-editor select, .decor-editor input:not([type=range]) { min-height: 39px; box-sizing: border-box; }
+  .editor-sidebar select[size] { min-height: 62px; }
+  .editor-nudge button { min-width: 42px; min-height: 42px; }
+  #editorSave { position: sticky; bottom: 0; z-index: 3; min-height: 45px; background: #315865; }
 }

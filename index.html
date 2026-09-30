@@ -109,9 +109,23 @@
               <label class="editor-upload">Añadir imagen<input id="editorUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /></label>
             </div>
             <div class="editor-body">
-              <div id="previewFrame" class="preview-frame"><iframe id="editorPreview" title="Vista previa para colocar decoración"></iframe></div>
+              <div id="previewFrame" class="preview-frame">
+                <iframe id="editorPreview" title="Vista previa para colocar decoración"></iframe>
+                <div class="preview-zoom" aria-label="Zoom de la vista previa">
+                  <button id="previewZoomOut" type="button" aria-label="Alejar vista previa">−</button>
+                  <button id="previewZoomReset" type="button" aria-label="Restablecer zoom de la vista previa">100%</button>
+                  <button id="previewZoomIn" type="button" aria-label="Acercar vista previa">+</button>
+                </div>
+              </div>
               <div class="editor-sidebar">
                 <label>Decoración <select id="editorItem" size="5" aria-label="Seleccionar decoración"></select></label>
+                <div id="editorNudge" class="editor-nudge" hidden aria-label="Ajustar posición de la decoración">
+                  <span>Posición fina</span>
+                  <button type="button" data-dx="-0.5" aria-label="Mover a la izquierda">←</button>
+                  <button type="button" data-dy="-0.5" aria-label="Mover hacia arriba">↑</button>
+                  <button type="button" data-dy="0.5" aria-label="Mover hacia abajo">↓</button>
+                  <button type="button" data-dx="0.5" aria-label="Mover a la derecha">→</button>
+                </div>
                 <div id="editorProperties" class="editor-properties" hidden>
                   <label class="editor-wide">Posición relativa a <select id="decorAnchor"><option value="frame">TV / máquina arcade</option><option value="scene">Escena completa</option></select></label>
                   <label>Izquierda % <input id="decorX" type="number" min="-30" max="130" step="0.1" /></label>
@@ -132,7 +146,7 @@
                 </div>
                 <button id="editorSave" type="button">Guardar para todos</button>
                 <span id="editorStatus" role="status"></span>
-                <small class="editor-tip">Los espacios Espectador 1–5 muestran bases roja, azul, verde, amarilla y negra. En Discord se llenan por orden de llegada; sin espectadores solo aparecen aquí para editarlos. Arrastra para mover, tira de la esquina para cambiar tamaño y del círculo para girar. Shift da más precisión.</small>
+                <small class="editor-tip">Los espacios Espectador 1–5 muestran bases roja, azul, verde, amarilla y negra. En Discord se llenan por orden de llegada; sin espectadores solo aparecen aquí para editarlos. Arrastra para mover, tira de la esquina para cambiar tamaño y del círculo para girar. En móvil pellizca con dos dedos para acercar y desplazar la escena; las flechas ajustan la posición. Shift da más precisión con ratón.</small>
               </div>
             </div>
           </div>
