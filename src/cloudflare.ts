@@ -33,7 +33,8 @@ export class CloudflareViewer {
   private async request<T>(route: string, body?: object): Promise<T> {
     const response = await fetch(`/api/cloudflare/${route}`, {
       method: body ? 'POST' : 'GET',
-      headers: { Authorization: `Bearer ${this.accessToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { Authorization: `Bearer ${this.accessToken()}`,
+        'X-Activity-Ticket': new URLSearchParams(location.search).get('ticket') || '', ...(body ? { 'Content-Type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
       cache: 'no-store',
     });
