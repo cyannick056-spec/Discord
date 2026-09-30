@@ -457,6 +457,8 @@
   --glass-y: 15.5%;
   --glass-w: 61.9%;
   --glass-h: 55.9%;
+  --status-light-x: 76.05%;
+  --status-light-y: 79.8%;
   position: relative;
   display: block;
   width: 100%;
@@ -474,6 +476,20 @@
   --glass-y: 14.1%;
   --glass-w: 47.6%;
   --glass-h: 58.2%;
+  --status-light-x: 69.0%;
+}
+.home-mode .tv-status-light {
+  position: absolute;
+  z-index: 7;
+  left: var(--status-light-x);
+  top: var(--status-light-y);
+  width: clamp(3px, .45vw, 7px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: radial-gradient(circle at 40% 35%, #fff0dd 0 12%, #ff514b 38%, #d30c1b 72%, #510711 100%);
+  box-shadow: 0 0 3px 1px #ff575e, 0 0 10px 3px #fc183daa, 0 0 20px 6px #bd0d263b;
 }
 .home-mode .tv-face::after {
   content: '';
@@ -536,6 +552,8 @@
     --glass-y: 16.5%;
     --glass-w: 68.5%;
     --glass-h: 19.8%;
+    --status-light-x: 75.2%;
+    --status-light-y: 39.8%;
   }
   .home-mode .tv-scene.aspect-4x3 .tv-face {
     --room-art: url('/crt-room-portrait-4x3.webp');
@@ -543,7 +561,10 @@
     --glass-y: 13.2%;
     --glass-w: 61%;
     --glass-h: 25.6%;
+    --status-light-x: 73.0%;
+    --status-light-y: 42.0%;
   }
+  .home-mode .tv-status-light { width: clamp(3px, .65vw, 6px); }
   .home-mode .sticker-layer .sticker { width: clamp(24px, 5vw, 42px); height: clamp(24px, 5vw, 42px); }
   .home-mode .sticker-ball { left: 8%; top: 13%; }
   .home-mode .sticker-ranma { right: 8%; top: 13%; }
@@ -642,6 +663,7 @@
 /* Discord's compact activity surface gets the picture, with just two slim
    graphite side rails. The outer call grid remains under Discord's control. */
 @media (max-width: 520px) and (max-height: 360px) {
+  .home-mode .tv-status-light { display: none; }
   .stage.home-mode { padding: 0; background: #34383e; }
   .home-mode .room-scene { display: block; width: 100%; height: 100%; }
   .home-mode .tv-scene,
