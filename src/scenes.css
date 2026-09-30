@@ -824,6 +824,15 @@
   pointer-events: none;
   image-rendering: pixelated;
 }
+.stage.retro-scanlines.has-signal .crt-overlay::after {
+  content: '';
+  position: absolute;
+  inset: -30% 0;
+  pointer-events: none;
+  background: linear-gradient(transparent 42%, rgba(245,252,255,.11) 49%, rgba(0,0,0,.18) 51%, transparent 57%);
+  opacity: .55;
+  animation: signalRoll 4.8s linear infinite;
+}
 .stage.retro-scanlines .screen-glare { opacity: .42; }
 .stage.retro-scanlines .player { box-shadow: inset 0 0 29px rgba(0,0,0,.65); }
 .stage.home-mode.retro-scanlines .screen-wrap .player { border-radius: 6% / 4.5%; }

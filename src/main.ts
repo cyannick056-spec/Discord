@@ -192,27 +192,18 @@ function drawSignalSweeps(now: number) {
   const { width, height } = signalSweep;
   const data = sweepFrame.data;
   data.fill(0);
-  // The no-signal canvas brightens random pixels in a travelling band. Use
-  // the same moving grain on live video, with two independent band profiles.
-  for (const { center, halfWidth } of [
-    { center: (now / 31) % (height + 24) - 12, halfWidth: 12 },
-    { center: (now / 17) % (height + 10) - 5, halfWidth: 5 },
-  ]) {
-    for (let y = Math.max(0, Math.floor(center - halfWidth)); y < Math.min(height, Math.ceil(center + halfWidth)); y++) {
-      const distance = y - center;
-      const strength = 1 - Math.abs(distance) / halfWidth;
-      if (strength <= 0) continue;
-      const light = distance < 0;
-      for (let x = 0; x < width; x++) {
-        const i = (y * width + x) * 4;
-        const grain = nextNoise() / 255;
-        const alpha = Math.round((light ? 35 : 55) * strength * (.55 + grain * .7));
-        if (alpha <= data[i + 3]) continue;
-        data[i] = light ? 245 : 0;
-        data[i + 1] = light ? 252 : 0;
-        data[i + 2] = light ? 255 : 0;
-        data[i + 3] = alpha;
-      }
+  // Exactly the thin moving grain band from the no-signal canvas. The wider
+  // sweep uses that screen's CSS signalRoll animation and its 4.8s period.
+  const band = Math.floor((now / 31) % height);
+  for (let y = Math.max(0, band - 2); y < Math.min(height, band + 3); y++) {
+    const strength = 1 - Math.abs(y - band) / 3;
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const grain = nextNoise() / 255;
+      data[i] = 245;
+      data[i + 1] = 252;
+      data[i + 2] = 255;
+      data[i + 3] = Math.round(22 * strength * (.5 + grain));
     }
   }
   sweepContext.putImageData(sweepFrame, 0, 0);
@@ -303,17 +294,9 @@ async function initDiscord(clientId: string) {
     let step = 'permiso de Discord';
     try {
       let code: string;
-      try {
-        ({ code } = await discordSdk!.commands.authorize({
-          client_id: clientId, response_type: 'code', scope: ['identify', 'guilds'], prompt: 'none', state: '',
-        }));
-      } catch (fullScopeError) {
-        console.warn('Discord rechazó el permiso completo; probando solo el perfil:', fullScopeError);
-        step = 'permiso del perfil';
-        ({ code } = await discordSdk!.commands.authorize({
-          client_id: clientId, response_type: 'code', scope: ['identify'], prompt: 'none', state: '',
-        }));
-      }
+      ({ code } = await discordSdk!.commands.authorize({
+        client_id: clientId, response_type: 'code', scope: ['identify', 'guilds'], prompt: 'none', state: '',
+      }));
       step = 'canje del código';
       const response = await fetch('/api/discord-token', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
@@ -328,7 +311,11 @@ async function initDiscord(clientId: string) {
       void refreshParticipants();
     } catch (error) {
       authState = '×';
-      authProblem = step;
+      const rpcError = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : null;
+      const code = typeof rpcError?.code === 'number' ? String(rpcError.code) : '';
+      const message = typeof rpcError?.message === 'string' ? rpcError.message.replace(/\s+/g, ' ').slice(0, 70) :
+        error instanceof Error ? error.message.replace(/\s+/g, ' ').slice(0, 70) : '';
+      authProblem = `${step}${code ? ` (${code})` : ''}${message ? `: ${message}` : ''}`;
       showParticipants();
       console.warn(`No se pudo autorizar el perfil de Discord (${step}):`, error);
     } finally {
