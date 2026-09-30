@@ -14,6 +14,7 @@ const distDir = path.join(__dirname, 'dist');
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
+app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
   directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),
   editKey: process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY,
@@ -44,10 +45,38 @@ function sameSecret(a, b) {
   return crypto.timingSafeEqual(left, right);
 }
 
-async function mintToken({ roomName, identity, publish, subscribe }) {
+const entryTicketLifetime = 6 * 60 * 60_000;
+
+function activityTicket() {
+  const payload = Buffer.from(JSON.stringify({ expires: Date.now() + entryTicketLifetime, nonce: crypto.randomUUID() })).toString('base64url');
+  const signature = crypto.createHmac('sha256', required('DISCORD_CLIENT_SECRET'))
+    .update(`shis-activity:${payload}`).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function validActivityTicket(value) {
+  if (typeof value !== 'string' || value.length > 512) return false;
+  const [payload, signature, extra] = value.split('.');
+  if (!payload || !signature || extra || !process.env.DISCORD_CLIENT_SECRET) return false;
+  const expected = crypto.createHmac('sha256', process.env.DISCORD_CLIENT_SECRET)
+    .update(`shis-activity:${payload}`).digest('base64url');
+  if (!sameSecret(signature, expected)) return false;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return Number.isSafeInteger(decoded.expires) && decoded.expires > Date.now() &&
+      decoded.expires <= Date.now() + entryTicketLifetime && typeof decoded.nonce === 'string';
+  } catch { return false; }
+}
+
+function requireActivityTicket(req, res, next) {
+  if (validActivityTicket(req.get('X-Activity-Ticket') || req.query.ticket)) return next();
+  res.set('Cache-Control', 'no-store').status(401).json({ error: 'Abre Shis Stream desde Discord' });
+}
+
+async function mintToken({ roomName, identity, publish, subscribe, ttl = '6h' }) {
   const apiKey = required('LIVEKIT_API_KEY');
   const apiSecret = required('LIVEKIT_API_SECRET');
-  const token = new AccessToken(apiKey, apiSecret, { identity, ttl: '6h' });
+  const token = new AccessToken(apiKey, apiSecret, { identity, ttl });
   token.addGrant({
     roomJoin: true,
     room: roomName,
@@ -98,7 +127,7 @@ app.post('/api/discord-token', async (req, res) => {
       console.warn('Discord OAuth rechazado:', response.status, reason);
       return res.status(502).json({ error: `Discord no aceptó la autorización (${reason})` });
     }
-    res.set('Cache-Control', 'no-store').json({ access_token: token.access_token });
+    res.set('Cache-Control', 'no-store').json({ access_token: token.access_token, ticket: activityTicket() });
   } catch (error) {
     console.error('Discord token exchange failed:', error);
     res.status(502).json({ error: 'No se pudo autorizar con Discord' });
@@ -130,29 +159,62 @@ app.get('/api/publisher-token', async (req, res) => {
 });
 
 app.get('/api/viewer-token', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
+    return res.status(503).json({ error: 'La autorización de Discord no está configurada' });
+  }
+  const authorization = req.get('Authorization') || '';
+  const accessToken = /^Bearer ([A-Za-z0-9._~-]+)$/.exec(authorization)?.[1];
+  if (!accessToken) return res.status(401).json({ error: 'Abre la actividad en Discord para ver la transmisión' });
   try {
-    const stream = normalizeStream(req.query.stream);
+    // Verify the viewer with Discord on the server. URL parameters, iframe
+    // headers and the client-side SDK alone are not proof of identity.
+    const profileResponse = await fetch('https://discord.com/api/v10/oauth2/@me', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!profileResponse.ok) {
+      return res.status(401).json({ error: 'La autorización de Discord caducó; vuelve a entrar a la actividad' });
+    }
+    const authorizationInfo = await profileResponse.json();
+    if (authorizationInfo.application?.id !== process.env.DISCORD_CLIENT_ID ||
+        !authorizationInfo.scopes?.includes('identify') ||
+        typeof authorizationInfo.user?.id !== 'string' ||
+        !/^\d{15,22}$/.test(authorizationInfo.user.id)) {
+      return res.status(401).json({ error: 'No se pudo verificar tu perfil de Discord' });
+    }
+    // Viewers cannot create arbitrary LiveKit rooms by changing the URL.
+    const stream = normalizeStream(process.env.DEFAULT_STREAM || 'cris');
     const roomName = roomFor(stream);
     const token = await mintToken({
       roomName,
       identity: `viewer-${crypto.randomUUID()}`,
       publish: false,
       subscribe: true,
+      ttl: '2m',
     });
 
-    res.set('Cache-Control', 'no-store');
     res.json({ serverUrl: required('LIVEKIT_URL'), token, roomName });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Server error' });
+    console.error('Viewer authorization failed:', error);
+    res.status(502).json({ error: 'No se pudo verificar el acceso con Discord' });
   }
 });
 
 if (existsSync(distDir)) {
+  const serveActivityEntry = (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (validActivityTicket(req.query.ticket)) return res.sendFile(path.join(distDir, 'index.html'));
+    if (typeof req.query.frame_id === 'string' || typeof req.query.instance_id === 'string') {
+      return res.sendFile(path.join(distDir, 'gate.html'));
+    }
+    return res.status(403).type('text/plain').send('Abre Shis Stream desde la actividad de Discord.');
+  };
+  app.get(['/', '/index.html', '/gate.html'], serveActivityEntry);
   app.use(express.static(distDir, { index: false, maxAge: '1h' }));
   app.use((req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
-    res.sendFile(path.join(distDir, 'index.html'));
+    serveActivityEntry(req, res);
   });
 }
 
