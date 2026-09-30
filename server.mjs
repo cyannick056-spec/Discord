@@ -126,6 +126,12 @@ app.use((req, res) => {
   res.status(404).send('Run npm run build first.');
 });
 
-app.listen(port, '0.0.0.0', () => {
+const server = app.listen(port, '0.0.0.0', () => {
   console.log(`SHIS Stream Activity listening on :${port}`);
+});
+
+process.once('SIGTERM', () => {
+  server.close(() => {
+    console.log('SHIS Stream Activity stopped');
+  });
 });

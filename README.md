@@ -1,41 +1,52 @@
-# SHIS Stream — Discord Activity
+# SHIS Stream — Discord Activity and native relay
 
-Viewer Activity + tiny token backend for the Android sender in `cyannick056-spec/Shis-Stream`.
+Watch a Nintendo Switch stream together inside a Discord Activity. The current sender is a customized SysDVR sysmodule on the Switch; the Android APK in [`Shis-Stream`](https://github.com/cyannick056-spec/Shis-Stream) is an older alternative.
 
-## Architecture
+## Current architecture
 
 ```text
-Switch Android 10
-  -> SHIS Stream APK (MediaProjection + playback audio)
+Nintendo Switch (Atmosphère + SysDVR SHIS Direct)
+  -> Railway TCP proxy
+  -> native SHIS relay (Go, this repo's relay/)
   -> LiveKit Cloud
-  -> this Discord Activity
-  -> friends watching inside Discord
+  -> Discord Activity (this repo's src/)
+  -> viewers in Discord
 ```
 
-The Node server does **not** relay video. It serves the Activity, signs short-lived LiveKit tokens, and stores the shared decorations. Media travels through LiveKit.
+SysDVR captures H.264 video and PCM audio, then sends both to the relay over TCP. The relay authenticates the sender with `SHIS/1 <stream> <stream_key>`, publishes the media to LiveKit, and the Activity subscribes to it. The Node server (`server.mjs`) serves the Activity, issues short-lived viewer tokens, and stores shared decorations; it does not carry the video stream. The legacy `/api/publisher-token` endpoint remains for the older Android sender.
 
-## Environment
+The Switch build, configuration file and installation instructions live in [`Shis-Stream/sysdvr-shis`](https://github.com/cyannick056-spec/Shis-Stream/tree/main/sysdvr-shis).
 
-Copy `.env.example` to `.env` for local development. Never commit real secrets.
+## Configuration
 
-Required:
+Copy `.env.example` to `.env` for local Activity development. Never commit real keys.
 
-- `DISCORD_CLIENT_ID`: your Discord application's public client/application ID.
-- `LIVEKIT_URL`: `wss://...` URL from your LiveKit Cloud project.
-- `LIVEKIT_API_KEY`: server-only LiveKit API key.
-- `LIVEKIT_API_SECRET`: server-only LiveKit API secret.
-- `STREAM_KEY`: private password used by the Switch APK to obtain a publisher token.
-- `DEFAULT_STREAM`: normally `cris`.
-- `DECORATION_DATA_DIR`: writable persistent directory for decorations (Railway mounts a volume at `/data`, so use `/data/decorations`).
-- `DECORATION_EDIT_KEY`: optional private editor password; falls back to `STREAM_KEY` when absent.
+Activity server (`server.mjs`):
+
+- `DISCORD_CLIENT_ID`: public Discord application ID.
+- `LIVEKIT_URL`: LiveKit Cloud `wss://...` URL.
+- `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`: server-only LiveKit credentials.
+- `DEFAULT_STREAM`: stream name, normally `cris`.
+- `DECORATION_DATA_DIR`: persistent writable directory (Railway volume: `/data/decorations`).
+- `DECORATION_EDIT_KEY`: optional editor password; if unset, the server uses `STREAM_KEY`.
+- `STREAM_KEY`: still used by the legacy publisher-token endpoint and as the optional editor password fallback.
+
+Native relay (`relay/`), deployed separately from the Activity:
+
+- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`: LiveKit credentials, available only to the relay and Activity server.
+- `STREAM_KEY`: shared secret matching `stream_key` in the Switch's `/config/sysdvr/shis.ini`.
+- `PORT` (or `RELAY_PORT`): TCP listen port; expose it through the Railway TCP proxy.
+- `DEFAULT_STREAM`: optional fallback stream name.
+
+Set the Switch's `relay_host` and `relay_port` to the TCP proxy endpoint, and keep `stream_key` private. They are **not** the HTTPS address or port of the Activity server. The `stream` value must match the Activity's chosen stream; rooms are named `shis-<stream>`.
 
 ## Decorations
 
 In the Activity, open **Ajustes → Decorar** and enter the editor password. Upload PNG, JPG, WebP or GIF images (up to 2 MB), place them by dragging, then fine-tune position, size, rotation, opacity and layer in the numeric fields. **Guardar para todos** makes the arrangement visible to viewers. The editor stores separate placements for Casa/Arcade in horizontal, vertical and compact window views. You can copy a placement to the other views and adjust each one afterward. New images start in the selected view; select them in another view to place them there as well.
 
-The editor password stays in page memory only. Viewers can see decorations without it; upload and save require the password. In production, mount persistent storage before adding images, or uploads will disappear on redeploy.
+The editor password stays in page memory only. Viewers can see decorations without it; upload and save require the password. Mount persistent storage in production so images survive redeployments.
 
-## Local development
+## Local Activity development
 
 ```bash
 npm install
@@ -45,28 +56,16 @@ npm start
 
 For Vite hot reload, run the API in one terminal with `npm run dev:server` and Vite in another with `npm run dev`.
 
-## Discord setup
+## Discord and LiveKit setup
 
-1. Create an application in the Discord Developer Portal.
-2. Configure an Activity URL Mapping pointing `/` to the HTTPS URL where this repo is deployed.
-3. Enable Activities for the application.
-4. Put the application ID in `DISCORD_CLIENT_ID` on the server and redeploy.
-5. Launch the unverified Activity from your test server while developing.
+1. Create an application in the Discord Developer Portal, enable Activities, and map `/` to the HTTPS URL of this Activity.
+2. Set `DISCORD_CLIENT_ID` on the Activity server.
+3. Configure LiveKit credentials on both the Activity server and the native relay.
+4. Configure the Switch with the relay TCP proxy host, port, stream name and shared `STREAM_KEY` as described in the other repository.
+5. Launch the Activity in a Discord test server and start SysDVR on the Switch.
 
-The frontend only calls `DiscordSDK.ready()`; it does not need Discord OAuth for the MVP because it only acts as a LiveKit viewer.
-
-## LiveKit setup
-
-Create a LiveKit Cloud project and put its URL, API key and API secret in the server environment. Secrets stay on the server. The browser and APK receive only short-lived participant tokens.
-
-Rooms are named `shis-<stream>`. The Switch publishes with `canPublish=true`; Activity viewers receive `canPublish=false, canSubscribe=true` tokens.
+Viewer tokens cannot publish. Keep LiveKit API secrets and the stream key out of the browser and the repository.
 
 ## Deployment
 
-A `render.yaml` is included as an easy first deployment option. Any Node host with HTTPS works. Build command: `npm install && npm run build`; start command: `npm start`.
-
-## Security
-
-- Never put `LIVEKIT_API_SECRET` in the Android app, Activity JavaScript, or GitHub repository.
-- `STREAM_KEY` is checked with a constant-time comparison and is sent by the APK in the `X-Stream-Key` header.
-- Viewer tokens cannot publish.
+The current deployment uses Railway: a Node service for the Activity (`npm install && npm run build`, then `node server.mjs`) and a separate Go service built from `relay/Dockerfile` for the native TCP relay. The Activity has an HTTPS endpoint and a persistent volume for decorations; the relay needs a TCP proxy. `render.yaml` is an older alternative for hosting the Activity, not the current deployment.
