@@ -248,19 +248,17 @@ async function initDiscord(clientId: string) {
     `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` :
     `https://cdn.discordapp.com/embed/avatars/${(BigInt(user.id) >> 22n) % 6n}.png`;
   let activityPeople: Participant[] = [];
-  let channelPeople: Participant[] = [];
   let selfUser: Participant | null = null;
   let activityOk = false;
-  let channelOk = false;
+  let rosterRevision = 0;
   let authState = config?.discordAuthAvailable ? '…' : 'sin clave';
   let authProblem = '';
   let authInFlight = false;
-  let populatedAt = 0;
   const showParticipants = () => {
-    // Keep the Activity's own list first. Voice states cover clients where the
-    // instance command omits the local user, without creating duplicate bases.
+    // A voice call can outlive the Activity. Only its instance roster belongs
+    // on the TV; the authenticated local viewer covers mobile roster gaps.
     const byId = new Map<string, Participant>();
-    for (const person of [...activityPeople, ...channelPeople, ...(selfUser ? [selfUser] : [])]) {
+    for (const person of [...activityPeople, ...(selfUser ? [selfUser] : [])]) {
       if (!person.bot && !byId.has(person.id)) byId.set(person.id, person);
     }
     const people = [...byId.values()];
@@ -273,16 +271,15 @@ async function initDiscord(clientId: string) {
     const connection = authState === 'sin clave' ? 'Falta clave de Discord' :
       authState === '×' ? `Acceso falló: ${authProblem}` :
       authState === '…' ? 'Conectando…' :
-      activityOk || channelOk ? 'Conectado' : 'Lista no disponible';
+      activityOk ? 'Conectado' : 'Lista no disponible';
     viewerStatus.textContent = `${people.length} espectador${people.length === 1 ? '' : 'es'} · ${connection}`;
-    viewerStatus.title = `Actividad: ${activityOk ? activityPeople.length : 'no disponible'}; llamada: ${channelOk ? channelPeople.length : 'no disponible'}.`;
+    viewerStatus.title = `En esta Activity: ${activityOk ? activityPeople.length : 'lista no disponible'}.`;
     viewerRetry.hidden = authState !== '×';
   };
   const onActivityUpdate = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
     activityOk = true;
-    const updated = participants.filter((person) => !person.bot);
-    if (updated.length || Date.now() - populatedAt > 30000) activityPeople = updated;
-    if (updated.length) populatedAt = Date.now();
+    rosterRevision++;
+    activityPeople = participants.filter((person) => !person.bot);
     showParticipants();
   };
   const authenticateDiscord = async () => {
@@ -295,7 +292,7 @@ async function initDiscord(clientId: string) {
     try {
       let code: string;
       ({ code } = await discordSdk!.commands.authorize({
-        client_id: clientId, response_type: 'code', scope: ['identify', 'guilds'], prompt: 'none', state: '',
+        client_id: clientId, response_type: 'code', scope: ['identify'], prompt: 'none', state: '',
       }));
       step = 'canje del código';
       const response = await fetch('/api/discord-token', {
@@ -328,35 +325,20 @@ async function initDiscord(clientId: string) {
   const refreshParticipants = async () => {
     if (refreshInFlight) return;
     refreshInFlight = true;
+    const startedRevision = rosterRevision;
     try {
       const activity = await discordSdk!.commands.getActivityInstanceConnectedParticipants();
       activityOk = true;
-      // An update event may arrive with a populated roster just before an
-      // initial empty mobile response. Give that event time to settle.
-      if (activity.participants.length || Date.now() - populatedAt > 30000) {
+      // An event received during this request is newer than its snapshot.
+      if (startedRevision === rosterRevision) {
         activityPeople = activity.participants.filter((person) => !person.bot);
-        if (activityPeople.length) populatedAt = Date.now();
       }
     } catch (error) {
-      activityOk = false;
-      console.warn('No se pudo consultar la Activity:', error);
-    }
-    // Query the call independently even when the Activity command fails.
-    if (discordSdk!.channelId) {
-      try {
-        const channel = await discordSdk!.commands.getChannel({ channel_id: discordSdk!.channelId });
-        channelOk = true;
-        channelPeople = channel.voice_states.filter((state) => !state.user.bot).map((state): Participant => ({
-          ...state.user, flags: state.user.flags ?? 0, nickname: state.nick,
-        }));
-      } catch (error) {
-        channelOk = false;
-        channelPeople = [];
-        console.warn('No se pudo consultar la llamada:', error);
+      if (startedRevision === rosterRevision) {
+        activityOk = false;
+        activityPeople = [];
       }
-    } else {
-      channelOk = false;
-      channelPeople = [];
+      console.warn('No se pudo consultar la Activity:', error);
     }
     showParticipants();
     refreshInFlight = false;
@@ -367,7 +349,7 @@ async function initDiscord(clientId: string) {
     .catch((error) => console.warn('No se pudo seguir cambios de participantes:', error));
   void refreshParticipants();
   if (config?.discordAuthAvailable) void authenticateDiscord();
-  setInterval(() => { if (!document.hidden) void refreshParticipants(); }, 8000);
+  setInterval(() => { if (!document.hidden) void refreshParticipants(); }, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshParticipants(); });
 }
 
