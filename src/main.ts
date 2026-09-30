@@ -200,9 +200,9 @@ function drawSignalSweeps(now: number) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4;
       const grain = nextNoise() / 255;
-      data[i] = 245;
-      data[i + 1] = 252;
-      data[i + 2] = 255;
+      data[i] = 205;
+      data[i + 1] = 222;
+      data[i + 2] = 241;
       data[i + 3] = Math.round(22 * strength * (.5 + grain));
     }
   }
