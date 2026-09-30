@@ -237,8 +237,12 @@ async function initDiscord(clientId: string) {
     setDecorationViewers(participantOrder.map((id) => byId.get(id)!).filter(Boolean).map((person) => ({
       id: person.id, name: person.nickname || person.global_name || person.username, avatar: avatarUrl(person),
     })));
-    viewerStatus.textContent = `${people.length} visibles · A:${activityOk ? activityPeople.length : '×'} V:${channelOk ? channelPeople.length : '×'} · acceso:${authState}`;
-    viewerStatus.title = 'A = Activity; V = llamada; × = consulta rechazada. Acceso = autorización de tu perfil de Discord.';
+    const connection = authState === 'sin clave' ? 'Falta clave de Discord' :
+      authState === '×' ? 'Acceso falló' :
+      authState === '…' ? 'Conectando…' :
+      activityOk || channelOk ? 'Conectado' : 'Lista no disponible';
+    viewerStatus.textContent = `${people.length} espectador${people.length === 1 ? '' : 'es'} · ${connection}`;
+    viewerStatus.title = `Actividad: ${activityOk ? activityPeople.length : 'no disponible'}; llamada: ${channelOk ? channelPeople.length : 'no disponible'}.`;
   };
   const onActivityUpdate = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
     activityOk = true;
