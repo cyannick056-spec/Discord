@@ -4,12 +4,12 @@ type Aspect = '16:9' | '4:3';
 type PlacementKey = `${Scene}-${View}` | `home-${View}-16x9` | `home-${View}-4x3`;
 type SlotColor = 'red' | 'blue' | 'green' | 'yellow' | 'black';
 type Viewer = { id: string; name: string; avatar: string };
-const slotColors: { id: SlotColor; name: string; css: string }[] = [
-  { id: 'red', name: 'Rojo', css: '#b73532' },
-  { id: 'blue', name: 'Azul', css: '#246fa8' },
-  { id: 'green', name: 'Verde', css: '#399055' },
-  { id: 'yellow', name: 'Amarillo', css: '#d1a532' },
-  { id: 'black', name: 'Negro', css: '#272b31' },
+const slotColors: { id: SlotColor; name: string }[] = [
+  { id: 'red', name: 'Rojo' },
+  { id: 'blue', name: 'Azul' },
+  { id: 'green', name: 'Verde' },
+  { id: 'yellow', name: 'Amarillo' },
+  { id: 'black', name: 'Negro' },
 ];
 type Placement = {
   x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
@@ -172,10 +172,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     if (slotIndex >= 0) {
       const figure = document.createElement('div');
       figure.className = 'viewer-figure';
-      figure.style.setProperty('--base-color', slotColors[slotIndex].css);
       figure.style.filter = ambientFilter(placement);
-      const neck = document.createElement('div');
-      neck.className = 'viewer-neck';
       const disc = document.createElement('div');
       disc.className = 'viewer-disc';
       disc.title = viewer?.name ?? `Espacio ${slotIndex + 1} · ${slotColors[slotIndex].name}`;
@@ -187,9 +184,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
         avatar.referrerPolicy = 'no-referrer';
         disc.append(avatar);
       } else disc.textContent = String(slotIndex + 1);
-      const base = document.createElement('div');
-      base.className = 'viewer-base';
-      figure.append(neck, disc, base);
+      figure.append(disc);
       box.append(figure);
     } else {
       const image = document.createElement('img');
