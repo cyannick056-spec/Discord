@@ -1,6 +1,6 @@
-import { DiscordSDK, RPCCloseCodes } from '@discord/embedded-app-sdk';
+import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
-import { initDecorations } from './decorations';
+import { initDecorations, setDecorationViewers } from './decorations';
 import './style.css';
 import './scenes.css';
 
@@ -47,6 +47,7 @@ const volumeValue = document.querySelector<HTMLOutputElement>('#volumeValue')!;
 let room: Room | null = null;
 let config: AppConfig | null = null;
 let discordSdk: DiscordSDK | null = null;
+let participantOrder: string[] = [];
 let signalLostTimer: ReturnType<typeof setTimeout> | null = null;
 const editorPreviewMode = new URLSearchParams(location.search).has('editorPreview');
 
@@ -233,6 +234,26 @@ async function initDiscord(clientId: string) {
   discordSdk = new DiscordSDK(clientId);
   await discordSdk.ready();
   exitButton.hidden = false;
+  type Participant = Types.GetActivityInstanceConnectedParticipantsResponse['participants'][number];
+  const avatarUrl = (user: Participant) => user.avatar ?
+    `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` :
+    `https://cdn.discordapp.com/embed/avatars/${(BigInt(user.id) >> 22n) % 6n}.png`;
+  const updateParticipants = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
+    const people = participants.filter((person) => !person.bot);
+    const present = new Set(people.map((person) => person.id));
+    participantOrder = participantOrder.filter((id) => present.has(id));
+    for (const person of people) if (!participantOrder.includes(person.id)) participantOrder.push(person.id);
+    const byId = new Map(people.map((person) => [person.id, person]));
+    setDecorationViewers(participantOrder.map((id) => byId.get(id)!).filter(Boolean).map((person) => ({
+      id: person.id, name: person.nickname || person.global_name || person.username, avatar: avatarUrl(person),
+    })));
+  };
+  try {
+    await discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, updateParticipants);
+    updateParticipants(await discordSdk.commands.getInstanceConnectedParticipants());
+  } catch (error) {
+    console.warn('No se pudo mostrar la lista de participantes:', error);
+  }
 }
 
 function getLiveKitConnectUrl(serverUrl: string) {

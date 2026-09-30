@@ -12,6 +12,7 @@ const views = new Set([
   'home-window-16x9', 'home-window-4x3',
 ]);
 const assetPattern = /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/;
+const viewerSlotIds = new Set(['viewer-slot-red', 'viewer-slot-blue', 'viewer-slot-green', 'viewer-slot-yellow', 'viewer-slot-black']);
 const mimeFor = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };
 
 function assetExtension(buffer) {
@@ -27,11 +28,16 @@ function inRange(value, low, high) {
 }
 
 function validManifest(input) {
-  if (!input || !Array.isArray(input.items) || input.items.length > 60) return false;
+  if (!input || !Array.isArray(input.items) || input.items.length > 65) return false;
   const ids = new Set();
+  let decorations = 0;
   return input.items.every((item) => {
-    if (!item || typeof item.id !== 'string' || !/^[a-f0-9-]{36}$/.test(item.id) || ids.has(item.id) ||
-        typeof item.asset !== 'string' || !assetPattern.test(item.asset) ||
+    const slot = item?.kind === 'viewer-slot';
+    if (!slot) decorations++;
+    if (!item || typeof item.id !== 'string' ||
+        (slot ? !viewerSlotIds.has(item.id) : !/^[a-f0-9-]{36}$/.test(item.id)) ||
+        decorations > 60 || ids.has(item.id) ||
+        (!slot && (typeof item.asset !== 'string' || !assetPattern.test(item.asset))) ||
         typeof item.name !== 'string' || item.name.length > 70 ||
         !item.placements || typeof item.placements !== 'object') return false;
     ids.add(item.id);

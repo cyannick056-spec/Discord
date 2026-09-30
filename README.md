@@ -46,6 +46,8 @@ In the Activity, open **Ajustes → Decorar** and enter the editor password. Upl
 
 New decorations are anchored to the TV glass (or arcade cabinet/screen) so their position follows it across different window sizes. Choose **Escena completa** for art meant to stay with the whole background. The editor stores separate placements for Casa in TV 16:9 and 4:3, each in horizontal, vertical and compact window views; Arcade has its own three views. Select **Tamaño TV** to see and edit the correct composition. Older Casa placements remain available in both sizes until you open each size in the editor; then a separate copy is made for that size. Older scene-based placements are anchored to the screen when opened. Check each size and save it. You can copy a placement to other views or the other TV size before fine-tuning. **Guardar para todos** makes the arrangement visible to viewers.
 
+The editor also includes five fixed viewer slots with red, blue, green, yellow and black pedestals. Position and style each one in every composition just like a decoration. Inside Discord, the first five connected participants occupy the slots in the order observed by the Activity; a slot disappears when no participant occupies it. The editor shows numbered placeholders, including outside Discord. People watching in a normal browser are not counted as Discord participants.
+
 The editor password stays in page memory only. Viewers can see decorations without it; upload and save require the password. Mount persistent storage in production so images survive redeployments.
 
 ## Local Activity development

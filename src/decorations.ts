@@ -2,11 +2,23 @@ type Scene = 'home' | 'arcade';
 type View = 'landscape' | 'portrait' | 'window';
 type Aspect = '16:9' | '4:3';
 type PlacementKey = `${Scene}-${View}` | `home-${View}-16x9` | `home-${View}-4x3`;
+type SlotColor = 'red' | 'blue' | 'green' | 'yellow' | 'black';
+type Viewer = { id: string; name: string; avatar: string };
+const slotColors: { id: SlotColor; name: string; css: string }[] = [
+  { id: 'red', name: 'Rojo', css: '#b73532' },
+  { id: 'blue', name: 'Azul', css: '#246fa8' },
+  { id: 'green', name: 'Verde', css: '#399055' },
+  { id: 'yellow', name: 'Amarillo', css: '#d1a532' },
+  { id: 'black', name: 'Negro', css: '#272b31' },
+];
 type Placement = {
   x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
   anchor?: 'scene' | 'frame'; brightness?: number; saturation?: number; hue?: number; shadow?: number;
 };
-type Decoration = { id: string; asset: string; name: string; placements: Partial<Record<PlacementKey, Placement>> };
+type Decoration = {
+  id: string; asset: string; name: string; kind?: 'viewer-slot';
+  placements: Partial<Record<PlacementKey, Placement>>;
+};
 type Manifest = { items: Decoration[] };
 
 const previewMode = new URLSearchParams(location.search).has('editorPreview');
@@ -47,6 +59,7 @@ let selected: string | null = null;
 let editKey = '';
 let previewReady = false;
 let lastRender: { manifest: Manifest; sceneName: Scene; view: View; editable: boolean } | null = null;
+let viewers: Viewer[] = [];
 
 function currentView(): View {
   if (innerWidth <= 520 && innerHeight <= 360) return 'window';
@@ -73,6 +86,36 @@ function defaultPlacement(): Placement {
     anchor: 'frame', brightness: 83, saturation: 82, hue: 0, shadow: 80 };
 }
 function copyManifest(source: Manifest): Manifest { return structuredClone(source); }
+
+function slotPlacement(sceneName: Scene, view: View, index: number): Placement {
+  const positions = [10, 30, 50, 70, 90];
+  const portrait = view === 'portrait';
+  const arcade = sceneName === 'arcade';
+  return { ...defaultPlacement(), x: positions[index],
+    y: arcade ? (portrait ? 47 : 88) : (portrait ? 130 : view === 'window' ? 87 : 115),
+    width: portrait ? (arcade ? 12 : 13) : view === 'window' ? 9 : 6,
+    z: 18 };
+}
+
+function ensureViewerSlots(manifest: Manifest) {
+  const keys: [Scene, View, Aspect][] = [];
+  for (const view of ['landscape', 'portrait', 'window'] as const) {
+    keys.push(['home', view, '16:9'], ['home', view, '4:3'], ['arcade', view, '16:9']);
+  }
+  const slots = slotColors.map((color, index) => {
+    const id = `viewer-slot-${color.id}`;
+    let item = manifest.items.find((entry) => entry.id === id);
+    if (!item) {
+      item = { id, asset: '', kind: 'viewer-slot', name: `Espectador ${index + 1} · ${color.name}`, placements: {} };
+    }
+    for (const [sceneName, view, aspect] of keys) {
+      const placementKey = key(sceneName, view, aspect);
+      item.placements[placementKey] ??= slotPlacement(sceneName, view, index);
+    }
+    return item;
+  });
+  manifest.items = [...slots, ...manifest.items.filter((item) => item.kind !== 'viewer-slot')];
+}
 
 function frameElement(sceneName: Scene, view: View): HTMLElement {
   const selector = sceneName === 'home' ? '.screen-wrap' :
@@ -110,18 +153,45 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
   for (const item of manifest.items) {
     const placement = placementFor(item, sceneName, view, currentAspect());
     if (!placement || placement.hidden) continue;
+    const slotIndex = item.kind === 'viewer-slot' ? slotColors.findIndex((color) => item.id === `viewer-slot-${color.id}`) : -1;
+    const viewer = slotIndex >= 0 ? viewers[slotIndex] : undefined;
+    if (slotIndex >= 0 && !editable && !viewer) continue;
     const box = document.createElement('div');
     box.className = 'decoration-box';
     box.dataset.id = item.id;
     position(box, placement, sceneName, view);
     if (editable && item.id === selected) box.classList.add('is-selected');
-    const image = document.createElement('img');
-    image.className = 'decoration';
-    image.src = `/api/decorations/assets/${encodeURIComponent(item.asset)}`;
-    image.alt = '';
-    image.draggable = false;
-    image.style.filter = ambientFilter(placement);
-    box.append(image);
+    if (slotIndex >= 0) {
+      const figure = document.createElement('div');
+      figure.className = 'viewer-figure';
+      figure.style.setProperty('--base-color', slotColors[slotIndex].css);
+      figure.style.filter = ambientFilter(placement);
+      const neck = document.createElement('div');
+      neck.className = 'viewer-neck';
+      const disc = document.createElement('div');
+      disc.className = 'viewer-disc';
+      disc.title = viewer?.name ?? `Espacio ${slotIndex + 1} · ${slotColors[slotIndex].name}`;
+      if (viewer) {
+        const avatar = document.createElement('img');
+        avatar.src = viewer.avatar;
+        avatar.alt = viewer.name;
+        avatar.draggable = false;
+        avatar.referrerPolicy = 'no-referrer';
+        disc.append(avatar);
+      } else disc.textContent = String(slotIndex + 1);
+      const base = document.createElement('div');
+      base.className = 'viewer-base';
+      figure.append(neck, disc, base);
+      box.append(figure);
+    } else {
+      const image = document.createElement('img');
+      image.className = 'decoration';
+      image.src = `/api/decorations/assets/${encodeURIComponent(item.asset)}`;
+      image.alt = '';
+      image.draggable = false;
+      image.style.filter = ambientFilter(placement);
+      box.append(image);
+    }
     if (editable) {
       for (const [className, label] of [['decor-resize', 'Cambiar tamaño'], ['decor-rotate', 'Girar']] as const) {
         const handle = document.createElement('span');
@@ -263,9 +333,11 @@ function refreshItemList() {
 }
 
 function refreshFields() {
-  const placement = selectedItem()?.placements[activeKey()];
+  const item = selectedItem();
+  const placement = item?.placements[activeKey()];
   editorProperties.hidden = !placement;
   if (!placement) return;
+  decorRemove.hidden = item?.kind === 'viewer-slot';
   [placement.x, placement.y, placement.width, placement.rotation, placement.opacity * 100, placement.z]
     .forEach((value, index) => { inputs[index].value = String(Math.round(value * 10) / 10); });
   decorAnchor.value = placement.anchor || 'scene';
@@ -301,6 +373,7 @@ async function loadDecorations() {
     const response = await fetch('/api/decorations', { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     saved = await response.json() as Manifest;
+    ensureViewerSlots(saved);
     if (editor.hidden) render(saved, scene(), currentView(), false);
   } catch (error) { console.error('No se pudo cargar la decoración:', error); }
 }
@@ -311,7 +384,9 @@ export function initDecorations() {
     window.addEventListener('message', (event) => {
       if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'decor-preview') return;
       selected = typeof event.data.selected === 'string' ? event.data.selected : null;
-      render(event.data.manifest as Manifest, scene(), currentView(), true);
+      const manifest = event.data.manifest as Manifest;
+      ensureViewerSlots(manifest);
+      render(manifest, scene(), currentView(), true);
     });
     window.addEventListener('resize', () => {
       if (lastRender) render(lastRender.manifest, lastRender.sceneName, currentView(), true);
@@ -386,7 +461,8 @@ export function initDecorations() {
     const file = editorUpload.files?.[0];
     editorUpload.value = '';
     if (!file) return;
-    if (draft.items.length >= 60) return status('Máximo 60 decoraciones. Quita alguna antes de añadir otra.');
+    if (draft.items.filter((item) => item.kind !== 'viewer-slot').length >= 60)
+      return status('Máximo 60 decoraciones. Quita alguna antes de añadir otra.');
     if (file.size > 2 * 1024 * 1024) return status('La imagen debe pesar menos de 2 MB.');
     try {
       status('Subiendo imagen…');
@@ -443,6 +519,7 @@ export function initDecorations() {
     status(`Copiada a TV ${other}. Cambia el selector de tamaño para ajustarla antes de guardar.`);
   });
   decorRemove.addEventListener('click', () => {
+    if (selectedItem()?.kind === 'viewer-slot') return;
     draft.items = draft.items.filter((item) => item.id !== selected);
     selected = null;
     refreshItemList();
@@ -499,6 +576,11 @@ function openWorkspace() {
   status('Sube una imagen o selecciona una decoración.');
   refreshItemList();
   reloadPreview();
+}
+
+export function setDecorationViewers(connected: Viewer[]) {
+  viewers = connected.slice(0, 5);
+  if (!previewMode && editor.hidden) render(saved, scene(), currentView(), false);
 }
 
 function updateAspectControls() {
