@@ -47,6 +47,7 @@ function validManifest(input) {
       inRange(p.width, 1, 80) && inRange(p.rotation, -180, 180) &&
       inRange(p.opacity, 0, 1) && inRange(p.z, 0, 99) &&
       typeof p.hidden === 'boolean' &&
+      (p.foreground === undefined || typeof p.foreground === 'boolean') &&
       (p.anchor === undefined || p.anchor === 'scene' || p.anchor === 'frame') &&
       (p.brightness === undefined || inRange(p.brightness, 35, 130)) &&
       (p.saturation === undefined || inRange(p.saturation, 0, 150)) &&

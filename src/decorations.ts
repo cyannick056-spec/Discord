@@ -13,7 +13,8 @@ const slotColors: { id: SlotColor; name: string }[] = [
 ];
 type Placement = {
   x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
-  anchor?: 'scene' | 'frame'; brightness?: number; saturation?: number; hue?: number; shadow?: number;
+  foreground?: boolean; anchor?: 'scene' | 'frame';
+  brightness?: number; saturation?: number; hue?: number; shadow?: number;
 };
 type Decoration = {
   id: string; asset: string; name: string; kind?: 'viewer-slot';
@@ -56,6 +57,7 @@ const filterIds = ['decorBrightness', 'decorSaturation', 'decorHue', 'decorShado
 const filters = filterIds.map((id) => document.querySelector<HTMLInputElement>(`#${id}`)!);
 const filterOutputs = filterIds.map((id) => document.querySelector<HTMLOutputElement>(`#${id}Value`)!);
 const decorHidden = document.querySelector<HTMLInputElement>('#decorHidden')!;
+const decorForeground = document.querySelector<HTMLInputElement>('#decorForeground')!;
 
 let saved: Manifest = { items: [] };
 let draft: Manifest = { items: [] };
@@ -144,7 +146,7 @@ function position(box: HTMLDivElement, placement: Placement, sceneName: Scene, v
   box.style.top = `${bounds.top - room.top + bounds.height * placement.y / 100}px`;
   box.style.width = `${bounds.width * placement.width / 100}px`;
   box.style.opacity = String(placement.opacity);
-  box.style.zIndex = String(placement.z);
+  box.style.zIndex = String(placement.z + (placement.foreground ? 100 : 0));
   box.style.transform = `translate(-50%, -50%) rotate(${placement.rotation}deg)`;
 }
 
@@ -168,9 +170,6 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     box.className = 'decoration-box';
     box.dataset.id = item.id;
     position(box, placement, sceneName, view);
-    // Viewer avatars sit above custom PNG bases in both the editor and the
-    // live scene. Keep the saved z value for ordering avatars among themselves.
-    if (slotIndex >= 0) box.style.zIndex = String(100 + placement.z);
     if (editable && item.id === selected) box.classList.add('is-selected');
     if (slotIndex >= 0) {
       const figure = document.createElement('div');
@@ -399,6 +398,7 @@ function refreshFields() {
   [placement.brightness ?? 83, placement.saturation ?? 82, placement.hue ?? 0, placement.shadow ?? 80]
     .forEach((value, index) => { filters[index].value = String(value); filterOutputs[index].value = `${value}${index === 2 ? '°' : '%'}`; });
   decorHidden.checked = placement.hidden;
+  decorForeground.checked = placement.foreground === true;
 }
 
 function selectItem(id: string) {
@@ -550,7 +550,7 @@ export function initDecorations() {
     } catch (error) { status(error instanceof Error ? error.message : 'No se pudo subir'); }
   });
 
-  [...inputs, ...filters, decorHidden].forEach((input) => input.addEventListener('input', () => {
+  [...inputs, ...filters, decorHidden, decorForeground].forEach((input) => input.addEventListener('input', () => {
     const placement = selectedItem()?.placements[activeKey()];
     if (!placement) return;
     const values = inputs.map((field) => Number(field.value));
@@ -562,6 +562,7 @@ export function initDecorations() {
     placement.opacity = clamp(values[4] / 100, 0, 1);
     placement.z = clamp(values[5], 0, 99);
     placement.hidden = decorHidden.checked;
+    placement.foreground = decorForeground.checked;
     placement.brightness = Number(filters[0].value);
     placement.saturation = Number(filters[1].value);
     placement.hue = Number(filters[2].value);
