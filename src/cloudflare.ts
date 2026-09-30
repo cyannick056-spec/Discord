@@ -16,7 +16,6 @@ async function gather(pc: RTCPeerConnection) {
 
 export class CloudflareViewer {
   private pc: RTCPeerConnection | null = null;
-  private session: string | null = null;
   private source: string | null = null;
   private polling: ReturnType<typeof setInterval> | null = null;
   private connecting = false;
@@ -45,9 +44,9 @@ export class CloudflareViewer {
 
   async start() {
     this.closed = false;
-    await this.poll();
     this.polling = setInterval(() => { if (!this.closed && !document.hidden) void this.poll().catch(this.onError); }, 3000);
     document.addEventListener('visibilitychange', this.visible);
+    await this.poll();
   }
 
   private visible = () => {
@@ -65,7 +64,6 @@ export class CloudflareViewer {
   private reset() {
     this.pc?.close();
     this.pc = null;
-    this.session = null;
     this.source = null;
     this.mids.clear();
     this.onSignalLost();
@@ -108,7 +106,6 @@ export class CloudflareViewer {
     try {
       const session = await this.request<{ sessionId: string; source: string }>('viewer/session', {});
       if (this.closed || this.pc !== pc || session.source !== source) return this.reset();
-      this.session = session.sessionId;
       const result = await this.request<TrackResponse>('viewer/tracks', { sessionId: session.sessionId });
       if (this.closed || this.pc !== pc) return;
       for (const track of result.tracks) {
