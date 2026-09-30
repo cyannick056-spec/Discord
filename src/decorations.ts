@@ -23,6 +23,12 @@ type Decoration = {
 type Manifest = { items: Decoration[] };
 
 const previewMode = new URLSearchParams(location.search).has('editorPreview');
+const activityTicket = new URLSearchParams(location.search).get('ticket') || '';
+function authorizedUrl(path: string) {
+  const url = new URL(path, location.origin);
+  if (activityTicket) url.searchParams.set('ticket', activityTicket);
+  return `${url.pathname}${url.search}`;
+}
 const layer = document.querySelector<HTMLDivElement>('#decorationLayer')!;
 const stage = document.querySelector<HTMLElement>('#stage')!;
 const editor = document.querySelector<HTMLElement>('#decorEditor')!;
@@ -191,7 +197,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     } else {
       const image = document.createElement('img');
       image.className = 'decoration';
-      image.src = `/api/decorations/assets/${encodeURIComponent(item.asset)}`;
+      image.src = authorizedUrl(`/api/decorations/assets/${encodeURIComponent(item.asset)}`);
       image.alt = '';
       image.draggable = false;
       image.style.filter = ambientFilter(placement);
@@ -369,6 +375,7 @@ function reloadPreview() {
   changeZoom(1);
   sizePreview();
   const params = new URLSearchParams({ editorPreview: '1', scene: editorScene.value, aspect: editorAspect.value });
+  if (activityTicket) params.set('ticket', activityTicket);
   preview.src = `/?${params}`;
 }
 
@@ -415,7 +422,9 @@ function selectItem(id: string) {
 }
 
 async function editorRequest(url: string, options: RequestInit) {
-  const response = await fetch(url, { ...options, headers: { ...options.headers, 'X-Decoration-Key': editKey } });
+  const response = await fetch(url, { ...options, headers: {
+    ...options.headers, 'X-Decoration-Key': editKey, 'X-Activity-Ticket': activityTicket,
+  } });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error || `HTTP ${response.status}`);
@@ -425,7 +434,7 @@ async function editorRequest(url: string, options: RequestInit) {
 
 async function loadDecorations() {
   try {
-    const response = await fetch('/api/decorations', { cache: 'no-store' });
+    const response = await fetch(authorizedUrl('/api/decorations'), { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     saved = await response.json() as Manifest;
     ensureViewerSlots(saved);
