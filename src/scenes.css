@@ -823,19 +823,43 @@
   }
 }
 
-/* User decorations are placed in viewport percentages for each scene and view. */
+/* Decorations may follow the screen body or the full scene; JS measures the
+   actual frame so Discord's different viewport does not shift the artwork. */
 .decoration-layer { position: absolute; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; }
 .decoration {
-  position: absolute;
   display: block;
+  width: 100%;
   height: auto;
   max-width: none;
   user-select: none;
   pointer-events: none;
-  filter: brightness(.83) saturate(.82) drop-shadow(0 2px 3px #000c);
 }
-.preview-mode .decoration { pointer-events: auto; touch-action: none; cursor: grab; }
-.preview-mode .decoration:active { cursor: grabbing; }
+.decoration-box {
+  position: absolute;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+.preview-mode .decoration-box { pointer-events: auto; touch-action: none; cursor: grab; }
+.preview-mode .decoration-box:active { cursor: grabbing; }
+.preview-mode .decoration-box.is-selected { outline: 1px dashed #c2e6ee; outline-offset: 3px; }
+.decor-handle { display: none; }
+.preview-mode .decoration-box.is-selected .decor-handle {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 2px solid #122532;
+  border-radius: 50%;
+  background: #d7f3ff;
+  box-shadow: 0 0 0 1px #ecfdff, 0 2px 7px #000c;
+  pointer-events: auto;
+  touch-action: none;
+}
+.preview-mode .decor-resize { right: -9px; bottom: -9px; cursor: nwse-resize; }
+.preview-mode .decor-rotate { left: calc(50% - 8px); top: -25px; cursor: grab; }
 .preview-mode .scene-controls { display: none !important; }
 .preview-mode .n64-display { pointer-events: none; }
 
@@ -919,15 +943,20 @@
 .editor-properties { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .editor-properties label { display: flex; flex-direction: column; align-items: stretch; font-size: 10px; }
 .editor-properties input[type=number] { width: 100%; box-sizing: border-box; }
+.editor-properties .editor-wide { grid-column: span 2; }
+.editor-properties .editor-wide select { width: 100%; }
+.editor-properties input[type=range] { width: 100%; padding: 0; }
+.editor-properties output { font-size: 10px; color: #b7dae8; }
 .editor-properties .editor-check { grid-column: span 2; flex-direction: row; font-size: 12px; }
 .editor-properties button { grid-column: span 2; }
 #editorStatus { min-height: 2em; color: #b7dae8; }
+.editor-tip { color: #9aafb9; line-height: 1.3; }
 @media (max-width: 670px) {
   .decor-editor { padding: 8px; gap: 6px; }
   .editor-body { display: flex; flex-direction: column; }
   .preview-frame { flex: 0 0 43%; }
   .editor-sidebar { flex: 1; }
   .editor-properties { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .editor-properties .editor-check, .editor-properties button { grid-column: span 3; }
+  .editor-properties .editor-wide, .editor-properties .editor-check, .editor-properties button { grid-column: span 3; }
   .editor-toolbar { gap: 5px; }
 }

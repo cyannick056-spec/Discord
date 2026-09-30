@@ -42,7 +42,9 @@ Set the Switch's `relay_host` and `relay_port` to the TCP proxy endpoint, and ke
 
 ## Decorations
 
-In the Activity, open **Ajustes → Decorar** and enter the editor password. Upload PNG, JPG, WebP or GIF images (up to 2 MB), place them by dragging, then fine-tune position, size, rotation, opacity and layer in the numeric fields. **Guardar para todos** makes the arrangement visible to viewers. The editor stores separate placements for Casa/Arcade in horizontal, vertical and compact window views. You can copy a placement to the other views and adjust each one afterward. New images start in the selected view; select them in another view to place them there as well.
+In the Activity, open **Ajustes → Decorar** and enter the editor password. Upload PNG, JPG, WebP or GIF images (up to 2 MB). Drag an image to move it; use its corner handle to resize and its round handle to rotate. Hold Shift while dragging for finer motion. Numeric position, size, rotation, opacity and layer controls remain available, alongside light, saturation, hue and shadow sliders that help the art match the room.
+
+New decorations are anchored to the TV glass (or arcade cabinet/screen) so their position follows it across different window sizes. Choose **Escena completa** for art meant to stay with the whole background. Older scene-based placements are converted to the screen anchor when their view opens in the editor; check the result and save it. The editor stores separate placements for Casa/Arcade in horizontal, vertical and compact window views. Copy a placement to other views if helpful, then adjust each one. **Guardar para todos** makes the arrangement visible to viewers.
 
 The editor password stays in page memory only. Viewers can see decorations without it; upload and save require the password. Mount persistent storage in production so images survive redeployments.
 

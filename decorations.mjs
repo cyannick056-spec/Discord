@@ -34,10 +34,15 @@ function validManifest(input) {
     ids.add(item.id);
     return Object.entries(item.placements).every(([view, p]) =>
       views.has(view) && p &&
-      inRange(p.x, 0, 100) && inRange(p.y, 0, 100) &&
+      inRange(p.x, -30, 130) && inRange(p.y, -35, 145) &&
       inRange(p.width, 1, 80) && inRange(p.rotation, -180, 180) &&
       inRange(p.opacity, 0, 1) && inRange(p.z, 0, 99) &&
-      typeof p.hidden === 'boolean');
+      typeof p.hidden === 'boolean' &&
+      (p.anchor === undefined || p.anchor === 'scene' || p.anchor === 'frame') &&
+      (p.brightness === undefined || inRange(p.brightness, 35, 130)) &&
+      (p.saturation === undefined || inRange(p.saturation, 0, 150)) &&
+      (p.hue === undefined || inRange(p.hue, -60, 60)) &&
+      (p.shadow === undefined || inRange(p.shadow, 0, 100)));
   });
 }
 

@@ -62,6 +62,7 @@ function setAspect(mode: AspectMode) {
   aspectButton.textContent = mode;
   aspectButton.setAttribute('aria-label', `Cambiar proporción de la TV a ${mode === '4:3' ? '16:9' : '4:3'}`);
   if (!editorPreviewMode) try { localStorage.setItem('shis-tv-aspect', mode); } catch { /* Session-only fallback. */ }
+  window.dispatchEvent(new Event('shis-aspect-change'));
 }
 setAspect(aspectMode);
 

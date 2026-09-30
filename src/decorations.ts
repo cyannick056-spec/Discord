@@ -1,6 +1,9 @@
 type Scene = 'home' | 'arcade';
 type View = 'landscape' | 'portrait' | 'window';
-type Placement = { x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean };
+type Placement = {
+  x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
+  anchor?: 'scene' | 'frame'; brightness?: number; saturation?: number; hue?: number; shadow?: number;
+};
 type Decoration = { id: string; asset: string; name: string; placements: Partial<Record<`${Scene}-${View}`, Placement>> };
 type Manifest = { items: Decoration[] };
 
@@ -27,6 +30,10 @@ const decorCopy = document.querySelector<HTMLButtonElement>('#decorCopy')!;
 const decorRemove = document.querySelector<HTMLButtonElement>('#decorRemove')!;
 const inputIds = ['decorX', 'decorY', 'decorWidth', 'decorRotation', 'decorOpacity', 'decorZ'] as const;
 const inputs = inputIds.map((id) => document.querySelector<HTMLInputElement>(`#${id}`)!);
+const decorAnchor = document.querySelector<HTMLSelectElement>('#decorAnchor')!;
+const filterIds = ['decorBrightness', 'decorSaturation', 'decorHue', 'decorShadow'] as const;
+const filters = filterIds.map((id) => document.querySelector<HTMLInputElement>(`#${id}`)!);
+const filterOutputs = filterIds.map((id) => document.querySelector<HTMLOutputElement>(`#${id}Value`)!);
 const decorHidden = document.querySelector<HTMLInputElement>('#decorHidden')!;
 
 let saved: Manifest = { items: [] };
@@ -34,6 +41,7 @@ let draft: Manifest = { items: [] };
 let selected: string | null = null;
 let editKey = '';
 let previewReady = false;
+let lastRender: { manifest: Manifest; sceneName: Scene; view: View; editable: boolean } | null = null;
 
 function currentView(): View {
   if (innerWidth <= 520 && innerHeight <= 360) return 'window';
@@ -46,58 +54,159 @@ function activeKey() { return key(editorScene.value as Scene, editorView.value a
 function clamp(value: number, low: number, high: number) { return Math.min(high, Math.max(low, value)); }
 function status(message: string) { editorStatus.textContent = message; }
 function selectedItem() { return draft.items.find((item) => item.id === selected); }
-function defaultPlacement(): Placement { return { x: 50, y: 30, width: 10, rotation: 0, opacity: 1, z: 10, hidden: false }; }
+function defaultPlacement(): Placement {
+  return { x: 50, y: 30, width: 10, rotation: 0, opacity: 1, z: 10, hidden: false,
+    anchor: 'frame', brightness: 83, saturation: 82, hue: 0, shadow: 80 };
+}
 function copyManifest(source: Manifest): Manifest { return structuredClone(source); }
 
+function frameElement(sceneName: Scene, view: View): HTMLElement {
+  const selector = sceneName === 'home' ? '.screen-wrap' :
+    view === 'portrait' ? '.arcade-scene' : '.arcade-screen';
+  return document.querySelector<HTMLElement>(selector)!;
+}
+
+function basis(placement: Placement, sceneName: Scene, view: View): DOMRect {
+  const frame = frameElement(sceneName, view).getBoundingClientRect();
+  return placement.anchor === 'frame' && frame.width && frame.height ?
+    frame : layer.getBoundingClientRect();
+}
+
+function position(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View) {
+  const room = layer.getBoundingClientRect();
+  const bounds = basis(placement, sceneName, view);
+  box.style.left = `${bounds.left - room.left + bounds.width * placement.x / 100}px`;
+  box.style.top = `${bounds.top - room.top + bounds.height * placement.y / 100}px`;
+  box.style.width = `${bounds.width * placement.width / 100}px`;
+  box.style.opacity = String(placement.opacity);
+  box.style.zIndex = String(placement.z);
+  box.style.transform = `translate(-50%, -50%) rotate(${placement.rotation}deg)`;
+}
+
+function ambientFilter(placement: Placement): string {
+  const shadow = (placement.shadow ?? 80) / 100;
+  return `brightness(${placement.brightness ?? 83}%) saturate(${placement.saturation ?? 82}%) ` +
+    `hue-rotate(${placement.hue ?? 0}deg) ` +
+    `drop-shadow(0 2px 3px rgba(0,0,0,${(.9 * shadow).toFixed(2)}))`;
+}
+
 function render(manifest: Manifest, sceneName: Scene, view: View, editable: boolean) {
+  lastRender = { manifest, sceneName, view, editable };
   layer.replaceChildren();
   for (const item of manifest.items) {
     const placement = item.placements[key(sceneName, view)];
     if (!placement || placement.hidden) continue;
+    const box = document.createElement('div');
+    box.className = 'decoration-box';
+    box.dataset.id = item.id;
+    position(box, placement, sceneName, view);
+    if (editable && item.id === selected) box.classList.add('is-selected');
     const image = document.createElement('img');
     image.className = 'decoration';
     image.src = `/api/decorations/assets/${encodeURIComponent(item.asset)}`;
     image.alt = '';
     image.draggable = false;
-    image.dataset.id = item.id;
-    image.style.left = `${placement.x}%`;
-    image.style.top = `${placement.y}%`;
-    image.style.width = `${placement.width}%`;
-    image.style.opacity = String(placement.opacity);
-    image.style.zIndex = String(placement.z);
-    image.style.transform = `translate(-50%, -50%) rotate(${placement.rotation}deg)`;
-    if (editable) attachDrag(image, placement);
-    layer.append(image);
+    image.style.filter = ambientFilter(placement);
+    box.append(image);
+    if (editable) {
+      for (const [className, label] of [['decor-resize', 'Cambiar tamaño'], ['decor-rotate', 'Girar']] as const) {
+        const handle = document.createElement('span');
+        handle.className = `decor-handle ${className}`;
+        handle.setAttribute('role', 'presentation');
+        handle.title = label;
+        box.append(handle);
+      }
+      attachDrag(box, placement, sceneName, view);
+    }
+    layer.append(box);
   }
 }
 
-function attachDrag(image: HTMLImageElement, placement: Placement) {
-  image.addEventListener('pointerdown', (event) => {
+function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View) {
+  box.addEventListener('pointerdown', (event) => {
     event.preventDefault();
-    const bounds = layer.getBoundingClientRect();
-    const origin = { x: event.clientX, y: event.clientY, left: placement.x, top: placement.y };
-    image.setPointerCapture(event.pointerId);
-    parent.postMessage({ type: 'decor-select', id: image.dataset.id }, location.origin);
+    const target = event.target as HTMLElement;
+    const action = target.closest('.decor-resize') ? 'resize' :
+      target.closest('.decor-rotate') ? 'rotate' : 'move';
+    const bounds = basis(placement, sceneName, view);
+    const center = box.getBoundingClientRect();
+    const cx = center.left + center.width / 2;
+    const cy = center.top + center.height / 2;
+    const startAngle = Math.atan2(event.clientY - cy, event.clientX - cx);
+    const origin = { x: event.clientX, y: event.clientY, left: placement.x,
+      top: placement.y, width: placement.width, rotation: placement.rotation };
+    layer.querySelectorAll('.is-selected').forEach((element) => element.classList.remove('is-selected'));
+    box.classList.add('is-selected');
+    box.setPointerCapture(event.pointerId);
+    parent.postMessage({ type: 'decor-select', id: box.dataset.id }, location.origin);
     const move = (e: PointerEvent) => {
-      placement.x = Math.round(clamp(origin.left + (e.clientX - origin.x) / bounds.width * 100, 0, 100) * 10) / 10;
-      placement.y = Math.round(clamp(origin.top + (e.clientY - origin.y) / bounds.height * 100, 0, 100) * 10) / 10;
-      image.style.left = `${placement.x}%`;
-      image.style.top = `${placement.y}%`;
-      parent.postMessage({ type: 'decor-move', id: image.dataset.id, x: placement.x, y: placement.y }, location.origin);
+      const dx = e.clientX - origin.x;
+      const dy = e.clientY - origin.y;
+      const fine = e.shiftKey ? .2 : 1;
+      if (action === 'move') {
+        placement.x = Math.round(clamp(origin.left + dx / bounds.width * 100 * fine, -30, 130) * 10) / 10;
+        placement.y = Math.round(clamp(origin.top + dy / bounds.height * 100 * fine, -35, 145) * 10) / 10;
+      } else if (action === 'resize') {
+        const angle = origin.rotation * Math.PI / 180;
+        const localDx = dx * Math.cos(angle) + dy * Math.sin(angle);
+        placement.width = Math.round(clamp(origin.width + localDx / bounds.width * 100 * fine, 1, 80) * 10) / 10;
+      } else {
+        const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
+        const delta = (angle - startAngle) * 180 / Math.PI;
+        placement.rotation = Math.round(clamp(origin.rotation + delta * fine, -180, 180));
+      }
+      position(box, placement, sceneName, view);
+      parent.postMessage({ type: 'decor-change', id: box.dataset.id,
+        x: placement.x, y: placement.y, width: placement.width, rotation: placement.rotation }, location.origin);
     };
     const end = () => {
-      image.removeEventListener('pointermove', move);
-      image.removeEventListener('pointerup', end);
-      image.removeEventListener('pointercancel', end);
+      box.removeEventListener('pointermove', move);
+      box.removeEventListener('pointerup', end);
+      box.removeEventListener('pointercancel', end);
+      box.removeEventListener('lostpointercapture', end);
     };
-    image.addEventListener('pointermove', move);
-    image.addEventListener('pointerup', end);
-    image.addEventListener('pointercancel', end);
+    box.addEventListener('pointermove', move);
+    box.addEventListener('pointerup', end);
+    box.addEventListener('pointercancel', end);
+    box.addEventListener('lostpointercapture', end);
   });
 }
 
 function sendPreview() {
-  if (previewReady) preview.contentWindow?.postMessage({ type: 'decor-preview', manifest: draft }, location.origin);
+  if (previewReady) preview.contentWindow?.postMessage({ type: 'decor-preview', manifest: draft, selected }, location.origin);
+}
+
+function convertAnchor(placement: Placement, next: 'frame' | 'scene') {
+  const doc = preview.contentDocument;
+  const sceneName = editorScene.value as Scene;
+  const view = editorView.value as View;
+  const sceneBounds = doc?.querySelector('#decorationLayer')?.getBoundingClientRect();
+  const selector = sceneName === 'home' ? '.screen-wrap' :
+    view === 'portrait' ? '.arcade-scene' : '.arcade-screen';
+  const frameBounds = doc?.querySelector(selector)?.getBoundingClientRect();
+  if (!sceneBounds?.width || !sceneBounds.height || !frameBounds?.width || !frameBounds.height) return false;
+  const before = placement.anchor === 'frame' ? frameBounds : sceneBounds;
+  const after = next === 'frame' ? frameBounds : sceneBounds;
+  const x = (before.left + before.width * placement.x / 100 - after.left) / after.width * 100;
+  const y = (before.top + before.height * placement.y / 100 - after.top) / after.height * 100;
+  const width = before.width * placement.width / after.width;
+  placement.x = Math.round(clamp(x, -30, 130) * 10) / 10;
+  placement.y = Math.round(clamp(y, -35, 145) * 10) / 10;
+  placement.width = Math.round(clamp(width, 1, 80) * 10) / 10;
+  placement.anchor = next;
+  return true;
+}
+
+function migrateLegacyInView() {
+  let count = 0;
+  for (const item of draft.items) {
+    const placement = item.placements[activeKey()];
+    if (placement && !placement.anchor && convertAnchor(placement, 'frame')) count++;
+  }
+  if (count) {
+    refreshFields();
+    status(`${count} estampa${count === 1 ? '' : 's'} anclada${count === 1 ? '' : 's'} a la TV/pantalla. Revisa y guarda para conservarlo.`);
+  }
 }
 
 function sizePreview() {
@@ -137,6 +246,9 @@ function refreshFields() {
   if (!placement) return;
   [placement.x, placement.y, placement.width, placement.rotation, placement.opacity * 100, placement.z]
     .forEach((value, index) => { inputs[index].value = String(Math.round(value * 10) / 10); });
+  decorAnchor.value = placement.anchor || 'scene';
+  [placement.brightness ?? 83, placement.saturation ?? 82, placement.hue ?? 0, placement.shadow ?? 80]
+    .forEach((value, index) => { filters[index].value = String(value); filterOutputs[index].value = `${value}${index === 2 ? '°' : '%'}`; });
   decorHidden.checked = placement.hidden;
 }
 
@@ -146,9 +258,10 @@ function selectItem(id: string) {
   if (item && !item.placements[activeKey()]) {
     item.placements[activeKey()] = { ...(Object.values(item.placements)[0] || defaultPlacement()) };
     status('Colocada en esta vista. Arrástrala o ajusta los números.');
-    sendPreview();
+    if (!item.placements[activeKey()]!.anchor && previewReady) convertAnchor(item.placements[activeKey()]!, 'frame');
   }
   refreshItemList();
+  sendPreview();
 }
 
 async function editorRequest(url: string, options: RequestInit) {
@@ -174,7 +287,11 @@ export function initDecorations() {
     stage.classList.add('preview-mode');
     window.addEventListener('message', (event) => {
       if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'decor-preview') return;
+      selected = typeof event.data.selected === 'string' ? event.data.selected : null;
       render(event.data.manifest as Manifest, scene(), currentView(), true);
+    });
+    window.addEventListener('resize', () => {
+      if (lastRender) render(lastRender.manifest, lastRender.sceneName, currentView(), true);
     });
     return;
   }
@@ -186,6 +303,7 @@ export function initDecorations() {
     if (!editor.hidden) sizePreview();
   });
   window.addEventListener('shis-scene-change', () => render(saved, scene(), currentView(), false));
+  window.addEventListener('shis-aspect-change', () => render(saved, scene(), currentView(), false));
 
   editorButton.addEventListener('click', async () => {
     await initialLoad;
@@ -218,11 +336,25 @@ export function initDecorations() {
     }
   });
   editorKey.addEventListener('keydown', (event) => { if (event.key === 'Enter') editorUnlock.click(); });
-  preview.addEventListener('load', () => { previewReady = preview.src !== 'about:blank'; sendPreview(); });
+  preview.addEventListener('load', () => {
+    previewReady = preview.src !== 'about:blank';
+    if (previewReady) migrateLegacyInView();
+    sendPreview();
+  });
   new ResizeObserver(sizePreview).observe(previewFrame);
   editorScene.addEventListener('change', () => { selected = null; refreshItemList(); reloadPreview(); });
   editorView.addEventListener('change', () => { selected = null; refreshItemList(); reloadPreview(); });
   editorItem.addEventListener('change', () => selectItem(editorItem.value));
+  decorAnchor.addEventListener('change', () => {
+    const placement = selectedItem()?.placements[activeKey()];
+    if (!placement) return;
+    if (!convertAnchor(placement, decorAnchor.value as 'frame' | 'scene')) {
+      decorAnchor.value = placement.anchor || 'scene';
+      return status('Espera a que cargue la vista previa.');
+    }
+    refreshFields();
+    sendPreview();
+  });
 
   editorUpload.addEventListener('change', async () => {
     const file = editorUpload.files?.[0];
@@ -248,18 +380,23 @@ export function initDecorations() {
     } catch (error) { status(error instanceof Error ? error.message : 'No se pudo subir'); }
   });
 
-  [...inputs, decorHidden].forEach((input) => input.addEventListener('input', () => {
+  [...inputs, ...filters, decorHidden].forEach((input) => input.addEventListener('input', () => {
     const placement = selectedItem()?.placements[activeKey()];
     if (!placement) return;
     const values = inputs.map((field) => Number(field.value));
     if (values.some((value) => !Number.isFinite(value))) return;
-    placement.x = clamp(values[0], 0, 100);
-    placement.y = clamp(values[1], 0, 100);
+    placement.x = clamp(values[0], -30, 130);
+    placement.y = clamp(values[1], -35, 145);
     placement.width = clamp(values[2], 1, 80);
     placement.rotation = clamp(values[3], -180, 180);
     placement.opacity = clamp(values[4] / 100, 0, 1);
     placement.z = clamp(values[5], 0, 99);
     placement.hidden = decorHidden.checked;
+    placement.brightness = Number(filters[0].value);
+    placement.saturation = Number(filters[1].value);
+    placement.hue = Number(filters[2].value);
+    placement.shadow = Number(filters[3].value);
+    filters.forEach((field, index) => { filterOutputs[index].value = `${field.value}${index === 2 ? '°' : '%'}`; });
     sendPreview();
   }));
   decorCopy.addEventListener('click', () => {
@@ -291,13 +428,18 @@ export function initDecorations() {
   });
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
-    if (event.data?.type === 'decor-select') selectItem(String(event.data.id));
-    if (event.data?.type === 'decor-move') {
+    if (event.data?.type === 'decor-select') {
+      selected = String(event.data.id);
+      refreshItemList();
+    }
+    if (event.data?.type === 'decor-change') {
       const item = draft.items.find((entry) => entry.id === event.data.id);
       const placement = item?.placements[activeKey()];
       if (!placement) return;
-      placement.x = clamp(Number(event.data.x), 0, 100);
-      placement.y = clamp(Number(event.data.y), 0, 100);
+      placement.x = clamp(Number(event.data.x), -30, 130);
+      placement.y = clamp(Number(event.data.y), -35, 145);
+      placement.width = clamp(Number(event.data.width), 1, 80);
+      placement.rotation = clamp(Number(event.data.rotation), -180, 180);
       selected = item!.id;
       editorItem.value = selected;
       refreshFields();
