@@ -38,6 +38,7 @@ const settingsControl = document.querySelector<HTMLDivElement>('#settingsControl
 const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButton')!;
 const settingsPanel = document.querySelector<HTMLDivElement>('#settingsPanel')!;
 const smoothingButton = document.querySelector<HTMLButtonElement>('#smoothingButton')!;
+const viewerStatus = document.querySelector<HTMLSpanElement>('#viewerStatus')!;
 const volumeControl = document.querySelector<HTMLDivElement>('#volumeControl')!;
 const volumeButton = document.querySelector<HTMLButtonElement>('#volumeButton')!;
 const volumePanel = document.querySelector<HTMLDivElement>('#volumePanel')!;
@@ -208,7 +209,7 @@ async function initDiscord(clientId: string) {
   const avatarUrl = (user: Participant) => user.avatar ?
     `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` :
     `https://cdn.discordapp.com/embed/avatars/${(BigInt(user.id) >> 22n) % 6n}.png`;
-  const updateParticipants = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
+  const updateParticipants = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse, source = 'Activity') => {
     const people = participants.filter((person) => !person.bot);
     const present = new Set(people.map((person) => person.id));
     participantOrder = participantOrder.filter((id) => present.has(id));
@@ -217,12 +218,31 @@ async function initDiscord(clientId: string) {
     setDecorationViewers(participantOrder.map((id) => byId.get(id)!).filter(Boolean).map((person) => ({
       id: person.id, name: person.nickname || person.global_name || person.username, avatar: avatarUrl(person),
     })));
+    viewerStatus.textContent = `${source}: ${people.length} participante${people.length === 1 ? '' : 's'}`;
   };
+  let refreshInFlight = false;
   const refreshParticipants = async () => {
+    if (refreshInFlight) return;
+    refreshInFlight = true;
     try {
-      updateParticipants(await discordSdk!.commands.getActivityInstanceConnectedParticipants());
+      const activity = await discordSdk!.commands.getActivityInstanceConnectedParticipants();
+      updateParticipants(activity);
+      // Discord may show people in the call who have not opened this Activity.
+      // Include them only if the client permits reading the current channel.
+      if (activity.participants.length <= 1 && discordSdk!.channelId) {
+        try {
+          const channel = await discordSdk!.commands.getChannel({ channel_id: discordSdk!.channelId });
+          const voice = channel.voice_states.filter((state) => !state.user.bot).map((state): Participant => ({
+            ...state.user, flags: state.user.flags ?? 0, nickname: state.nick,
+          }));
+          if (voice.length > activity.participants.length) updateParticipants({ participants: voice }, 'En llamada');
+        } catch { /* The channel command may require an OAuth scope. */ }
+      }
     } catch (error) {
+      viewerStatus.textContent = 'Espectadores: sin respuesta de Discord';
       console.warn('No se pudo consultar la lista de participantes:', error);
+    } finally {
+      refreshInFlight = false;
     }
   };
   // A client may not support the update event. The initial query and periodic
