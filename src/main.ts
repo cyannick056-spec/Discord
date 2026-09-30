@@ -93,14 +93,10 @@ function setScene(mode: SceneMode) {
 setScene(sceneMode);
 
 type RetroLevel = 'off' | 'normal' | 'immersive';
-let retroLevel: RetroLevel = 'off';
-let smoothing = false;
+let retroLevel: RetroLevel = 'immersive';
+let smoothing = true;
 let volume = 100;
 try {
-  const storedRetro = localStorage.getItem('shis-retro-level');
-  if (storedRetro === 'normal' || storedRetro === 'immersive') retroLevel = storedRetro;
-  else if (storedRetro === null && localStorage.getItem('shis-retro-filter') === 'on') retroLevel = 'normal';
-  smoothing = localStorage.getItem('shis-edge-smoothing') === 'on';
   const storedVolume = Number(localStorage.getItem('shis-volume'));
   if (localStorage.getItem('shis-volume') !== null && Number.isFinite(storedVolume)) {
     volume = Math.max(0, Math.min(100, storedVolume));
@@ -117,7 +113,6 @@ function setRetroLevel(level: RetroLevel) {
   const next = level === 'off' ? 'normal' : level === 'normal' ? 'inmersivo' : 'apagado';
   filterButton.setAttribute('aria-label', `Retro ${level === 'off' ? 'apagado' : level === 'normal' ? 'normal' : 'inmersivo'}; cambiar a ${next}`);
   filterButton.title = `Retro: ${level === 'off' ? 'apagado' : level === 'normal' ? 'normal' : 'inmersivo'}. Pulsar para ${next}`;
-  try { localStorage.setItem('shis-retro-level', level); } catch { /* Session-only fallback. */ }
 }
 setRetroLevel(retroLevel);
 
@@ -127,7 +122,6 @@ function setSmoothing(enabled: boolean) {
   smoothingButton.setAttribute('aria-pressed', String(enabled));
   smoothingButton.setAttribute('aria-label', enabled ? 'Desactivar suavizado de bordes' : 'Activar suavizado de bordes');
   smoothingButton.title = enabled ? 'Suavizado activado: pulsar para comparar' : 'Suavizar bordes dentados';
-  try { localStorage.setItem('shis-edge-smoothing', enabled ? 'on' : 'off'); } catch { /* Session-only fallback. */ }
 }
 setSmoothing(smoothing);
 
@@ -192,34 +186,10 @@ function drawStatic(now: number) {
       noiseFrame.data[i + 3] = 255;
     }
     noiseContext.putImageData(noiseFrame, 0, 0);
-    stage.style.setProperty('--glow-rgb', '116, 146, 169');
-    stage.style.setProperty('--glow-strength', String(.13 + (noiseSeed & 31) / 700));
   }
   setTimeout(() => drawStatic(performance.now()), 42);
 }
 drawStatic(performance.now());
-
-const glowCanvas = document.createElement('canvas');
-glowCanvas.width = 12;
-glowCanvas.height = 7;
-const glowContext = glowCanvas.getContext('2d', { willReadFrequently: true });
-let glowColor = [116, 146, 169];
-setInterval(() => {
-  const video = videoMount.querySelector('video');
-  if (!video || video.readyState < 2 || document.hidden || !glowContext || !stage.classList.contains('has-signal')) return;
-  try {
-    glowContext.drawImage(video, 0, 0, glowCanvas.width, glowCanvas.height);
-    const pixels = glowContext.getImageData(0, 0, glowCanvas.width, glowCanvas.height).data;
-    const rgb = [0, 0, 0];
-    for (let i = 0; i < pixels.length; i += 4) {
-      rgb[0] += pixels[i]; rgb[1] += pixels[i + 1]; rgb[2] += pixels[i + 2];
-    }
-    const count = pixels.length / 4;
-    glowColor = rgb.map((sum, channel) => Math.round(glowColor[channel] * .68 + sum / count * .32));
-    stage.style.setProperty('--glow-rgb', glowColor.join(', '));
-    stage.style.setProperty('--glow-strength', '.22');
-  } catch { /* The video may forbid canvas sampling; retain the last safe light. */ }
-}, 300);
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: 'no-store' });
