@@ -101,6 +101,10 @@ func publishCloudflare(id uint64, conn net.Conn, reader *bufio.Reader) {
   if state == webrtc.PeerConnectionStateConnected {
    select { case connected <- struct{}{}: default: }
   }
+  if state == webrtc.PeerConnectionStateFailed {
+   // Drop the TCP stream so the Switch reconnects with a fresh SFU session.
+   _ = conn.Close()
+  }
  })
  offer, err := pc.CreateOffer(nil)
  if err != nil { log.Printf("[%d] offer: %v", id, err); return }
