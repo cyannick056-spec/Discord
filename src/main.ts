@@ -51,6 +51,8 @@ const volumeValue = document.querySelector<HTMLOutputElement>('#volumeValue')!;
 let room: Room | null = null;
 let config: AppConfig | null = null;
 let discordSdk: DiscordSDK | null = null;
+let discordAccessToken = '';
+let retryDiscordAuthorization: (() => Promise<void>) | null = null;
 let participantOrder: string[] = [];
 let signalLostTimer: ReturnType<typeof setTimeout> | null = null;
 let activeVideoTrack: RemoteTrack | null = null;
@@ -243,7 +245,9 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function initDiscord(clientId: string) {
-  if (!isInsideDiscord() || !clientId) return;
+  if (!isInsideDiscord() || !clientId) {
+    throw new Error('Abre Shis Stream desde la actividad de Discord');
+  }
 
   discordSdk = new DiscordSDK(clientId);
   await discordSdk.ready();
@@ -307,11 +311,13 @@ async function initDiscord(clientId: string) {
       if (!response.ok || !body.access_token) throw new Error(body.error || 'Discord rechazó el acceso');
       step = 'lectura del perfil';
       const auth = await discordSdk!.commands.authenticate({ access_token: body.access_token });
+      discordAccessToken = body.access_token;
       selfUser = { ...auth.user, bot: false, flags: auth.user.public_flags };
       authState = 'sí';
       showParticipants();
       void refreshParticipants();
     } catch (error) {
+      discordAccessToken = '';
       authState = '×';
       const rpcError = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : null;
       const code = typeof rpcError?.code === 'number' ? String(rpcError.code) : '';
@@ -325,7 +331,12 @@ async function initDiscord(clientId: string) {
       viewerRetry.disabled = false;
     }
   };
-  viewerRetry.addEventListener('click', () => { void authenticateDiscord(); });
+  retryDiscordAuthorization = authenticateDiscord;
+  viewerRetry.addEventListener('click', () => {
+    void authenticateDiscord().then(() => {
+      if (discordAccessToken && config && !room) void connectViewer(config.defaultStream).catch(showConnectionError);
+    });
+  });
   let refreshInFlight = false;
   const refreshParticipants = async () => {
     if (refreshInFlight) return;
@@ -353,7 +364,9 @@ async function initDiscord(clientId: string) {
   void discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, onActivityUpdate)
     .catch((error) => console.warn('No se pudo seguir cambios de participantes:', error));
   void refreshParticipants();
-  if (config?.discordAuthAvailable) void authenticateDiscord();
+  if (!config?.discordAuthAvailable) throw new Error('Falta configurar la autorización de Discord');
+  await authenticateDiscord();
+  if (!discordAccessToken) throw new Error('Autoriza tu perfil en Discord para ver la transmisión');
   setInterval(() => { if (!document.hidden) void refreshParticipants(); }, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshParticipants(); });
 }
@@ -427,6 +440,7 @@ setInterval(() => {
 }, 2000);
 
 async function connectViewer(stream: string) {
+  if (!discordAccessToken) throw new Error('Autoriza tu perfil en Discord para ver la transmisión');
   if (signalLostTimer) {
     clearTimeout(signalLostTimer);
     signalLostTimer = null;
@@ -440,7 +454,15 @@ async function connectViewer(stream: string) {
     room = null;
   }
 
-  const credentials = await fetchJson<ViewerCredentials>(`/api/viewer-token?stream=${encodeURIComponent(stream)}`);
+  const response = await fetch(`/api/viewer-token?stream=${encodeURIComponent(stream)}`, {
+    headers: { Authorization: `Bearer ${discordAccessToken}` }, cache: 'no-store',
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401) discordAccessToken = '';
+    throw new Error(body.error || `HTTP ${response.status}`);
+  }
+  const credentials = body as ViewerCredentials;
   roomText.textContent = credentials.roomName;
 
   const nextRoom = new Room({ adaptiveStream: false });
@@ -469,16 +491,21 @@ async function connectViewer(stream: string) {
   if (videoMount.childElementCount === 0) setStatus('BUSCANDO SEÑAL…');
 }
 
+function showConnectionError(error: unknown) {
+  console.error(error);
+  setLive(false);
+  setStatus(error instanceof Error && /Discord|actividad|perfil|autoriza/i.test(error.message) ?
+    'ABRE EN DISCORD' : 'ERROR DE SEÑAL');
+  retryButton.hidden = false;
+}
+
 async function boot() {
   try {
     config = await fetchJson<AppConfig>('/api/config');
     await initDiscord(config.discordClientId);
     await connectViewer(config.defaultStream);
   } catch (error) {
-    console.error(error);
-    setLive(false);
-    setStatus('ERROR DE SEÑAL');
-    retryButton.hidden = false;
+    showConnectionError(error);
   }
 }
 
@@ -534,16 +561,13 @@ audioButton.addEventListener('click', async () => {
   if (!audioButton.hidden) audioButton.title = 'El audio sigue bloqueado; toca de nuevo para activarlo';
 });
 
-retryButton.addEventListener('click', () => {
-  if (config) {
-    connectViewer(config.defaultStream).catch((error) => {
-      console.error(error);
-      setLive(false);
-      setStatus('ERROR DE SEÑAL');
-      retryButton.hidden = false;
-    });
-  } else {
-    boot();
+retryButton.addEventListener('click', async () => {
+  try {
+    if (!config) return await boot();
+    if (!discordAccessToken && retryDiscordAuthorization) await retryDiscordAuthorization();
+    if (discordAccessToken) await connectViewer(config.defaultStream);
+  } catch (error) {
+    showConnectionError(error);
   }
 });
 
