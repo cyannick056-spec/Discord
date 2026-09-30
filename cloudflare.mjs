@@ -58,7 +58,8 @@ function activePublisher() {
   return null;
 }
 
-export function installCloudflare(app) {
+export function installCloudflare(app, requireActivityTicket) {
+  app.use('/api/cloudflare/viewer', requireActivityTicket);
   const publisherAuth = (req, res, next) => {
     if (!ready()) return res.status(503).json({ error: 'Cloudflare SFU no está configurado' });
     if (!equal(req.get('X-Stream-Key'), process.env.STREAM_KEY)) {
@@ -146,7 +147,7 @@ export function installCloudflare(app) {
     res.json({ ok: true });
   });
 
-  app.get('/api/cloudflare/stream', viewerAuth, (_req, res) => {
+  app.get('/api/cloudflare/stream', requireActivityTicket, viewerAuth, (_req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json({ sessionId: activePublisher()?.sessionId || null });
   });
