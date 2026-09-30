@@ -294,6 +294,9 @@ async function initDiscord(clientId: string) {
     viewerStatus.title = `En esta Activity: ${activityOk ? activityPeople.length : 'lista no disponible'}.`;
     viewerRetry.hidden = authState !== '×';
   };
+  // The gate already verified this viewer; show their avatar even while the
+  // Activity roster is still being requested from Discord.
+  showParticipants();
   const onActivityUpdate = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
     activityOk = true;
     rosterRevision++;
