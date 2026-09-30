@@ -916,19 +916,51 @@
 .preview-mode .decor-rotate { left: calc(50% - 8px); top: -25px; cursor: grab; }
 .preview-mode .scene-controls { display: none !important; }
 
-/* A faint spill of actual picture color lights the room, behind the glass. */
+/* Sampled picture color falls on the cabinet and room, outside the glass. */
 .ambient-glow {
   position: absolute;
-  z-index: 1;
-  inset: -8%;
+  z-index: 7;
+  inset: 0;
   pointer-events: none;
   opacity: var(--glow-strength, .15);
-  background: radial-gradient(ellipse 62% 50% at 50% 46%, rgba(var(--glow-rgb, 116, 146, 169), .95), transparent 75%);
-  filter: blur(19px);
-  transition: background-color .4s ease, opacity .3s ease;
+  mix-blend-mode: screen;
+  transition: opacity .3s ease;
+}
+.ambient-glow i { position: absolute; display: block; pointer-events: none; }
+.home-glow { --spill-x: var(--glass-x); --spill-y: var(--glass-y); --spill-w: var(--glass-w); --spill-h: var(--glass-h); }
+.arcade-glow { --spill-x: 10.8%; --spill-y: 19%; --spill-w: 78.4%; --spill-h: 20.3%; }
+.ambient-glow i:nth-child(1) {
+  inset: 0 0 auto; height: var(--spill-y);
+  background: radial-gradient(ellipse 54% 90% at 50% 100%, rgba(var(--glow-rgb, 116, 146, 169), .95), transparent 90%);
+}
+.ambient-glow i:nth-child(2) {
+  top: calc(var(--spill-y) + var(--spill-h)); bottom: 0; left: 0; right: 0;
+  background: radial-gradient(ellipse 58% 75% at 50% 0, rgba(var(--glow-rgb, 116, 146, 169), .95), transparent 85%);
+}
+.ambient-glow i:nth-child(3) {
+  top: var(--spill-y); left: 0; width: var(--spill-x); height: var(--spill-h);
+  background: linear-gradient(to left, rgba(var(--glow-rgb, 116, 146, 169), .85), transparent);
+}
+.ambient-glow i:nth-child(4) {
+  top: var(--spill-y); left: calc(var(--spill-x) + var(--spill-w)); right: 0; height: var(--spill-h);
+  background: linear-gradient(to right, rgba(var(--glow-rgb, 116, 146, 169), .85), transparent);
 }
 .stage.arcade-mode .arcade-scene { z-index: 2; }
 .stage.arcade-mode .ambient-glow { opacity: calc(var(--glow-strength, .15) * .7); }
+@media (orientation: portrait) and (min-height: 430px) {
+  .stage.arcade-mode .arcade-glow { --spill-x: 1.7%; --spill-y: 17.1%; --spill-w: 96.6%; --spill-h: 25.2%; }
+}
+@media (orientation: landscape) and (min-height: 361px) {
+  .stage.arcade-mode .arcade-glow {
+    z-index: 0;
+    background: radial-gradient(ellipse 70% 65% at 50% 50%, rgba(var(--glow-rgb, 116, 146, 169), .95), transparent 75%);
+  }
+  .stage.arcade-mode .arcade-glow i { display: none; }
+  .stage.arcade-mode .arcade-screen { z-index: 1; }
+}
+@media (max-width: 520px) and (max-height: 360px) {
+  .ambient-glow { display: none; }
+}
 .stage.has-signal .osd-bottom { display: none; }
 .empty-state { background: radial-gradient(ellipse at 50% 48%, #1a1d20 0, #080a0d 75%, #020304 100%); }
 .empty-state .noise {
