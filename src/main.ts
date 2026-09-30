@@ -365,7 +365,7 @@ async function initDiscord(clientId: string) {
   retryDiscordAuthorization = authenticateDiscord;
   viewerRetry.addEventListener('click', () => {
     void authenticateDiscord().then(() => {
-      if (discordAccessToken && config && !room) void connectViewer(config.defaultStream).catch(showConnectionError);
+      if (discordAccessToken && config && !room && !cloudflareViewer) void connectViewer(config.defaultStream).catch(showConnectionError);
     });
   });
   let refreshInFlight = false;
