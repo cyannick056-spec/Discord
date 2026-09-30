@@ -463,10 +463,10 @@ function attachTrack(track: RemoteTrack, publisherId: string) {
 
 
 function attachCloudflareTrack(kind: 'video' | 'audio', mediaTrack: MediaStreamTrack) {
-  const element = document.createElement(kind);
-  element.autoplay = true;
-  element.srcObject = new MediaStream([mediaTrack]);
   if (kind === 'audio') {
+    const element = document.createElement('audio');
+    element.autoplay = true;
+    element.srcObject = new MediaStream([mediaTrack]);
     element.style.display = 'none';
     element.volume = volume / 100;
     audioMount.replaceChildren(element);
@@ -474,6 +474,9 @@ function attachCloudflareTrack(kind: 'video' | 'audio', mediaTrack: MediaStreamT
       .catch(() => { audioButton.hidden = false; });
     return;
   }
+  const element = document.createElement('video');
+  element.autoplay = true;
+  element.srcObject = new MediaStream([mediaTrack]);
   element.setAttribute('playsinline', 'true');
   activeVideoTrack = null;
   activeVideoPublisherId = 'cloudflare';
