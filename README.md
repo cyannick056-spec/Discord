@@ -56,6 +56,17 @@ The Activity verifies each viewer through Discord before creating a Cloudflare S
 
 An OVHcloud VPS requires a public TCP endpoint for SysDVR, an HTTPS domain for the Discord Activity, automatic service restart, firewall rules, and persistent backed-up storage for decorations. Match the Activity HTTPS URL in Discord Developer Portal URL mappings before moving traffic. Buying a VPS and changing DNS/Discord mappings are separate deployment steps after the new video path works.
 
+### Deploy the two services on an OVHcloud VPS
+
+The `deploy/` directory includes a Caddy HTTPS proxy, a Node Activity image, a native relay image and persistent volumes for TLS and decorations. It does **not** migrate the currently mounted Railway decorations automatically.
+
+1. Point an A/AAAA DNS record for a domain you control to the VPS. Permit inbound TCP 80 and 443 for Discord and TCP 9000 (or your chosen `RELAY_PORT`) for the Switch. A VPS and a hostname are needed before these steps can run.
+2. Clone this repository on the VPS, copy `deploy/vps.env.example` to `deploy/.env`, fill in Discord, stream and Cloudflare credentials **on the VPS** (never in GitHub). Set `ACTIVITY_DOMAIN` to the exact DNS hostname. Copy decorations from Railway's persistent directory before switching services.
+3. Build the images one at a time if the VPS has limited memory: `docker compose --env-file deploy/.env -f deploy/compose.yaml build activity` then `docker compose --env-file deploy/.env -f deploy/compose.yaml build relay`; run `docker compose --env-file deploy/.env -f deploy/compose.yaml up -d`. Inspect `docker compose --env-file deploy/.env -f deploy/compose.yaml logs --tail=100` and verify `https://YOUR_DOMAIN/api/health`.
+4. During the Cloudflare trial, use the same `STREAM_PROVIDER` value on both services. Set it to `cloudflare` only after configuring a Cloudflare SFU app and testing the publisher and subscriber. If the test fails, restore `livekit` on both services and restart. Then update the Activity URL mapping in Discord and the Switch `relay_host` only when the replacement is working.
+
+Caddy renews the HTTPS certificate. The `decorations` Docker volume stores uploads across image updates; back it up separately. Store the Compose `.env` outside version control, and protect SSH access to the VPS. Building the Go relay on a small VPS may need extra RAM or swap. No OVHcloud purchase, DNS change or Cloudflare account creation is performed by this code change.
+
 ## Decorations
 
 In the Activity, open **Ajustes → Decorar** and enter the editor password. Upload PNG, JPG, WebP or GIF images (up to 2 MB). Drag an image to move it; use its corner handle to resize and its round handle to rotate. Hold Shift while dragging for finer motion. Numeric position, size, rotation, opacity and layer controls remain available, alongside light, saturation, hue and shadow sliders that help the art match the room.
