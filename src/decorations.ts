@@ -168,6 +168,9 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     box.className = 'decoration-box';
     box.dataset.id = item.id;
     position(box, placement, sceneName, view);
+    // Viewer avatars sit above custom PNG bases in both the editor and the
+    // live scene. Keep the saved z value for ordering avatars among themselves.
+    if (slotIndex >= 0) box.style.zIndex = String(100 + placement.z);
     if (editable && item.id === selected) box.classList.add('is-selected');
     if (slotIndex >= 0) {
       const figure = document.createElement('div');

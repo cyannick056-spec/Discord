@@ -35,6 +35,7 @@ const (
 	videoQueueDepth      = 180
 	audioQueueDepth      = 384
 	videoDiscontinuityUS = 500000
+	senderIdleTimeout     = 10 * time.Second
 )
 
 const videoFrameDuration = time.Second / videoFPS
@@ -269,9 +270,18 @@ func handleConnection(conn net.Conn) {
 		default:
 		}
 
+		// A powered-off Switch can leave a half-open TCP connection. Stop
+		// publishing its last frame when no media packets arrive.
+		if err := conn.SetReadDeadline(time.Now().Add(senderIdleTimeout)); err != nil {
+			log.Printf("[%d] sender deadline: %v", id, err)
+			return
+		}
 		h, err := readFrameHeader(reader)
 		if err != nil {
-			if !errors.Is(err, io.EOF) {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				log.Printf("[%d] sender idle for %s; ending stream", id, senderIdleTimeout)
+			} else if !errors.Is(err, io.EOF) {
 				log.Printf("[%d] frame header: %v", id, err)
 			}
 			return

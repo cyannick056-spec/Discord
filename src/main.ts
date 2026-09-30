@@ -53,6 +53,11 @@ let config: AppConfig | null = null;
 let discordSdk: DiscordSDK | null = null;
 let participantOrder: string[] = [];
 let signalLostTimer: ReturnType<typeof setTimeout> | null = null;
+let activeVideoTrack: RemoteTrack | null = null;
+let activeVideoPublisherId: string | null = null;
+let activeVideoElement: HTMLVideoElement | null = null;
+let lastDecodedFrameAt = 0;
+let videoStalled = false;
 const editorPreviewMode = new URLSearchParams(location.search).has('editorPreview');
 
 type AspectMode = '16:9' | '4:3';
@@ -361,15 +366,47 @@ function getLiveKitConnectUrl(serverUrl: string) {
   return proxyUrl.toString().replace(/\/$/, '');
 }
 
-function attachTrack(track: RemoteTrack) {
+function clearVideo() {
+  activeVideoTrack?.detach().forEach((element) => element.remove());
+  activeVideoTrack = null;
+  activeVideoPublisherId = null;
+  activeVideoElement = null;
+  videoMount.replaceChildren();
+  signalLost();
+}
+
+function attachTrack(track: RemoteTrack, publisherId: string) {
   const element = track.attach();
   element.autoplay = true;
 
   if (track.kind === Track.Kind.Video) {
-    element.setAttribute('playsinline', 'true');
-    videoMount.replaceChildren(element);
-    setLive(true);
-    setStatus('');
+    const video = element as HTMLVideoElement;
+    video.setAttribute('playsinline', 'true');
+    activeVideoTrack?.detach().forEach((old) => old.remove());
+    activeVideoTrack = track;
+    activeVideoPublisherId = publisherId;
+    activeVideoElement = video;
+    lastDecodedFrameAt = performance.now();
+    videoStalled = false;
+    videoMount.replaceChildren(video);
+    setStatus('SEÑAL DETECTADA…');
+    if ('requestVideoFrameCallback' in video) {
+      const onFrame: VideoFrameRequestCallback = (now) => {
+        if (activeVideoElement !== video) return;
+        lastDecodedFrameAt = now;
+        videoStalled = false;
+        if (!stage.classList.contains('has-signal')) {
+          setLive(true);
+          setStatus('');
+        }
+        video.requestVideoFrameCallback(onFrame);
+      };
+      video.requestVideoFrameCallback(onFrame);
+    } else {
+      // Older embedded browsers rely on track disconnect and relay timeout.
+      setLive(true);
+      setStatus('');
+    }
   } else if (track.kind === Track.Kind.Audio) {
     element.style.display = 'none';
     element.volume = volume / 100;
@@ -379,6 +416,15 @@ function attachTrack(track: RemoteTrack) {
     });
   }
 }
+
+setInterval(() => {
+  if (document.hidden || !activeVideoElement || videoStalled ||
+      !('requestVideoFrameCallback' in activeVideoElement)) return;
+  if (performance.now() - lastDecodedFrameAt > 10000) {
+    videoStalled = true;
+    signalLost();
+  }
+}, 2000);
 
 async function connectViewer(stream: string) {
   if (signalLostTimer) {
@@ -400,20 +446,22 @@ async function connectViewer(stream: string) {
   const nextRoom = new Room({ adaptiveStream: false });
   room = nextRoom;
 
-  nextRoom.on(RoomEvent.TrackSubscribed, (track) => attachTrack(track));
+  nextRoom.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
+    if (room === nextRoom) attachTrack(track, participant.identity);
+  });
   nextRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
     track.detach().forEach((element) => element.remove());
     if (track.kind === Track.Kind.Audio) audioButton.hidden = true;
-    if (track.kind === Track.Kind.Video && videoMount.childElementCount === 0) signalLost();
+    if (room === nextRoom && track === activeVideoTrack) clearVideo();
   });
   nextRoom.on(RoomEvent.ParticipantConnected, () => {
     if (videoMount.childElementCount === 0) setStatus('SEÑAL DETECTADA…');
   });
-  nextRoom.on(RoomEvent.ParticipantDisconnected, () => {
-    if (videoMount.childElementCount === 0) signalLost();
+  nextRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
+    if (room === nextRoom && participant.identity === activeVideoPublisherId) clearVideo();
   });
   nextRoom.on(RoomEvent.Disconnected, () => {
-    signalLost();
+    if (room === nextRoom) clearVideo();
   });
 
   const connectUrl = getLiveKitConnectUrl(credentials.serverUrl);
