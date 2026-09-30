@@ -44,10 +44,10 @@ function sameSecret(a, b) {
   return crypto.timingSafeEqual(left, right);
 }
 
-async function mintToken({ roomName, identity, publish, subscribe }) {
+async function mintToken({ roomName, identity, publish, subscribe, ttl = '6h' }) {
   const apiKey = required('LIVEKIT_API_KEY');
   const apiSecret = required('LIVEKIT_API_SECRET');
-  const token = new AccessToken(apiKey, apiSecret, { identity, ttl: '6h' });
+  const token = new AccessToken(apiKey, apiSecret, { identity, ttl });
   token.addGrant({
     roomJoin: true,
     room: roomName,
@@ -130,21 +130,45 @@ app.get('/api/publisher-token', async (req, res) => {
 });
 
 app.get('/api/viewer-token', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
+    return res.status(503).json({ error: 'La autorización de Discord no está configurada' });
+  }
+  const authorization = req.get('Authorization') || '';
+  const accessToken = /^Bearer ([A-Za-z0-9._~-]+)$/.exec(authorization)?.[1];
+  if (!accessToken) return res.status(401).json({ error: 'Abre la actividad en Discord para ver la transmisión' });
   try {
-    const stream = normalizeStream(req.query.stream);
+    // Verify the viewer with Discord on the server. URL parameters, iframe
+    // headers and the client-side SDK alone are not proof of identity.
+    const profileResponse = await fetch('https://discord.com/api/v10/oauth2/@me', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!profileResponse.ok) {
+      return res.status(401).json({ error: 'La autorización de Discord caducó; vuelve a entrar a la actividad' });
+    }
+    const authorizationInfo = await profileResponse.json();
+    if (authorizationInfo.application?.id !== process.env.DISCORD_CLIENT_ID ||
+        !authorizationInfo.scopes?.includes('identify') ||
+        typeof authorizationInfo.user?.id !== 'string' ||
+        !/^\d{15,22}$/.test(authorizationInfo.user.id)) {
+      return res.status(401).json({ error: 'No se pudo verificar tu perfil de Discord' });
+    }
+    // Viewers cannot create arbitrary LiveKit rooms by changing the URL.
+    const stream = normalizeStream(process.env.DEFAULT_STREAM || 'cris');
     const roomName = roomFor(stream);
     const token = await mintToken({
       roomName,
       identity: `viewer-${crypto.randomUUID()}`,
       publish: false,
       subscribe: true,
+      ttl: '2m',
     });
 
-    res.set('Cache-Control', 'no-store');
     res.json({ serverUrl: required('LIVEKIT_URL'), token, roomName });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Server error' });
+    console.error('Viewer authorization failed:', error);
+    res.status(502).json({ error: 'No se pudo verificar el acceso con Discord' });
   }
 });
 
