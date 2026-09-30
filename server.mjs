@@ -16,7 +16,7 @@ const distDir = path.join(__dirname, 'dist');
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
-installCloudflare(app);
+installCloudflare(app, requireActivityTicket);
 app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
   directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),
