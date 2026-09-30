@@ -1,0 +1,43 @@
+services:
+  activity:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    env_file: .env
+    environment:
+      PORT: "3000"
+      DECORATION_DATA_DIR: /data/decorations
+    volumes:
+      - decorations:/data/decorations
+    restart: unless-stopped
+
+  relay:
+    build:
+      context: ../relay
+    env_file: .env
+    environment:
+      PORT: "9000"
+      SHIS_ACTIVITY_URL: https://${ACTIVITY_DOMAIN}
+    ports:
+      - "${RELAY_PORT:-9000}:9000/tcp"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    environment:
+      ACTIVITY_DOMAIN: ${ACTIVITY_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - activity
+    restart: unless-stopped
+
+volumes:
+  decorations:
+  caddy_data:
+  caddy_config:
