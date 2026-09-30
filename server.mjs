@@ -6,13 +6,16 @@ import { existsSync } from 'node:fs';
 import express from 'express';
 import { AccessToken } from 'livekit-server-sdk';
 import { installDecorations } from './decorations.mjs';
+import { installCloudflare } from './cloudflare.mjs';
 
 const app = express();
+const cloudflareMode = process.env.STREAM_PROVIDER === 'cloudflare';
 const port = Number(process.env.PORT || 3000);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, 'dist');
 
 app.disable('x-powered-by');
+installCloudflare(app);
 app.use(express.json({ limit: '256kb' }));
 app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
@@ -97,6 +100,7 @@ app.get('/api/config', (_req, res) => {
     discordClientId: process.env.DISCORD_CLIENT_ID || '',
     discordAuthAvailable: Boolean(process.env.DISCORD_CLIENT_SECRET),
     defaultStream: normalizeStream(process.env.DEFAULT_STREAM || 'cris'),
+    streamProvider: cloudflareMode ? 'cloudflare' : 'livekit',
   });
 });
 
@@ -135,6 +139,7 @@ app.post('/api/discord-token', async (req, res) => {
 });
 
 app.get('/api/publisher-token', async (req, res) => {
+  if (cloudflareMode) return res.status(410).json({ error: 'Usa Cloudflare SFU' });
   try {
     const configuredKey = required('STREAM_KEY');
     if (!sameSecret(req.get('X-Stream-Key'), configuredKey)) {
@@ -159,6 +164,7 @@ app.get('/api/publisher-token', async (req, res) => {
 });
 
 app.get('/api/viewer-token', async (req, res) => {
+  if (cloudflareMode) return res.status(410).json({ error: 'Usa Cloudflare SFU' });
   res.set('Cache-Control', 'no-store');
   if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
     return res.status(503).json({ error: 'La autorización de Discord no está configurada' });
