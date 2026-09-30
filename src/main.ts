@@ -23,6 +23,7 @@ const videoMount = document.querySelector<HTMLDivElement>('#videoMount')!;
 const audioMount = document.querySelector<HTMLDivElement>('#audioMount')!;
 const emptyState = document.querySelector<HTMLDivElement>('#emptyState')!;
 const staticNoise = document.querySelector<HTMLCanvasElement>('#staticNoise')!;
+const signalSweep = document.querySelector<HTMLCanvasElement>('#signalSweep')!;
 const audioButton = document.querySelector<HTMLButtonElement>('#audioButton')!;
 const retryButton = document.querySelector<HTMLButtonElement>('#retryButton')!;
 const tvScene = document.querySelector<HTMLDivElement>('#tvScene')!;
@@ -40,6 +41,7 @@ const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButto
 const settingsPanel = document.querySelector<HTMLDivElement>('#settingsPanel')!;
 const smoothingButton = document.querySelector<HTMLButtonElement>('#smoothingButton')!;
 const viewerStatus = document.querySelector<HTMLSpanElement>('#viewerStatus')!;
+const viewerRetry = document.querySelector<HTMLButtonElement>('#viewerRetry')!;
 const volumeControl = document.querySelector<HTMLDivElement>('#volumeControl')!;
 const volumeButton = document.querySelector<HTMLButtonElement>('#volumeButton')!;
 const volumePanel = document.querySelector<HTMLDivElement>('#volumePanel')!;
@@ -176,16 +178,51 @@ function signalLost() {
 
 const noiseContext = staticNoise.getContext('2d', { alpha: false });
 const noiseFrame = noiseContext?.createImageData(staticNoise.width, staticNoise.height);
+const sweepContext = signalSweep.getContext('2d');
+const sweepFrame = sweepContext?.createImageData(signalSweep.width, signalSweep.height);
 let noiseSeed = 0x6a09e667;
+function nextNoise() {
+  noiseSeed ^= noiseSeed << 13;
+  noiseSeed ^= noiseSeed >>> 17;
+  noiseSeed ^= noiseSeed << 5;
+  return noiseSeed & 255;
+}
+function drawSignalSweeps(now: number) {
+  if (!sweepContext || !sweepFrame) return;
+  const { width, height } = signalSweep;
+  const data = sweepFrame.data;
+  data.fill(0);
+  // The no-signal canvas brightens random pixels in a travelling band. Use
+  // the same moving grain on live video, with two independent band profiles.
+  for (const { center, halfWidth } of [
+    { center: (now / 31) % (height + 24) - 12, halfWidth: 12 },
+    { center: (now / 17) % (height + 10) - 5, halfWidth: 5 },
+  ]) {
+    for (let y = Math.max(0, Math.floor(center - halfWidth)); y < Math.min(height, Math.ceil(center + halfWidth)); y++) {
+      const distance = y - center;
+      const strength = 1 - Math.abs(distance) / halfWidth;
+      if (strength <= 0) continue;
+      const light = distance < 0;
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const grain = nextNoise() / 255;
+        const alpha = Math.round((light ? 35 : 55) * strength * (.55 + grain * .7));
+        if (alpha <= data[i + 3]) continue;
+        data[i] = light ? 245 : 0;
+        data[i + 1] = light ? 252 : 0;
+        data[i + 2] = light ? 255 : 0;
+        data[i + 3] = alpha;
+      }
+    }
+  }
+  sweepContext.putImageData(sweepFrame, 0, 0);
+}
 function drawStatic(now: number) {
   if (noiseContext && noiseFrame && !stage.classList.contains('has-signal')) {
     const width = staticNoise.width;
     const band = Math.floor((now / 31) % staticNoise.height);
     for (let i = 0; i < noiseFrame.data.length; i += 4) {
-      noiseSeed ^= noiseSeed << 13;
-      noiseSeed ^= noiseSeed >>> 17;
-      noiseSeed ^= noiseSeed << 5;
-      const value = noiseSeed & 255;
+      const value = nextNoise();
       const y = Math.floor(i / 4 / width);
       const grain = Math.min(255, value + (Math.abs(y - band) < 3 ? 35 : 0));
       noiseFrame.data[i] = grain;
@@ -194,6 +231,9 @@ function drawStatic(now: number) {
       noiseFrame.data[i + 3] = 255;
     }
     noiseContext.putImageData(noiseFrame, 0, 0);
+  }
+  if (stage.classList.contains('has-signal') && stage.classList.contains('retro-scanlines')) {
+    drawSignalSweeps(now);
   }
   setTimeout(() => drawStatic(performance.now()), 42);
 }
@@ -222,6 +262,8 @@ async function initDiscord(clientId: string) {
   let activityOk = false;
   let channelOk = false;
   let authState = config?.discordAuthAvailable ? '…' : 'sin clave';
+  let authProblem = '';
+  let authInFlight = false;
   let populatedAt = 0;
   const showParticipants = () => {
     // Keep the Activity's own list first. Voice states cover clients where the
@@ -238,11 +280,12 @@ async function initDiscord(clientId: string) {
       id: person.id, name: person.nickname || person.global_name || person.username, avatar: avatarUrl(person),
     })));
     const connection = authState === 'sin clave' ? 'Falta clave de Discord' :
-      authState === '×' ? 'Acceso falló' :
+      authState === '×' ? `Acceso falló: ${authProblem}` :
       authState === '…' ? 'Conectando…' :
       activityOk || channelOk ? 'Conectado' : 'Lista no disponible';
     viewerStatus.textContent = `${people.length} espectador${people.length === 1 ? '' : 'es'} · ${connection}`;
     viewerStatus.title = `Actividad: ${activityOk ? activityPeople.length : 'no disponible'}; llamada: ${channelOk ? channelPeople.length : 'no disponible'}.`;
+    viewerRetry.hidden = authState !== '×';
   };
   const onActivityUpdate = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
     activityOk = true;
@@ -252,15 +295,32 @@ async function initDiscord(clientId: string) {
     showParticipants();
   };
   const authenticateDiscord = async () => {
+    if (authInFlight) return;
+    authInFlight = true;
+    viewerRetry.disabled = true;
+    authState = '…';
+    showParticipants();
+    let step = 'permiso de Discord';
     try {
-      const { code } = await discordSdk!.commands.authorize({
-        client_id: clientId, response_type: 'code', scope: ['identify', 'guilds'], prompt: 'none', state: '',
-      });
+      let code: string;
+      try {
+        ({ code } = await discordSdk!.commands.authorize({
+          client_id: clientId, response_type: 'code', scope: ['identify', 'guilds'], prompt: 'none', state: '',
+        }));
+      } catch (fullScopeError) {
+        console.warn('Discord rechazó el permiso completo; probando solo el perfil:', fullScopeError);
+        step = 'permiso del perfil';
+        ({ code } = await discordSdk!.commands.authorize({
+          client_id: clientId, response_type: 'code', scope: ['identify'], prompt: 'none', state: '',
+        }));
+      }
+      step = 'canje del código';
       const response = await fetch('/api/discord-token', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
       });
       const body = await response.json() as { access_token?: string; error?: string };
       if (!response.ok || !body.access_token) throw new Error(body.error || 'Discord rechazó el acceso');
+      step = 'lectura del perfil';
       const auth = await discordSdk!.commands.authenticate({ access_token: body.access_token });
       selfUser = { ...auth.user, bot: false, flags: auth.user.public_flags };
       authState = 'sí';
@@ -268,10 +328,15 @@ async function initDiscord(clientId: string) {
       void refreshParticipants();
     } catch (error) {
       authState = '×';
+      authProblem = step;
       showParticipants();
-      console.warn('No se pudo autorizar el perfil de Discord:', error);
+      console.warn(`No se pudo autorizar el perfil de Discord (${step}):`, error);
+    } finally {
+      authInFlight = false;
+      viewerRetry.disabled = false;
     }
   };
+  viewerRetry.addEventListener('click', () => { void authenticateDiscord(); });
   let refreshInFlight = false;
   const refreshParticipants = async () => {
     if (refreshInFlight) return;

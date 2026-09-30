@@ -29,7 +29,7 @@
                     </div>
 
                     <div id="videoMount" class="video-mount"></div>
-                    <div class="crt-overlay" aria-hidden="true"></div>
+                    <div class="crt-overlay" aria-hidden="true"><canvas id="signalSweep" class="signal-sweep" width="320" height="180"></canvas></div>
                     <div class="screen-glare" aria-hidden="true"></div>
 
                     <div class="osd osd-top">
@@ -78,6 +78,7 @@
               <button id="smoothingButton" type="button" aria-pressed="false" title="Suavizar bordes dentados">Bordes</button>
               <button id="editorButton" type="button" title="Editar decoración">Decorar</button>
               <span id="viewerStatus" class="viewer-status" role="status">Espectadores: conectando…</span>
+              <button id="viewerRetry" class="viewer-retry" type="button" hidden>Reintentar acceso</button>
             </div>
           </div>
           <div class="volume-control" id="volumeControl">

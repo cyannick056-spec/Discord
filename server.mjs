@@ -93,7 +93,10 @@ app.post('/api/discord-token', async (req, res) => {
     });
     const token = await response.json();
     if (!response.ok || typeof token.access_token !== 'string') {
-      return res.status(502).json({ error: 'Discord no aceptó la autorización' });
+      const reason = ['invalid_client', 'invalid_grant', 'invalid_request', 'unauthorized_client']
+        .includes(token?.error) ? token.error : `HTTP ${response.status}`;
+      console.warn('Discord OAuth rechazado:', response.status, reason);
+      return res.status(502).json({ error: `Discord no aceptó la autorización (${reason})` });
     }
     res.set('Cache-Control', 'no-store').json({ access_token: token.access_token });
   } catch (error) {
