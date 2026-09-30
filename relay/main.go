@@ -164,6 +164,11 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
+	if strings.EqualFold(os.Getenv("STREAM_PROVIDER"), "cloudflare") {
+		publishCloudflare(id, conn, reader)
+		return
+	}
+
 	roomName := "shis-" + stream
 	identity := fmt.Sprintf("native-switch-%d-%d", time.Now().Unix(), id)
 	room, err := lksdk.ConnectToRoom(
