@@ -48,24 +48,9 @@ The code can switch the transport with `STREAM_PROVIDER=cloudflare` on **both** 
 1. In [Cloudflare Realtime > Serverless SFU](https://dash.cloudflare.com/?to=/:account/realtime/sfu), create an SFU app. Add its `CLOUDFLARE_SFU_APP_ID` and `CLOUDFLARE_SFU_APP_SECRET` **only** to the Activity server's environment.
 2. Set `SHIS_ACTIVITY_URL` on the relay to the Activity HTTPS origin (without a trailing slash). The relay authenticates its SFU signaling with the existing `STREAM_KEY`. Leave `STREAM_PROVIDER=livekit` on both services until test time.
 3. With the Switch off and Activity closed, set `STREAM_PROVIDER=cloudflare` on both services and deploy. Start the Switch and verify video, game audio, signal-loss behavior and mobile Discord playback. Keep LiveKit credentials available so both services can switch back together.
-4. Check actual Cloudflare Realtime egress and Railway egress before deciding whether to migrate the two services to a PayPal-billed VPS. Export persistent decorations from the mounted directory before moving; a new VPS does not inherit Railway's volume.
+4. Keep both services on Railway and compare their actual usage with Cloudflare Realtime egress during the test. The existing Railway volume continues to hold decorations.
 
 The Activity verifies each viewer through Discord before creating a Cloudflare SFU session. The SFU secret stays on the Activity backend. A short relay heartbeat lets viewers find the current Switch publication and removes it after the stream stops. The Cloudflare path is new and requires a live test with an SFU account before replacing the production transport.
-
-### VPS deployment prerequisites
-
-An OVHcloud VPS requires a public TCP endpoint for SysDVR, an HTTPS domain for the Discord Activity, automatic service restart, firewall rules, and persistent backed-up storage for decorations. Match the Activity HTTPS URL in Discord Developer Portal URL mappings before moving traffic. Buying a VPS and changing DNS/Discord mappings are separate deployment steps after the new video path works.
-
-### Deploy the two services on an OVHcloud VPS
-
-The `deploy/` directory includes a Caddy HTTPS proxy, a Node Activity image, a native relay image and persistent volumes for TLS and decorations. It does **not** migrate the currently mounted Railway decorations automatically.
-
-1. Point an A/AAAA DNS record for a domain you control to the VPS. Permit inbound TCP 80 and 443 for Discord and TCP 9000 (or your chosen `RELAY_PORT`) for the Switch. A VPS and a hostname are needed before these steps can run.
-2. Clone this repository on the VPS, copy `deploy/vps.env.example` to `deploy/.env`, fill in Discord, stream and Cloudflare credentials **on the VPS** (never in GitHub). Set `ACTIVITY_DOMAIN` to the exact DNS hostname. Copy decorations from Railway's persistent directory before switching services.
-3. Build the images one at a time if the VPS has limited memory: `docker compose --env-file deploy/.env -f deploy/compose.yaml build activity` then `docker compose --env-file deploy/.env -f deploy/compose.yaml build relay`; run `docker compose --env-file deploy/.env -f deploy/compose.yaml up -d`. Inspect `docker compose --env-file deploy/.env -f deploy/compose.yaml logs --tail=100` and verify `https://YOUR_DOMAIN/api/health`.
-4. During the Cloudflare trial, use the same `STREAM_PROVIDER` value on both services. Set it to `cloudflare` only after configuring a Cloudflare SFU app and testing the publisher and subscriber. If the test fails, restore `livekit` on both services and restart. Then update the Activity URL mapping in Discord and the Switch `relay_host` only when the replacement is working.
-
-Caddy renews the HTTPS certificate. The `decorations` Docker volume stores uploads across image updates; back it up separately. Store the Compose `.env` outside version control, and protect SSH access to the VPS. Building the Go relay on a small VPS may need extra RAM or swap. No OVHcloud purchase, DNS change or Cloudflare account creation is performed by this code change.
 
 ## Decorations
 
