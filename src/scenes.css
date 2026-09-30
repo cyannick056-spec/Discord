@@ -645,7 +645,8 @@
 @media (orientation: landscape) and (min-height: 361px) {
   .home-mode .tv-scene,
   .home-mode .tv-scene.aspect-4x3 {
-    width: min(98vw, calc(98dvh * 1672 / 941));
+    width: min(130vw, calc(117dvh * 1672 / 941));
+    top: 53%;
   }
   .arcade-art { display: none; }
   .arcade-screen {
@@ -1018,8 +1019,8 @@
 @media (pointer: coarse) and (orientation: landscape) and (min-height: 361px) {
   .home-mode .tv-scene,
   .home-mode .tv-scene.aspect-4x3 {
-    width: min(98vw, calc(98dvh * 1672 / 941));
-    top: 50%;
+    width: min(130vw, calc(117dvh * 1672 / 941));
+    top: 53%;
   }
 }
 @media (pointer: coarse) and (orientation: portrait) and (min-height: 430px) {
