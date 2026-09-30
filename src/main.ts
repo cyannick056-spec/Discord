@@ -93,7 +93,7 @@ function setScene(mode: SceneMode) {
 }
 setScene(sceneMode);
 
-type RetroLevel = 'off' | 'normal' | 'immersive';
+type RetroLevel = 'off' | 'normal' | 'immersive' | 'scanlines';
 let retroLevel: RetroLevel = 'immersive';
 let smoothing = true;
 let volume = 100;
@@ -108,12 +108,18 @@ function setRetroLevel(level: RetroLevel) {
   retroLevel = level;
   stage.classList.toggle('retro-strong', level === 'normal');
   stage.classList.toggle('retro-immersive', level === 'immersive');
+  stage.classList.toggle('retro-scanlines', level === 'scanlines');
   filterButton.dataset.level = level;
   filterButton.setAttribute('aria-pressed', String(level !== 'off'));
-  filterButton.textContent = level === 'off' ? 'Retro apagado' : `Retro ${level === 'normal' ? 'normal' : 'inmersivo'}`;
-  const next = level === 'off' ? 'normal' : level === 'normal' ? 'inmersivo' : 'apagado';
-  filterButton.setAttribute('aria-label', `Retro ${level === 'off' ? 'apagado' : level === 'normal' ? 'normal' : 'inmersivo'}; cambiar a ${next}`);
-  filterButton.title = `Retro: ${level === 'off' ? 'apagado' : level === 'normal' ? 'normal' : 'inmersivo'}. Pulsar para ${next}`;
+  const names: Record<RetroLevel, string> = {
+    off: 'apagado', normal: 'normal', immersive: 'inmersivo', scanlines: 'rayitas',
+  };
+  filterButton.textContent = `Retro ${names[level]}`;
+  const next: Record<RetroLevel, RetroLevel> = {
+    off: 'normal', normal: 'immersive', immersive: 'scanlines', scanlines: 'off',
+  };
+  filterButton.setAttribute('aria-label', `Retro ${names[level]}; cambiar a ${names[next[level]]}`);
+  filterButton.title = `Retro: ${names[level]}. Pulsar para ${names[next[level]]}`;
 }
 setRetroLevel(retroLevel);
 
@@ -209,16 +215,34 @@ async function initDiscord(clientId: string) {
   const avatarUrl = (user: Participant) => user.avatar ?
     `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` :
     `https://cdn.discordapp.com/embed/avatars/${(BigInt(user.id) >> 22n) % 6n}.png`;
-  const updateParticipants = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse, source = 'Activity') => {
-    const people = participants.filter((person) => !person.bot);
+  let activityPeople: Participant[] = [];
+  let channelPeople: Participant[] = [];
+  let activityOk = false;
+  let channelOk = false;
+  let populatedAt = 0;
+  const showParticipants = () => {
+    // Keep the Activity's own list first. Voice states cover clients where the
+    // instance command omits the local user, without creating duplicate bases.
+    const byId = new Map<string, Participant>();
+    for (const person of [...activityPeople, ...channelPeople]) {
+      if (!person.bot && !byId.has(person.id)) byId.set(person.id, person);
+    }
+    const people = [...byId.values()];
     const present = new Set(people.map((person) => person.id));
     participantOrder = participantOrder.filter((id) => present.has(id));
     for (const person of people) if (!participantOrder.includes(person.id)) participantOrder.push(person.id);
-    const byId = new Map(people.map((person) => [person.id, person]));
     setDecorationViewers(participantOrder.map((id) => byId.get(id)!).filter(Boolean).map((person) => ({
       id: person.id, name: person.nickname || person.global_name || person.username, avatar: avatarUrl(person),
     })));
-    viewerStatus.textContent = `${source}: ${people.length} participante${people.length === 1 ? '' : 's'}`;
+    viewerStatus.textContent = `${people.length} visibles · A:${activityOk ? activityPeople.length : '×'} V:${channelOk ? channelPeople.length : '×'}`;
+    viewerStatus.title = 'A = participantes de la Activity; V = personas en la llamada; × = Discord no permitió leer esa lista';
+  };
+  const onActivityUpdate = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
+    activityOk = true;
+    const updated = participants.filter((person) => !person.bot);
+    if (updated.length || Date.now() - populatedAt > 30000) activityPeople = updated;
+    if (updated.length) populatedAt = Date.now();
+    showParticipants();
   };
   let refreshInFlight = false;
   const refreshParticipants = async () => {
@@ -226,31 +250,44 @@ async function initDiscord(clientId: string) {
     refreshInFlight = true;
     try {
       const activity = await discordSdk!.commands.getActivityInstanceConnectedParticipants();
-      updateParticipants(activity);
-      // Discord may show people in the call who have not opened this Activity.
-      // Include them only if the client permits reading the current channel.
-      if (activity.participants.length <= 1 && discordSdk!.channelId) {
-        try {
-          const channel = await discordSdk!.commands.getChannel({ channel_id: discordSdk!.channelId });
-          const voice = channel.voice_states.filter((state) => !state.user.bot).map((state): Participant => ({
-            ...state.user, flags: state.user.flags ?? 0, nickname: state.nick,
-          }));
-          if (voice.length > activity.participants.length) updateParticipants({ participants: voice }, 'En llamada');
-        } catch { /* The channel command may require an OAuth scope. */ }
+      activityOk = true;
+      // An update event may arrive with a populated roster just before an
+      // initial empty mobile response. Give that event time to settle.
+      if (activity.participants.length || Date.now() - populatedAt > 30000) {
+        activityPeople = activity.participants.filter((person) => !person.bot);
+        if (activityPeople.length) populatedAt = Date.now();
       }
     } catch (error) {
-      viewerStatus.textContent = 'Espectadores: sin respuesta de Discord';
-      console.warn('No se pudo consultar la lista de participantes:', error);
-    } finally {
-      refreshInFlight = false;
+      activityOk = false;
+      console.warn('No se pudo consultar la Activity:', error);
     }
+    // Query the call independently even when the Activity command fails.
+    if (discordSdk!.channelId) {
+      try {
+        const channel = await discordSdk!.commands.getChannel({ channel_id: discordSdk!.channelId });
+        channelOk = true;
+        channelPeople = channel.voice_states.filter((state) => !state.user.bot).map((state): Participant => ({
+          ...state.user, flags: state.user.flags ?? 0, nickname: state.nick,
+        }));
+      } catch (error) {
+        channelOk = false;
+        channelPeople = [];
+        console.warn('No se pudo consultar la llamada:', error);
+      }
+    } else {
+      channelOk = false;
+      channelPeople = [];
+    }
+    showParticipants();
+    refreshInFlight = false;
   };
   // A client may not support the update event. The initial query and periodic
   // refresh still work independently of that subscription.
-  void discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, updateParticipants)
+  void discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, onActivityUpdate)
     .catch((error) => console.warn('No se pudo seguir cambios de participantes:', error));
   void refreshParticipants();
   setInterval(() => { if (!document.hidden) void refreshParticipants(); }, 8000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshParticipants(); });
 }
 
 function getLiveKitConnectUrl(serverUrl: string) {
@@ -341,7 +378,7 @@ settingsButton.addEventListener('click', () => {
   volumePanel.hidden = true;
   volumeButton.setAttribute('aria-expanded', 'false');
 });
-filterButton.addEventListener('click', () => setRetroLevel(retroLevel === 'off' ? 'normal' : retroLevel === 'normal' ? 'immersive' : 'off'));
+filterButton.addEventListener('click', () => setRetroLevel(retroLevel === 'off' ? 'normal' : retroLevel === 'normal' ? 'immersive' : retroLevel === 'immersive' ? 'scanlines' : 'off'));
 smoothingButton.addEventListener('click', () => setSmoothing(!smoothing));
 aspectButton.addEventListener('click', () => setAspect(aspectMode === '4:3' ? '16:9' : '4:3'));
 volumeButton.addEventListener('click', () => {

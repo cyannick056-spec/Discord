@@ -311,6 +311,7 @@
 #filterButton::after { content: "Retro"; }
 #filterButton[data-level="normal"]::after { content: "Normal"; }
 #filterButton[data-level="immersive"]::after { content: "Intenso"; }
+#filterButton[data-level="scanlines"]::after { content: "Rayitas"; }
 #smoothingButton::before { content: "◌"; font-size: 24px; }
 #smoothingButton::after { content: "Bordes"; }
 #volumeButton::before { content: "♪"; }
@@ -791,6 +792,25 @@
 }
 .stage.retro-immersive .player { box-shadow: inset 0 0 27px rgba(0,0,0,.6); }
 .stage.home-mode.retro-immersive .screen-wrap .player { border-radius: 6% / 4.5%; }
+.stage.retro-scanlines .video-mount video { filter: blur(.58px) saturate(1.06) contrast(1.09); }
+.stage.retro-scanlines.edge-smoothing .video-mount video { filter: blur(.75px) saturate(1.06) contrast(1.09); }
+.stage.retro-scanlines .crt-overlay,
+.stage.retro-scanlines .player:has(.video-mount video) .crt-overlay {
+  opacity: .93;
+  background:
+    repeating-linear-gradient(to bottom,
+      rgba(0,0,0,.37) 0 2px,
+      rgba(194,211,224,.055) 2px 3px,
+      transparent 3px 5px),
+    repeating-linear-gradient(to right,
+      rgba(217,88,72,.025) 0 1px,
+      rgba(73,174,128,.025) 1px 2px,
+      rgba(88,131,207,.025) 2px 3px),
+    radial-gradient(ellipse at center, transparent 46%, rgba(0,0,0,.57) 100%);
+}
+.stage.retro-scanlines .screen-glare { opacity: .42; }
+.stage.retro-scanlines .player { box-shadow: inset 0 0 29px rgba(0,0,0,.65); }
+.stage.home-mode.retro-scanlines .screen-wrap .player { border-radius: 6% / 4.5%; }
 
 @media (max-width: 420px) and (min-height: 361px) {
   .scene-controls { gap: 4px; }
