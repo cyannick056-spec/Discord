@@ -1,0 +1,4 @@
+{$ACTIVITY_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy activity:3000
+}
