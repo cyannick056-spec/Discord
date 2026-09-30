@@ -14,6 +14,7 @@ const distDir = path.join(__dirname, 'dist');
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
+app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
   directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),
   editKey: process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY,
@@ -42,6 +43,34 @@ function sameSecret(a, b) {
   const right = Buffer.from(String(b || ''));
   if (left.length !== right.length || left.length === 0) return false;
   return crypto.timingSafeEqual(left, right);
+}
+
+const entryTicketLifetime = 6 * 60 * 60_000;
+
+function activityTicket() {
+  const payload = Buffer.from(JSON.stringify({ expires: Date.now() + entryTicketLifetime, nonce: crypto.randomUUID() })).toString('base64url');
+  const signature = crypto.createHmac('sha256', required('DISCORD_CLIENT_SECRET'))
+    .update(`shis-activity:${payload}`).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function validActivityTicket(value) {
+  if (typeof value !== 'string' || value.length > 512) return false;
+  const [payload, signature, extra] = value.split('.');
+  if (!payload || !signature || extra || !process.env.DISCORD_CLIENT_SECRET) return false;
+  const expected = crypto.createHmac('sha256', process.env.DISCORD_CLIENT_SECRET)
+    .update(`shis-activity:${payload}`).digest('base64url');
+  if (!sameSecret(signature, expected)) return false;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return Number.isSafeInteger(decoded.expires) && decoded.expires > Date.now() &&
+      decoded.expires <= Date.now() + entryTicketLifetime && typeof decoded.nonce === 'string';
+  } catch { return false; }
+}
+
+function requireActivityTicket(req, res, next) {
+  if (validActivityTicket(req.get('X-Activity-Ticket') || req.query.ticket)) return next();
+  res.set('Cache-Control', 'no-store').status(401).json({ error: 'Abre Shis Stream desde Discord' });
 }
 
 async function mintToken({ roomName, identity, publish, subscribe, ttl = '6h' }) {
@@ -98,7 +127,7 @@ app.post('/api/discord-token', async (req, res) => {
       console.warn('Discord OAuth rechazado:', response.status, reason);
       return res.status(502).json({ error: `Discord no aceptó la autorización (${reason})` });
     }
-    res.set('Cache-Control', 'no-store').json({ access_token: token.access_token });
+    res.set('Cache-Control', 'no-store').json({ access_token: token.access_token, ticket: activityTicket() });
   } catch (error) {
     console.error('Discord token exchange failed:', error);
     res.status(502).json({ error: 'No se pudo autorizar con Discord' });
@@ -173,10 +202,19 @@ app.get('/api/viewer-token', async (req, res) => {
 });
 
 if (existsSync(distDir)) {
+  const serveActivityEntry = (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (validActivityTicket(req.query.ticket)) return res.sendFile(path.join(distDir, 'index.html'));
+    if (typeof req.query.frame_id === 'string' || typeof req.query.instance_id === 'string') {
+      return res.sendFile(path.join(distDir, 'gate.html'));
+    }
+    return res.status(403).type('text/plain').send('Abre Shis Stream desde la actividad de Discord.');
+  };
+  app.get(['/', '/index.html', '/gate.html'], serveActivityEntry);
   app.use(express.static(distDir, { index: false, maxAge: '1h' }));
   app.use((req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
-    res.sendFile(path.join(distDir, 'index.html'));
+    serveActivityEntry(req, res);
   });
 }
 
