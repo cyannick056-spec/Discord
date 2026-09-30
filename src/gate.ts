@@ -34,9 +34,22 @@ async function enterActivity() {
     if (!response.ok || !result.ticket || !result.access_token) {
       throw new Error(result.error || 'No se pudo comprobar el acceso');
     }
+    const auth = await discord.commands.authenticate({ access_token: result.access_token });
     try { sessionStorage.setItem('shis-discord-access', result.access_token); } catch { /* Retry OAuth on the full page. */ }
     params.set('ticket', result.ticket);
-    location.replace(`/?${params}`);
+    // Navigating the embedded iframe tears down its Discord RPC connection.
+    // Keep the authorized SDK and swap in the protected Activity in this document.
+    const entry = await fetch(`/?${params}`, { cache: 'no-store' });
+    if (!entry.ok) throw new Error('No se pudo abrir la transmisión');
+    const activity = new DOMParser().parseFromString(await entry.text(), 'text/html');
+    if (!activity.querySelector('#stage')) throw new Error('La transmisión no está disponible');
+    (window as Window & { __shisDiscordSession?: unknown }).__shisDiscordSession = {
+      sdk: discord, user: auth.user, accessToken: result.access_token,
+    };
+    history.replaceState(null, '', `/?${params}`);
+    document.head.innerHTML = activity.head.innerHTML;
+    document.body.innerHTML = activity.body.innerHTML;
+    await import('./main');
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : 'No se pudo entrar desde Discord';
     retry.hidden = false;
