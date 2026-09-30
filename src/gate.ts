@@ -46,8 +46,23 @@ async function enterActivity() {
     (window as Window & { __shisDiscordSession?: unknown }).__shisDiscordSession = {
       sdk: discord, user: auth.user, accessToken: result.access_token,
     };
+    // Wait for the current scene styles before replacing the entry screen.
+    // Otherwise the browser can paint the old unstyled room for one frame.
+    const stylesheets = [...activity.head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')];
+    await Promise.all(stylesheets.map((stylesheet) => new Promise<void>((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = stylesheet.getAttribute('href') || '';
+      link.addEventListener('load', () => resolve(), { once: true });
+      link.addEventListener('error', () => reject(new Error('No se pudo cargar el entorno')), { once: true });
+      document.head.append(link);
+    })));
     history.replaceState(null, '', `/?${params}`);
-    document.head.innerHTML = activity.head.innerHTML;
+    document.title = activity.title;
+    const viewport = activity.head.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    const currentViewport = document.head.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (viewport && currentViewport) currentViewport.content = viewport.content;
+    document.head.querySelector('style')?.remove();
     document.body.innerHTML = activity.body.innerHTML;
     await import('./main');
   } catch (error) {
