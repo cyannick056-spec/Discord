@@ -1,6 +1,7 @@
 import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import { initDecorations, setDecorationViewers } from './decorations';
+import { CloudflareViewer } from './cloudflare';
 import './style.css';
 import './scenes.css';
 
@@ -8,6 +9,7 @@ type AppConfig = {
   discordClientId: string;
   discordAuthAvailable: boolean;
   defaultStream: string;
+  streamProvider: 'livekit' | 'cloudflare';
 };
 
 type ViewerCredentials = {
@@ -49,6 +51,7 @@ const volumeSlider = document.querySelector<HTMLInputElement>('#volumeSlider')!;
 const volumeValue = document.querySelector<HTMLOutputElement>('#volumeValue')!;
 
 let room: Room | null = null;
+let cloudflareViewer: CloudflareViewer | null = null;
 let config: AppConfig | null = null;
 let discordSdk: DiscordSDK | null = null;
 let discordAccessToken = '';
@@ -458,6 +461,46 @@ function attachTrack(track: RemoteTrack, publisherId: string) {
   }
 }
 
+
+function attachCloudflareTrack(kind: 'video' | 'audio', mediaTrack: MediaStreamTrack) {
+  const element = document.createElement(kind);
+  element.autoplay = true;
+  element.srcObject = new MediaStream([mediaTrack]);
+  if (kind === 'audio') {
+    element.style.display = 'none';
+    element.volume = volume / 100;
+    audioMount.replaceChildren(element);
+    void element.play().then(() => { audioButton.hidden = true; })
+      .catch(() => { audioButton.hidden = false; });
+    return;
+  }
+  element.setAttribute('playsinline', 'true');
+  activeVideoTrack = null;
+  activeVideoPublisherId = 'cloudflare';
+  activeVideoElement = element;
+  lastDecodedFrameAt = performance.now();
+  videoStalled = false;
+  videoMount.replaceChildren(element);
+  setStatus('SEÑAL DETECTADA…');
+  void element.play().catch(() => {});
+  if ('requestVideoFrameCallback' in element) {
+    const onFrame: VideoFrameRequestCallback = (now) => {
+      if (activeVideoElement !== element) return;
+      lastDecodedFrameAt = now;
+      videoStalled = false;
+      if (!stage.classList.contains('has-signal')) {
+        setLive(true);
+        setStatus('');
+      }
+      element.requestVideoFrameCallback(onFrame);
+    };
+    element.requestVideoFrameCallback(onFrame);
+  } else {
+    setLive(true);
+    setStatus('');
+  }
+}
+
 setInterval(() => {
   if (document.hidden || !activeVideoElement || videoStalled ||
       !('requestVideoFrameCallback' in activeVideoElement)) return;
@@ -480,6 +523,20 @@ async function connectViewer(stream: string) {
   if (room) {
     await room.disconnect();
     room = null;
+  }
+
+  if (config?.streamProvider === 'cloudflare') {
+    if (cloudflareViewer) cloudflareViewer.stop();
+    roomText.textContent = `shis-${config.defaultStream}`;
+    cloudflareViewer = new CloudflareViewer(
+      () => discordAccessToken,
+      attachCloudflareTrack,
+      () => { audioMount.replaceChildren(); audioButton.hidden = true; clearVideo(); },
+      showConnectionError,
+    );
+    await cloudflareViewer.start();
+    if (!activeVideoElement) setStatus('BUSCANDO SEÑAL…');
+    return;
   }
 
   const response = await fetch(`/api/viewer-token?stream=${encodeURIComponent(stream)}`, {
