@@ -113,7 +113,7 @@ function setRetroLevel(level: RetroLevel) {
   filterButton.dataset.level = level;
   filterButton.setAttribute('aria-pressed', String(level !== 'off'));
   const names: Record<RetroLevel, string> = {
-    off: 'apagado', normal: 'normal', immersive: 'inmersivo', scanlines: 'rayitas',
+    off: 'apagado', normal: 'normal', immersive: 'inmersivo', scanlines: 'barrido',
   };
   filterButton.textContent = `Retro ${names[level]}`;
   const next: Record<RetroLevel, RetroLevel> = {
