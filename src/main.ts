@@ -55,6 +55,7 @@ let aspectMode: AspectMode = '16:9';
 try {
   if (localStorage.getItem('shis-tv-aspect') === '4:3') aspectMode = '4:3';
 } catch { /* Embedded browsers may deny storage. */ }
+if (editorPreviewMode) aspectMode = new URLSearchParams(location.search).get('aspect') === '4:3' ? '4:3' : '16:9';
 
 function setAspect(mode: AspectMode) {
   aspectMode = mode;

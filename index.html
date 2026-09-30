@@ -106,6 +106,7 @@
             <div class="editor-toolbar">
               <label>Escena <select id="editorScene"><option value="home">Casa</option><option value="arcade">Arcade</option></select></label>
               <label>Vista <select id="editorView"><option value="landscape">Horizontal</option><option value="portrait">Vertical</option><option value="window">Ventana</option></select></label>
+              <label id="editorAspectLabel">Tamaño TV <select id="editorAspect"><option value="16:9">16:9</option><option value="4:3">4:3</option></select></label>
               <label class="editor-upload">Añadir imagen<input id="editorUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /></label>
             </div>
             <div class="editor-body">
@@ -127,6 +128,7 @@
                   <label>Sombra <input id="decorShadow" type="range" min="0" max="100" step="1" /><output id="decorShadowValue"></output></label>
                   <label class="editor-check"><input id="decorHidden" type="checkbox" /> Ocultar en esta vista</label>
                   <button id="decorCopy" type="button">Copiar a las otras vistas</button>
+                  <button id="decorCopyAspect" type="button">Copiar al otro tamaño TV</button>
                   <button id="decorRemove" type="button">Quitar decoración</button>
                 </div>
                 <button id="editorSave" type="button">Guardar para todos</button>

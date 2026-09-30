@@ -7,6 +7,9 @@ import express from 'express';
 const views = new Set([
   'home-landscape', 'home-portrait', 'home-window',
   'arcade-landscape', 'arcade-portrait', 'arcade-window',
+  'home-landscape-16x9', 'home-landscape-4x3',
+  'home-portrait-16x9', 'home-portrait-4x3',
+  'home-window-16x9', 'home-window-4x3',
 ]);
 const assetPattern = /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/;
 const mimeFor = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' };

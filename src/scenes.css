@@ -949,6 +949,7 @@
 .editor-properties output { font-size: 10px; color: #b7dae8; }
 .editor-properties .editor-check { grid-column: span 2; flex-direction: row; font-size: 12px; }
 .editor-properties button { grid-column: span 2; }
+#editorAspectLabel[hidden], #decorCopyAspect[hidden] { display: none !important; }
 #editorStatus { min-height: 2em; color: #b7dae8; }
 .editor-tip { color: #9aafb9; line-height: 1.3; }
 @media (max-width: 670px) {
