@@ -10,7 +10,7 @@ export function prepareRoom(manifest: Manifest, id: RoomId) {
   if (manifest.items.filter(i => i.kind === 'builtin').length + missing.length > 72) return false;
   for (const key of homeKeys) {
     const p: Presentation = (manifest.presentations ??= {})[key] ??= {};
-    if (!p.environment) p.tv = { zoom: key.includes('portrait') ? .95 : .55, y: key.includes('portrait') ? key.endsWith('4x3') ? 1.8 : 2.8 : -8.5 };
+    if (!p.environment) { p.tvSupport = 'cabinet'; p.tv = { zoom: key.includes('portrait') ? .95 : .55, y: key.includes('portrait') ? key.endsWith('4x3') ? 1.8 : 2.8 : -8.5 }; }
     p.environment = id; p.style = 'classic'; delete p.background;
   }
   // Each kit owns its own objects. Returning to a room reuses edited placements.
@@ -32,10 +32,11 @@ export function roomPlacement(prop: string, portrait = false): Placement {
     cabinet: [50, 78, 60, 3], rug: [50, 92, 68, 0], sofa: [84, 76, 28, 2], bed: [85, 78, 26, 2], shelf: [85, 73, 22, 2],
     console: [33, 63.5, 10, 14], controller: [50, 63.5, 7, 15], games: [67, 63.5, 8, 14], poster: [84, 24, 11, 1], lamp: [17, 63, 8, 12],
   };
+  Object.assign(coords, portrait ? { 'floor-lamp': [10, 53, 38, 12], 'mushroom-lamp': [15, 42, 14, 12], 'desk-lamp': [15, 41, 14, 12], 'lava-lamp': [15, 41, 10, 12] } : { 'floor-lamp': [9, 61, 20, 12], 'mushroom-lamp': [17, 62, 10, 12], 'desk-lamp': [17, 62, 10, 12], 'lava-lamp': [17, 60, 7, 12] });
   const [x, y, width, z] = coords[prop] ?? [50, 50, 15, 10];
   return { x, y, width, z, rotation: 0, opacity: 1, hidden: false, anchor: 'scene', behindTv: ['rug', 'cabinet', 'sofa', 'bed', 'shelf', 'poster'].includes(prop),
     brightness: 100, saturation: 100, shadow: 25,
-    ...(prop === 'lamp' ? { light: { color: '#ffca90', intensity: 55, radius: 5, x: 50, y: 24 } } : {}) };
+    ...((props.find(p => p.id === prop)?.category === 'lamp') ? { light: { color: prop === 'lava-lamp' ? '#ff6aa3' : '#ffca90', intensity: 55, radius: 5, x: 50, y: 24 }, ...(prop === 'lava-lamp' ? { lava: { motion: true, speed: 1 } } : {}) } : {}) };
 }
 export function builtinDecoration(prop: string): Decoration {
   const info = props.find(p => p.id === prop)!;

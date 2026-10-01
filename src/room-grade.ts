@@ -38,7 +38,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
     const grade = { ...mood.grade, ...mood.zones?.[zone] };
     const influence = (grade.influence ?? (zone === 'tv' ? 30 : 100)) / 100;
     if (influence === 0) continue;
-    const photo = free && zone !== 'tv' ? { x: bx, y: by, width: bw, height: bh } : face.dataset.tvModel && face.dataset.tvModel !== 'original' ? tv : { x, y, width: w, height: h };
+    const photo = free && zone !== 'tv' ? { x: bx, y: by, width: bw, height: bh } : face.dataset.tvModel && face.dataset.tvModel !== 'original' ? { x: x + w * value('photo-x'), y: y + h * value('photo-y'), width: w * value('photo-w'), height: h * value('photo-h') } : { x, y, width: w, height: h };
     const cover = free && zone !== 'tv' && getComputedStyle(backgroundImage).objectFit === 'cover';
     const ratio = cover ? Math.max(photo.width / backgroundImage.naturalWidth, photo.height / backgroundImage.naturalHeight) : 1;
     const sw = cover ? photo.width / ratio : backgroundImage.naturalWidth, sh = cover ? photo.height / ratio : backgroundImage.naturalHeight;
@@ -80,7 +80,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
     ctx.drawImage(texture, 0, 0); ctx.restore();
   }
   const aperture = { x: x + w * value('glass-x'), y: y + h * value('glass-y'), width: w * value('glass-w'), height: h * value('glass-h') };
-  paintTv(ctx, image, face.dataset.tvModel && face.dataset.tvModel !== 'original' ? tv : { x, y, width: w, height: h }, tv, aperture, getPresentation()?.tvPaint);
+  paintTv(ctx, image, face.dataset.tvModel && face.dataset.tvModel !== 'original' ? { x: x + w * value('photo-x'), y: y + h * value('photo-y'), width: w * value('photo-w'), height: h * value('photo-h') } : { x, y, width: w, height: h }, tv, aperture, getPresentation()?.tvPaint);
   ctx.save(); ctx.globalCompositeOperation = 'destination-out';
   ctx.beginPath(); ctx.roundRect(glass.x, glass.y, glass.width, glass.height, Math.min(glass.width * .025, glass.height * .04));
   ctx.fillStyle = '#000'; ctx.fill(); ctx.restore();

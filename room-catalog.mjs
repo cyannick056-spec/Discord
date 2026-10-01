@@ -8,6 +8,10 @@ export const rooms = [
   { id: 'city', name: 'Apartamento', description: 'Una ventana hacia la ciudad', furniture: 'sofa' },
 ];
 export const props = [
+  { id: 'floor-lamp', name: 'Lámpara de pie', category: 'lamp' },
+  { id: 'mushroom-lamp', name: 'Lámpara de hongo', category: 'lamp' },
+  { id: 'desk-lamp', name: 'Lámpara articulada', category: 'lamp' },
+  { id: 'lava-lamp', name: 'Lámpara de lava animada', category: 'lamp' },
   { id: 'cabinet', name: 'Mueble de TV', category: 'furniture' },
   { id: 'sofa', name: 'Sofá', category: 'furniture' },
   { id: 'bed', name: 'Cama', category: 'furniture' },
