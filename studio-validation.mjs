@@ -15,6 +15,7 @@ export function validPresentations(settings, views) {
   if (!object(settings)) return false;
   return Object.entries(settings).every(([view, p]) => views.has(view) && object(p) &&
     (p.environment === undefined || roomIds.has(p.environment)) &&
+    (p.rain === undefined || (object(p.rain) && (p.rain.enabled === undefined || typeof p.rain.enabled === 'boolean') && optionalNumbers(p.rain, { intensity: [0,100], speed: [.2,3] }))) &&
     (p.tvSupport === undefined || ['free', 'cabinet', 'floor'].includes(p.tvSupport)) &&
     (p.tvModel === undefined || tvIds.has(p.tvModel)) &&
     (p.style === undefined || ['original', 'classic', 'minimal', 'wood', 'brick', 'custom'].includes(p.style)) &&

@@ -34,6 +34,6 @@ Se pidió una segunda extracción de fondo de sofá, cama, repisa, consola y caj
 
 ## Uso en el editor
 
-Escena permite elegir habitación y televisión; Objetos permite mover, girar, escalar, ocultar, bloquear o duplicar sus piezas y usar la biblioteca. Los muebles de cada habitación conservan sus posiciones al volver a ella. Paredes, suelo y ventanas forman la fotografía; su encuadre se controla con cámara. Los cuatro momentos modifican la iluminación sobre las nuevas fotografías, sin cambiar los colores del vídeo. La lluvia del fondo es estática.
+Escena permite elegir habitación y televisión; Objetos permite mover, girar, escalar, ocultar, bloquear o duplicar sus piezas y usar la biblioteca. Los muebles de cada habitación conservan sus posiciones al volver a ella. Paredes, suelo y ventanas forman la fotografía; su encuadre se controla con cámara. Los cuatro momentos modifican la iluminación sobre las nuevas fotografías, sin cambiar los colores del vídeo. La fotografía conserva gotas húmedas; una capa Canvas añade lluvia y gotas deslizantes en tiempo real sobre los dos cristales laterales, con intensidad y velocidad ajustables en Escena. Se recorta al cristal y sigue el encuadre; la animación se pausa al ocultar la pestaña y respeta movimiento reducido.
 
 Se mantienen las tres TVs fotográficas: CRT original, plateada y carbón, en 4:3 y 16:9. Cambiar modelo ajusta el área de reproducción; sigue disponible el ajuste independiente de la pantalla.
