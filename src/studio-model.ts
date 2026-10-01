@@ -1,5 +1,6 @@
-export type Surface = 'free' | 'wall' | 'cabinet' | 'floor';
-export type Transform = { surface?: Surface; auto?: boolean; tiltX?: number; tiltY?: number; skewX?: number; skewY?: number; scaleX?: number; scaleY?: number; flipX?: boolean; flipY?: boolean };
+import { cornerMatrix } from './perspective.ts';
+export type Surface = 'free' | 'wall' | 'cabinet' | 'floor' | 'ceiling' | 'left-wall' | 'right-wall' | 'shelf';
+export type Transform = { surface?: Surface; auto?: boolean; tiltX?: number; tiltY?: number; skewX?: number; skewY?: number; scaleX?: number; scaleY?: number; flipX?: boolean; flipY?: boolean; depth?: number; corners?: number[][] };
 export type ContactShadow = { opacity: number; blur: number; width: number; x: number; y: number };
 export type Grade = { exposure?: number; contrast?: number; saturation?: number; temperature?: number; shadows?: number; influence?: number };
 export type Zone = 'wall' | 'cabinet' | 'floor' | 'tv' | 'figures';
@@ -8,12 +9,12 @@ export type Mood = { preset: 'neutral' | 'blue-night' | 'warm' | 'classic-night'
 export function perspectiveAngles(t: Transform = {}, x = 50) {
   if (!t.auto) return { x: t.tiltX ?? 0, y: t.tiltY ?? 0 };
   const side = Math.max(-1, Math.min(1, (x - 50) / 50));
-  return { x: t.surface === 'floor' ? 55 : t.surface === 'cabinet' ? 12 : 0,
-    y: t.surface === 'wall' ? side * -12 : t.surface === 'cabinet' ? side * -6 : 0 };
+  return { x: t.surface === 'floor' ? 55 : t.surface === 'ceiling' ? -55 : t.surface === 'cabinet' ? 12 : t.surface === 'shelf' ? 20 : 0,
+    y: t.surface === 'left-wall' ? 45 : t.surface === 'right-wall' ? -45 : t.surface === 'wall' ? side * -12 : t.surface === 'cabinet' ? side * -6 : 0 };
 }
-export function objectTransform(rotation: number, t: Transform = {}, x = 50) {
+export function objectTransform(rotation: number, t: Transform = {}, x = 50, width = 100, height = 100) {
   const angles = perspectiveAngles(t, x);
-  return `translate(-50%, -50%) rotate(${rotation}deg) perspective(800px) rotateX(${angles.x}deg) rotateY(${angles.y}deg) skew(${t.skewX ?? 0}deg,${t.skewY ?? 0}deg) scale(${(t.scaleX ?? 1) * (t.flipX ? -1 : 1)},${(t.scaleY ?? 1) * (t.flipY ? -1 : 1)})`;
+  return `translate(-50%, -50%) rotate(${rotation}deg) perspective(${t.depth ?? 800}px) rotateX(${angles.x}deg) rotateY(${angles.y}deg) skew(${t.skewX ?? 0}deg,${t.skewY ?? 0}deg) scale(${(t.scaleX ?? 1) * (t.flipX ? -1 : 1)},${(t.scaleY ?? 1) * (t.flipY ? -1 : 1)}) ${t.corners ? cornerMatrix(t.corners, width, height) : ''}`.trim();
 }
 export function gradeFilter(mood: Mood | undefined, zone: Zone) {
   const g = { ...mood?.grade, ...mood?.zones?.[zone] };

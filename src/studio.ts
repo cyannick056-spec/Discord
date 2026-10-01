@@ -1,5 +1,7 @@
 import type { Decoration, Manifest, Placement, RoomSnapshot } from './decorations';
 import { perspectiveAngles, type Grade, type Mood, type Transform, type Zone } from './studio-model';
+import { freeRoom, type Presentation } from './presentation-model';
+import { straightCorners, validCorners } from './perspective';
 
 type Host = {
   draft(): Manifest; saved(): Manifest; item(): Decoration | undefined; key(): string; selected(): string[];
@@ -7,6 +9,8 @@ type Host = {
   command(command: string): void; status(message: string): void; create(item: Decoration): void;
   compare(value: boolean): void; test(value: string): void; asset(path: string): string; resize(): void;
   restore(room: RoomSnapshot): void;
+  background(file: File): Promise<string>;
+  tool(tool: 'select' | 'pan' | 'tv' | 'camera' | 'warp'): void;
 };
 let host: Host | undefined;
 let listSignature = '';
@@ -36,7 +40,8 @@ function field(id: string, value: string | number | boolean) {
   if (input.type === 'checkbox') input.checked = Boolean(value); else input.value = String(value);
   const output = $<HTMLOutputElement>(`${id}Value`); if (output) output.value = String(value);
 }
-function room(): RoomSnapshot { const d = host!.draft(); return structuredClone({ items: d.items, ambient: d.ambient, mood: d.mood }); }
+function room(): RoomSnapshot { const d = host!.draft(); return structuredClone({ items: d.items, ambient: d.ambient, mood: d.mood, presentations: d.presentations }); }
+function presentation(): Presentation { return (host!.draft().presentations ??= {})[host!.key() as keyof NonNullable<Manifest['presentations']>] ??= {}; }
 function mood(): Mood { return host!.draft().mood ??= { preset: 'neutral', intensity: 65, tvGlow: 100 }; }
 function placements(): Placement[] {
   const ids = host!.selected(); return host!.draft().items.filter(i => ids.includes(i.id)).flatMap(i => {
@@ -59,6 +64,14 @@ export function initStudio(h: Host) {
   const old = [...sidebar.children];
   sidebar.innerHTML = '<div class="studio-tabs" role="tablist" aria-label="Panel de edición"><button id="studioObjectsTab" role="tab" aria-selected="true" aria-controls="studioObjects">Objetos</button><button id="studioLightsTab" role="tab" aria-selected="false" aria-controls="studioLights">Luces</button><button id="studioMoodTab" role="tab" aria-selected="false" aria-controls="studioMood">Ambiente</button><button id="studioCollapse" aria-label="Plegar panel" aria-expanded="true">⌄</button></div><div class="studio-scroll"><section id="studioObjects" role="tabpanel" aria-labelledby="studioObjectsTab"></section><section id="studioLights" role="tabpanel" aria-labelledby="studioLightsTab" hidden></section><section id="studioMood" role="tabpanel" aria-labelledby="studioMoodTab" hidden></section></div>';
   const objects = $('studioObjects'), lights = $('studioLights'), environment = $('studioMood');
+  $('studioCollapse').insertAdjacentHTML('beforebegin', '<button id="studioSceneTab" role="tab" aria-selected="false" aria-controls="studioScene">Escena</button>');
+  document.querySelector('.studio-scroll')!.insertAdjacentHTML('beforeend', '<section id="studioScene" role="tabpanel" aria-labelledby="studioSceneTab" hidden></section>');
+  $('studioScene').innerHTML = '<p class="studio-note">Cada vista y tamaño de TV conserva su composición. El zoom de la vista previa solo ayuda a editar; los controles de aquí cambian el escenario compartido.</p><div class="studio-template-grid"><button data-studio-template="classic" style="--swatch:#273348">Como antes · 3 a. m.</button><button data-studio-template="cinema" style="--swatch:#17171c">Sala de cine</button><button data-studio-template="warm" style="--swatch:#684d3d">Sala acogedora</button><button data-studio-template="blue" style="--swatch:#30465e">Estudio azul</button></div>' +
+    panel('studioBackground', 'Fondo y mobiliario', '<label>Escenario<select id="studioSceneStyle"><option value="original">Habitación actual</option><option value="classic">Habitación anterior</option><option value="minimal">Sala libre · pared lisa</option><option value="wood">Sala libre · paneles</option><option value="brick">Sala libre · ladrillos</option><option value="custom">Mi imagen de fondo</option></select></label><label class="editor-upload">Subir fondo<input id="studioBackgroundUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif"/></label><label>Reutilizar imagen<select id="studioBackgroundAsset"></select></label><label>Pared<input id="studioWallColor" type="color"/></label><label>Mueble<input id="studioCabinetColor" type="color"/></label><label>Suelo<input id="studioFloorColor" type="color"/></label>' + range('studioCabinetY', 'Altura del mueble', 15, 90) + range('studioCabinetHeight', 'Tamaño del mueble', 5, 45) + '<label class="studio-check"><input id="studioHideCabinet" type="checkbox"/> Quitar mueble</label><p class="studio-note">Las salas libres separan la TV del fondo. El modo anterior recupera su decoración integrada.</p>', true) +
+    panel('studioCamera', 'Encuadre del escenario', range('studioCameraX', 'Mover horizontalmente', -50, 50) + range('studioCameraY', 'Mover verticalmente', -50, 50) + range('studioCameraZoom', 'Zoom del escenario', .5, 2.5, .05) + '<div class="studio-buttons">' + buttons([['cameraTool', 'Encuadrar con el ratón'], ['resetCamera', 'Restablecer']]) + '</div>') +
+    panel('studioTv', 'Posición y tamaño de la TV / arcade', range('studioTvX', 'Posición horizontal', -80, 80) + range('studioTvY', 'Posición vertical', -80, 80) + range('studioTvZoom', 'Tamaño de la TV', .3, 2.5, .05) + '<div class="studio-buttons">' + buttons([['tvTool', 'Mover TV en la escena'], ['resetTv', 'Restablecer']]) + '</div><p class="studio-note">En Casa, mover la TV activa una sala libre para que el fondo se quede en su sitio.</p>') +
+    panel('studioVideo', 'Encuadre del vídeo', range('studioVideoZoom', 'Zoom dentro de la pantalla', 1, 3, .05) + range('studioVideoX', 'Encuadre horizontal', -50, 50) + range('studioVideoY', 'Encuadre vertical', -50, 50) + '<div class="studio-buttons">' + buttons([['resetVideo', 'Restablecer vídeo']]) + '</div><p class="studio-note">El vídeo queda recortado por el marco. Su luz sigue el área visible.</p>') +
+    '<div class="studio-buttons">' + buttons([['copyPresentation', 'Copiar a otras vistas'], ['resetPresentation', 'Restablecer esta escena']]) + '</div>';
   objects.insertAdjacentHTML('beforeend', '<div class="studio-search"><input id="studioSearch" type="search" placeholder="Buscar decoración…" aria-label="Buscar decoración"/><select id="studioCategory" aria-label="Categoría"><option value="all">Todo</option><option value="favorite">Favoritos</option><option value="figurine">Figuras</option><option value="sticker">Estampas</option><option value="poster">Pósters</option><option value="frame">Marcos</option><option value="lamp">Lámparas</option></select></div><div id="studioObjectList" class="studio-list"></div>');
   old.forEach(node => objects.append(node));
   const native = $('editorItem').closest('label')!; native.classList.add('studio-native-select'); $<HTMLSelectElement>('editorItem').size = 1;
@@ -67,11 +80,11 @@ export function initStudio(h: Host) {
   props.insertAdjacentHTML('afterbegin', '<label class="editor-wide">Tipo<select id="studioObjectCategory"><option value="figurine">Figurita</option><option value="sticker">Estampa</option><option value="poster">Póster</option><option value="frame">Marco</option><option value="lamp">Lámpara</option></select></label>');
   // Keep everyday adjustments in view and gather the rest into small disclosures.
   objects.insertAdjacentHTML('beforeend', panel('studioPerspective', 'Perspectiva y transformación',
-    '<label>Superficie<select id="studioSurface"><option value="free">Libre</option><option value="wall">Pared</option><option value="cabinet">Mueble</option><option value="floor">Suelo</option></select></label><label class="studio-check"><input id="studioAuto" type="checkbox"/> Ajustar automáticamente</label><p class="studio-note">Aproximación según superficie y posición. Desactiva para afinar a mano.</p>' +
-    range('studioTiltX', 'Inclinación vertical', -75, 75) + range('studioTiltY', 'Inclinación lateral', -75, 75) +
+    '<label>Vista preparada<select id="studioPerspectivePreset"><option value="custom">Personalizada</option><option value="front">Frontal</option><option value="left">Desde la izquierda</option><option value="right">Desde la derecha</option><option value="above">Desde arriba</option><option value="below">Desde abajo</option><option value="iso-left">Isométrica izquierda</option><option value="iso-right">Isométrica derecha</option><option value="floor">Sobre el suelo</option><option value="ceiling">En el techo</option></select></label><label>Superficie<select id="studioSurface"><option value="free">Libre</option><option value="wall">Pared frontal</option><option value="left-wall">Pared izquierda</option><option value="right-wall">Pared derecha</option><option value="cabinet">Mueble</option><option value="shelf">Repisa</option><option value="floor">Suelo</option><option value="ceiling">Techo</option></select></label><label class="studio-check"><input id="studioAuto" type="checkbox"/> Ajustar automáticamente</label><p class="studio-note">Las vistas son proyecciones de tu imagen. Para otro lado de una figura necesitas una imagen de ese lado.</p>' +
+    range('studioTiltX', 'Inclinación vertical', -85, 85) + range('studioTiltY', 'Inclinación lateral', -85, 85) + range('studioDepth', 'Profundidad de perspectiva', 150, 2000, 10) +
     range('studioSkewX', 'Deformación horizontal', -45, 45) + range('studioSkewY', 'Deformación vertical', -45, 45) +
     range('studioScaleX', 'Estirar ancho', .25, 2.5, .05) + range('studioScaleY', 'Estirar alto', .25, 2.5, .05) +
-    '<div class="studio-buttons">' + buttons([['flipX', 'Voltear ↔'], ['flipY', 'Voltear ↕'], ['resetTransform', 'Restablecer']]) + '</div>') +
+    '<div class="studio-buttons">' + buttons([['flipX', 'Voltear ↔'], ['flipY', 'Voltear ↕'], ['warpTool', 'Editar las 4 esquinas'], ['resetCorners', 'Restablecer esquinas'], ['resetTransform', 'Restablecer']]) + '</div><details><summary>Coordenadas de las esquinas</summary><div class="studio-corner-fields">' + [0, 1, 2, 3].map(i => `<label>${['Superior izquierda', 'Superior derecha', 'Inferior derecha', 'Inferior izquierda'][i]}<span><input id="studioCorner${i}X" type="number" min="-60" max="160" step="1" aria-label="Esquina ${i + 1} X"/><input id="studioCorner${i}Y" type="number" min="-60" max="160" step="1" aria-label="Esquina ${i + 1} Y"/></span></label>`).join('') + '</div></details>') +
     panel('studioAppearance', 'Acabado, recorte y sombra de apoyo',
       range('studioContactOpacity', 'Sombra de apoyo', 0, 100) + range('studioContactBlur', 'Suavidad de sombra', 0, 25) + range('studioContactWidth', 'Ancho de sombra', 20, 160) +
       range('studioContactX', 'Desplazar sombra X', -50, 50) + range('studioContactY', 'Desplazar sombra Y', -40, 40) +
@@ -98,21 +111,22 @@ export function initStudio(h: Host) {
     panel('studioRooms', 'Mis ambientes y versiones', '<label>Nombre<input id="studioRoomName" maxlength="70" placeholder="Mi noche favorita"/></label><div class="studio-buttons">' + buttons([['saveRoom', 'Guardar ambiente'], ['loadRoom', 'Aplicar'], ['deleteRoom', 'Eliminar']]) + '</div><select id="studioProfile" aria-label="Ambientes guardados"></select><label>Versiones anteriores<select id="studioVersion"></select></label><div class="studio-buttons">' + buttons([['loadVersion', 'Restaurar versión']]) + '</div><p class="studio-note">Guarda para todos para conservar tus ambientes y las tres versiones anteriores.</p>'));
   // Remove obsolete section headings after relocating their controls.
   props.querySelectorAll('strong').forEach(node => node.remove());
-  document.querySelector('.editor-tools')!.insertAdjacentHTML('beforeend', '<button id="studioCompare" type="button" aria-pressed="false">Antes / después</button><button id="studioImmersive" type="button" aria-pressed="false">Solo escena</button>');
-  for (const id of ['Objects', 'Lights', 'Mood']) {
+  document.querySelector('.editor-tools')!.insertAdjacentHTML('beforeend', '<button id="studioTvTool" type="button" aria-pressed="false">Mover TV</button><button id="studioCameraTool" type="button" aria-pressed="false">Encuadrar</button><button id="studioWarpTool" type="button" aria-pressed="false">Perspectiva</button><button id="studioCompare" type="button" aria-pressed="false">Antes / después</button><button id="studioImmersive" type="button" aria-pressed="false">Solo escena</button>');
+  for (const [id, cmd] of [['studioTvTool', 'tvTool'], ['studioCameraTool', 'cameraTool'], ['studioWarpTool', 'warpTool']]) $(id).addEventListener('click', () => command(cmd));
+  for (const id of ['Objects', 'Lights', 'Mood', 'Scene']) {
     const tab = $(`studio${id}Tab`);
     tab.addEventListener('click', () => {
-      for (const other of ['Objects', 'Lights', 'Mood']) { $(`studio${other}`).hidden = other !== id; $(`studio${other}Tab`).setAttribute('aria-selected', String(other === id)); }
+      for (const other of ['Objects', 'Lights', 'Mood', 'Scene']) { $(`studio${other}`).hidden = other !== id; $(`studio${other}Tab`).setAttribute('aria-selected', String(other === id)); $(`studio${other}Tab`).tabIndex = other === id ? 0 : -1; }
       sidebar.classList.remove('is-collapsed'); $('studioCollapse').setAttribute('aria-expanded', 'true'); h.resize();
     });
     tab.addEventListener('keydown', event => {
       if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-      event.preventDefault(); const tabs = ['Objects', 'Lights', 'Mood'];
-      const next = $(`studio${tabs[(tabs.indexOf(id) + (event.key === 'ArrowRight' ? 1 : 2)) % 3]}Tab`); next.click(); next.focus();
+      event.preventDefault(); const tabs = ['Objects', 'Lights', 'Mood', 'Scene'];
+      const next = $(`studio${tabs[(tabs.indexOf(id) + (event.key === 'ArrowRight' ? 1 : 3)) % 4]}Tab`); next.click(); next.focus();
     });
   }
   $('studioCollapse').addEventListener('click', () => { sidebar.classList.toggle('is-collapsed'); $('studioCollapse').setAttribute('aria-expanded', String(!sidebar.classList.contains('is-collapsed'))); h.resize(); });
-  $('studioImmersive').addEventListener('click', () => { const body = document.querySelector('.editor-body')!; body.classList.toggle('studio-immersive'); $('studioImmersive').setAttribute('aria-pressed', String(body.classList.contains('studio-immersive'))); h.resize(); });
+  $('studioImmersive').addEventListener('click', () => { const body = document.querySelector('.editor-body')!; body.classList.toggle('studio-immersive'); document.querySelector('.decor-editor')!.classList.toggle('studio-focus', body.classList.contains('studio-immersive')); $('studioImmersive').setAttribute('aria-pressed', String(body.classList.contains('studio-immersive'))); h.resize(); });
   $('studioCompare').addEventListener('click', () => { const button = $('studioCompare'), value = button.getAttribute('aria-pressed') !== 'true'; button.setAttribute('aria-pressed', String(value)); button.textContent = value ? 'Viendo guardado' : 'Antes / después'; h.compare(value); });
   $('studioTest').addEventListener('change', () => h.test($<HTMLSelectElement>('studioTest').value));
   ['studioSearch', 'studioCategory'].forEach(id => $(id).addEventListener('input', () => { listSignature = ''; refreshStudio(); }));
@@ -126,7 +140,19 @@ export function initStudio(h: Host) {
       t.auto = $<HTMLInputElement>('studioAuto').checked;
     } h.change();
   });
-  const transformFields = { TiltX: 'tiltX', TiltY: 'tiltY', SkewX: 'skewX', SkewY: 'skewY', ScaleX: 'scaleX', ScaleY: 'scaleY' } as const;
+  $('studioPerspectivePreset').addEventListener('change', () => {
+    const presets: Record<string, [number, number]> = { front: [0, 0], left: [0, 35], right: [0, -35], above: [35, 0], below: [-35, 0], 'iso-left': [25, 35], 'iso-right': [25, -35], floor: [55, 0], ceiling: [-55, 0] };
+    const value = presets[$<HTMLSelectElement>('studioPerspectivePreset').value]; if (!value) return;
+    for (const p of placements().filter(p => !p.locked)) { const t = p.transform ??= {}; t.auto = false; t.tiltX = value[0]; t.tiltY = value[1]; delete t.corners; t.skewX = t.skewY = 0; }
+    h.change();
+  });
+  for (let i = 0; i < 4; i++) for (const [axis, index] of [['X', 0], ['Y', 1]] as const) $(`studioCorner${i}${axis}`).addEventListener('input', () => {
+    const value = Number($<HTMLInputElement>(`studioCorner${i}${axis}`).value);
+    for (const p of placements().filter(p => !p.locked)) { const corners = structuredClone(p.transform?.corners ?? straightCorners()); corners[i][index] = value;
+      if (validCorners(corners)) (p.transform ??= {}).corners = corners; else h.status('Mantén las cuatro esquinas sin cruzarse.'); }
+    h.change('corners');
+  });
+  const transformFields = { TiltX: 'tiltX', TiltY: 'tiltY', SkewX: 'skewX', SkewY: 'skewY', ScaleX: 'scaleX', ScaleY: 'scaleY', Depth: 'depth' } as const;
   Object.entries(transformFields).forEach(([id, key]) => $('studio' + id).addEventListener('input', () => {
     for (const p of placements().filter(p => !p.locked)) { (p.transform ??= {})[key] = Number($<HTMLInputElement>('studio' + id).value); }
     h.change('transform');
@@ -153,6 +179,31 @@ export function initStudio(h: Host) {
     $<HTMLOutputElement>('studioKelvinValue').value = `${t * 100} K`;
   });
   field('studioKelvin', 4000);
+  for (const group of ['Camera', 'Tv', 'Video'] as const) for (const axis of ['X', 'Y', 'Zoom'] as const) $(`studio${group}${axis}`).addEventListener('input', () => {
+    const p = presentation(), key = group.toLowerCase() as 'camera' | 'tv' | 'video';
+    if (key === 'tv' && h.key().startsWith('home') && !freeRoom(p)) p.style = 'minimal';
+    (p[key] ??= {})[axis.toLowerCase() as 'x' | 'y' | 'zoom'] = Number($<HTMLInputElement>(`studio${group}${axis}`).value); h.change('presentation');
+  });
+  $('studioSceneStyle').addEventListener('change', () => { const p = presentation(); p.style = $<HTMLSelectElement>('studioSceneStyle').value as Presentation['style']; if (!freeRoom(p)) delete p.tv; h.change(); });
+  for (const [id, key] of [['studioWallColor', 'wall'], ['studioCabinetColor', 'cabinet'], ['studioFloorColor', 'floor']] as const) $(id).addEventListener('input', () => {
+    const p = presentation(); if (!freeRoom(p)) p.style = 'minimal'; p[key] = $<HTMLInputElement>(id).value; h.change('presentation');
+  });
+  for (const [id, key] of [['studioCabinetY', 'cabinetY'], ['studioCabinetHeight', 'cabinetHeight']] as const) $(id).addEventListener('input', () => { const p = presentation(); if (!freeRoom(p)) p.style = 'minimal'; p[key] = Number($<HTMLInputElement>(id).value); h.change('presentation'); });
+  $('studioHideCabinet').addEventListener('input', () => { const p = presentation(); if (!freeRoom(p)) p.style = 'minimal'; p.hideCabinet = $<HTMLInputElement>('studioHideCabinet').checked; h.change(); });
+  $('studioBackgroundAsset').addEventListener('change', () => { const p = presentation(); p.background = $<HTMLSelectElement>('studioBackgroundAsset').value || undefined; p.style = 'custom'; h.change(); });
+  $('studioBackgroundUpload').addEventListener('change', async () => {
+    const input = $<HTMLInputElement>('studioBackgroundUpload'), file = input.files?.[0]; input.value = ''; if (!file) return;
+    try { h.status('Subiendo fondo…'); const asset = await h.background(file); const p = presentation(); p.background = asset; p.style = 'custom'; h.change(); h.status('Fondo listo. Guarda para compartirlo.'); }
+    catch (error) { h.status(error instanceof Error ? error.message : 'No se pudo subir el fondo.'); }
+  });
+  sidebar.addEventListener('click', event => {
+    const button = (event.target as HTMLElement).closest<HTMLElement>('[data-studio-template]'); if (!button) return;
+    const kind = button.dataset.studioTemplate!, p = presentation();
+    const styles: Record<string, Partial<Presentation>> = { classic: { style: 'classic' }, cinema: { style: 'minimal', wall: '#191c24', cabinet: '#27252b', floor: '#17191e' }, warm: { style: 'wood', wall: '#675443', cabinet: '#6f4630', floor: '#40352f' }, blue: { style: 'minimal', wall: '#334967', cabinet: '#344358', floor: '#263344' } };
+    Object.keys(p).forEach(key => delete p[key as keyof Presentation]); Object.assign(p, styles[kind]);
+    h.draft().mood = { preset: kind === 'classic' ? 'classic-night' : kind === 'warm' ? 'warm' : kind === 'cinema' ? 'tv-only' : 'soft-night', intensity: 65, tvGlow: 100 };
+    h.draft().ambient = kind === 'classic' ? 42 : kind === 'cinema' ? 35 : 66; h.change();
+  });
   for (const [id, key] of [['studioAccent', 'accent'], ['studioAccent2', 'accent2']] as const) $(id).addEventListener('input', () => { mood()[key] = $<HTMLInputElement>(id).value; h.change('accent'); });
   sidebar.addEventListener('click', event => { const target = (event.target as HTMLElement).closest<HTMLElement>('[data-studio-command]'); if (target) command(target.dataset.studioCommand!); });
   $<HTMLSelectElement>('editorMood').addEventListener('change', () => {
@@ -165,7 +216,13 @@ export function initStudio(h: Host) {
 function command(cmd: string) {
   if (!host) return;
   const d = host.draft(), ps = placements(), ids = host.selected();
-  if (cmd.startsWith('flip')) { ps.filter(p => !p.locked).forEach(p => { const t = p.transform ??= {}, key = cmd as 'flipX' | 'flipY'; t[key] = !t[key]; }); }
+  if (cmd === 'warpTool') { host.tool('warp'); return; }
+  else if (cmd === 'resetCorners') ps.filter(p => !p.locked).forEach(p => { if (p.transform) delete p.transform.corners; });
+  else if (cmd === 'cameraTool' || cmd === 'tvTool') { if (cmd === 'tvTool' && host.key().startsWith('home') && !freeRoom(presentation())) { presentation().style = 'minimal'; host.change(); } host.tool(cmd === 'tvTool' ? 'tv' : 'camera'); return; }
+  else if (['resetCamera', 'resetTv', 'resetVideo'].includes(cmd)) delete presentation()[cmd.slice(5).toLowerCase() as 'camera' | 'tv' | 'video'];
+  else if (cmd === 'resetPresentation') { if (d.presentations) delete d.presentations[host.key() as keyof typeof d.presentations]; }
+  else if (cmd === 'copyPresentation') { const p = structuredClone(presentation()), keys = host.key().startsWith('home') ? ['home-landscape-16x9', 'home-landscape-4x3', 'home-portrait-16x9', 'home-portrait-4x3', 'home-window-16x9', 'home-window-4x3'] : ['arcade-landscape', 'arcade-portrait', 'arcade-window']; keys.forEach(key => (d.presentations ??= {})[key as keyof typeof d.presentations] = structuredClone(p)); host.status('Composición copiada. Revisa el encuadre de cada vista.'); }
+  else if (cmd.startsWith('flip')) { ps.filter(p => !p.locked).forEach(p => { const t = p.transform ??= {}, key = cmd as 'flipX' | 'flipY'; t[key] = !t[key]; }); }
   else if (cmd === 'resetTransform') ps.filter(p => !p.locked).forEach(p => { delete p.transform; });
   else if (cmd === 'copyStyle') { const p = ps.at(-1); if (p) { appearance = structuredClone({ brightness: p.brightness, saturation: p.saturation, hue: p.hue, shadow: p.shadow, opacity: p.opacity, contactShadow: p.contactShadow, crop: p.crop }); host.status('Acabado copiado. Selecciona otra decoración para pegarlo.'); } return; }
   else if (cmd === 'pasteStyle' && appearance) ps.forEach(p => Object.assign(p, structuredClone(appearance)));
@@ -197,9 +254,23 @@ function command(cmd: string) {
 export function refreshStudio() {
   if (!host) return;
   const d = host.draft(), item = host.item(), p = item?.placements[host.key() as keyof typeof item.placements], t = p?.transform ?? {};
+  const scene = d.presentations?.[host.key() as keyof typeof d.presentations];
+  field('studioSceneStyle', scene?.style ?? 'original');
+  for (const group of ['Camera', 'Tv', 'Video'] as const) for (const axis of ['X', 'Y', 'Zoom'] as const) {
+    const value = scene?.[group.toLowerCase() as 'camera' | 'tv' | 'video']?.[axis.toLowerCase() as 'x' | 'y' | 'zoom'];
+    field(`studio${group}${axis}`, value ?? (axis === 'Zoom' ? group === 'Video' ? 1.035 : 1 : 0));
+  }
+  field('studioWallColor', scene?.wall ?? '#33404e'); field('studioCabinetColor', scene?.cabinet ?? '#4b352a'); field('studioFloorColor', scene?.floor ?? '#262c35');
+  field('studioCabinetY', scene?.cabinetY ?? (host.key().includes('portrait') ? 44 : 86)); field('studioCabinetHeight', scene?.cabinetHeight ?? 22); field('studioHideCabinet', scene?.hideCabinet ?? false);
+  const backgrounds = [...(d.library ?? []), ...d.items].filter(i => i.asset); const bgSelect = $<HTMLSelectElement>('studioBackgroundAsset');
+  const bgSignature = JSON.stringify(backgrounds.map(i => [i.asset, i.name]));
+  if (bgSelect.dataset.signature !== bgSignature) { bgSelect.dataset.signature = bgSignature; const seen = new Set<string>(); bgSelect.replaceChildren(new Option('Seleccionar imagen…', ''), ...backgrounds.flatMap(i => seen.has(i.asset) ? [] : (seen.add(i.asset), [new Option(i.name, i.asset)]))); }
+  field('studioBackgroundAsset', scene?.background ?? '');
   const angles = perspectiveAngles(t, p?.x);
   field('studioSurface', t.surface ?? 'free'); field('studioAuto', t.auto ?? false);
   field('studioTiltX', Math.round(angles.x)); field('studioTiltY', Math.round(angles.y));
+  field('studioDepth', t.depth ?? 800);
+  const corners = t.corners ?? straightCorners(); for (let i = 0; i < 4; i++) { field(`studioCorner${i}X`, corners[i][0]); field(`studioCorner${i}Y`, corners[i][1]); }
   field('studioSkewX', t.skewX ?? 0); field('studioSkewY', t.skewY ?? 0); field('studioScaleX', t.scaleX ?? 1); field('studioScaleY', t.scaleY ?? 1);
   $('studioPerspective').querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input,select,button').forEach(el => { el.disabled = !p || Boolean(p.locked) || (Boolean(t.auto) && ['studioTiltX', 'studioTiltY'].includes(el.id)); });
   const c = p?.contactShadow;
