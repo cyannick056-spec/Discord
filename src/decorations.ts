@@ -1,5 +1,6 @@
-import { setDecorationLights, setRoomAmbient, type DecorationLight } from './lighting';
+import { setDecorationLights, setRoomAmbient, setRoomMood, type DecorationLight, type RoomMood } from './lighting';
 import { maskBehindTv } from './occlusion';
+import { EditorHistory } from './editor-history';
 
 type Scene = 'home' | 'arcade';
 type View = 'landscape' | 'portrait' | 'window';
@@ -17,7 +18,7 @@ const slotColors: { id: SlotColor; name: string }[] = [
 type Placement = {
   x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
   foreground?: boolean; anchor?: 'scene' | 'frame';
-  behindTv?: boolean;
+  behindTv?: boolean; locked?: boolean;
   brightness?: number; saturation?: number; hue?: number; shadow?: number;
   light?: { color: string; intensity: number; radius: number; x?: number; y?: number };
 };
@@ -25,7 +26,7 @@ type Decoration = {
   id: string; asset: string; name: string; kind?: 'viewer-slot' | 'light';
   placements: Partial<Record<PlacementKey, Placement>>;
 };
-type Manifest = { items: Decoration[]; ambient?: number };
+type Manifest = { items: Decoration[]; ambient?: number; mood?: RoomMood };
 
 const previewMode = new URLSearchParams(location.search).has('editorPreview');
 const activityTicket = new URLSearchParams(location.search).get('ticket') || '';
@@ -82,6 +83,30 @@ const decorLightIntensityValue = document.querySelector<HTMLOutputElement>('#dec
 const decorLightRadiusValue = document.querySelector<HTMLOutputElement>('#decorLightRadiusValue')!;
 const decorLightX = document.querySelector<HTMLInputElement>('#decorLightX')!;
 const decorLightY = document.querySelector<HTMLInputElement>('#decorLightY')!;
+const decorName = document.querySelector<HTMLInputElement>('#decorName')!;
+const decorLocked = document.querySelector<HTMLInputElement>('#decorLocked')!;
+const editorUndo = document.querySelector<HTMLButtonElement>('#editorUndo')!;
+const editorRedo = document.querySelector<HTMLButtonElement>('#editorRedo')!;
+const editorDirty = document.querySelector<HTMLElement>('#editorDirty')!;
+const editorMenu = document.querySelector<HTMLDivElement>('#editorMenu')!;
+const editorMood = document.querySelector<HTMLSelectElement>('#editorMood')!;
+const editorMoodIntensity = document.querySelector<HTMLInputElement>('#editorMoodIntensity')!;
+const editorTvGlow = document.querySelector<HTMLInputElement>('#editorTvGlow')!;
+const editorGrid = document.querySelector<HTMLInputElement>('#editorGrid')!;
+const editorSnap = document.querySelector<HTMLInputElement>('#editorSnap')!;
+const editorSelectTool = document.querySelector<HTMLButtonElement>('#editorSelectTool')!;
+const editorPanTool = document.querySelector<HTMLButtonElement>('#editorPanTool')!;
+const editorEnvironment = document.querySelector<HTMLDetailsElement>('#editorEnvironment')!;
+let compactEditor = innerWidth <= 670;
+const history = new EditorHistory<Manifest>();
+let editorTool: 'select' | 'pan' = 'select';
+let previewTool: 'select' | 'pan' = 'select';
+let previewSnap = false;
+let previewGrid = false;
+let spaceHeld = false;
+let previewPanning = false;
+let previewLastClick: { id: string; time: number; x: number; y: number } | null = null;
+let panStart: { x: number; y: number } | null = null;
 
 let saved: Manifest = { items: [] };
 let draft: Manifest = { items: [] };
@@ -190,6 +215,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
   if (sceneName === 'home') maskBehindTv(behind, layer, document.querySelector<HTMLElement>('.tv-face')!);
   const lights: DecorationLight[] = [];
   setRoomAmbient(manifest.ambient ?? 62);
+  setRoomMood(manifest.mood);
   for (const item of manifest.items) {
     const placement = placementFor(item, sceneName, view, currentAspect());
     if (!placement || placement.hidden) continue;
@@ -199,6 +225,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     const box = document.createElement('div');
     box.className = 'decoration-box';
     box.dataset.id = item.id;
+    box.classList.toggle('is-locked', placement.locked === true);
     position(box, placement, sceneName, view);
     if (editable && item.id === selected) box.classList.add('is-selected');
     if (slotIndex >= 0) {
@@ -234,7 +261,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       box.append(image);
     }
     if (editable) {
-      for (const [className, label] of [['decor-resize', 'Cambiar tamaño'], ['decor-rotate', 'Girar']] as const) {
+      for (const [className, label] of [['decor-resize decor-resize-se', 'Cambiar tamaño'], ['decor-resize decor-resize-nw', 'Cambiar tamaño'], ['decor-resize decor-resize-ne', 'Cambiar tamaño'], ['decor-resize decor-resize-sw', 'Cambiar tamaño'], ['decor-rotate', 'Girar']] as const) {
         const handle = document.createElement('span');
         handle.className = `decor-handle ${className}`;
         handle.setAttribute('role', 'presentation');
@@ -244,19 +271,21 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       attachDrag(box, placement, sceneName, view);
     }
     (sceneName === 'home' && placement.behindTv ? behind : layer).append(box);
-    if (editable && sceneName === 'home' && placement.behindTv && item.id === selected) {
-      // Keep handles usable even when the photograph completely hides a figure.
+    if (editable && item.id === selected) {
+      // Keep handles usable even when the TV or another figure hides artwork.
       // Only an outline is drawn in front; the artwork still obeys occlusion.
       const outline = document.createElement('div');
       outline.className = 'decoration-box decor-depth-outline is-selected';
       outline.dataset.id = item.id;
+      outline.classList.toggle('is-locked', placement.locked === true);
       position(outline, placement, sceneName, view);
+      outline.style.zIndex = '210';
       const sizeOutline = () => { outline.style.height = `${box.offsetHeight}px`; };
       box.querySelector('img')?.addEventListener('load', sizeOutline, { once: true });
-      for (const className of ['decor-resize', 'decor-rotate', 'decor-depth-move']) {
+      for (const className of ['decor-resize decor-resize-se', 'decor-resize decor-resize-nw', 'decor-resize decor-resize-ne', 'decor-resize decor-resize-sw', 'decor-rotate', 'decor-depth-move']) {
         const handle = document.createElement('span');
         handle.className = `decor-handle ${className}`;
-        handle.title = className === 'decor-depth-move' ? 'Mover figura detrás de la TV' : className === 'decor-resize' ? 'Cambiar tamaño' : 'Girar';
+        handle.title = className === 'decor-depth-move' ? 'Mover decoración' : className.startsWith('decor-resize') ? 'Cambiar tamaño' : 'Girar';
         outline.append(handle);
       }
       layer.append(outline);
@@ -267,12 +296,26 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       lights.push({ id: item.id, ...placement.light, intensity: placement.light.intensity * placement.opacity });
     }
   }
+  if (editable && previewGrid) {
+    const grid = document.createElement('div'); grid.className = 'decor-grid';
+    const p = manifest.items.find(item => item.id === selected)?.placements[key(sceneName, view, currentAspect())];
+    const bounds = p ? basis(p, sceneName, view) : layer.getBoundingClientRect(), room = layer.getBoundingClientRect();
+    Object.assign(grid.style, { left: `${bounds.left - room.left}px`, top: `${bounds.top - room.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` });
+    layer.append(grid);
+  }
   setDecorationLights(lights);
 }
 
 function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View, linkedBox?: HTMLDivElement) {
   box.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || previewPanning || spaceHeld || previewTool === 'pan' || previewPinching) return;
     event.preventDefault();
+    const click = { id: box.dataset.id!, time: performance.now(), x: event.clientX, y: event.clientY };
+    if (event.pointerType === 'mouse' && previewLastClick && previewLastClick.id === click.id && click.time - previewLastClick.time < 350 &&
+        Math.hypot(click.x - previewLastClick.x, click.y - previewLastClick.y) < 6) {
+      previewLastClick = null; parent.postMessage({ type: 'decor-rename', id: click.id }, location.origin); return;
+    }
+    previewLastClick = click;
     const target = event.target as HTMLElement;
     const action = target.closest('.decor-resize') ? 'resize' :
       target.closest('.decor-rotate') ? 'rotate' : 'move';
@@ -285,24 +328,34 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
       top: placement.y, width: placement.width, rotation: placement.rotation };
     layer.querySelectorAll('.is-selected').forEach((element) => element.classList.remove('is-selected'));
     box.classList.add('is-selected');
-    box.setPointerCapture(event.pointerId);
     parent.postMessage({ type: 'decor-select', id: box.dataset.id }, location.origin);
+    if (placement.locked) return;
+    box.setPointerCapture(event.pointerId);
+    parent.postMessage({ type: 'decor-gesture-start' }, location.origin);
     const move = (e: PointerEvent) => {
       if (previewPinching) return;
       const dx = e.clientX - origin.x;
       const dy = e.clientY - origin.y;
+      if (Math.hypot(dx, dy) > 4) previewLastClick = null;
       const fine = e.shiftKey ? .2 : 1;
       if (action === 'move') {
-        placement.x = Math.round(clamp(origin.left + dx / bounds.width * 100 * fine, -30, 130) * 10) / 10;
-        placement.y = Math.round(clamp(origin.top + dy / bounds.height * 100 * fine, -35, 145) * 10) / 10;
+        const step = previewSnap && !e.shiftKey ? 5 : .1;
+        placement.x = clamp(Math.round((origin.left + dx / bounds.width * 100 * fine) / step) * step, -30, 130);
+        placement.y = clamp(Math.round((origin.top + dy / bounds.height * 100 * fine) / step) * step, -35, 145);
       } else if (action === 'resize') {
         const angle = origin.rotation * Math.PI / 180;
         const localDx = dx * Math.cos(angle) + dy * Math.sin(angle);
-        placement.width = Math.round(clamp(origin.width + localDx / bounds.width * 100 * fine, 1, 80) * 10) / 10;
+        const localDy = -dx * Math.sin(angle) + dy * Math.cos(angle);
+        const signX = target.closest('.decor-resize-nw, .decor-resize-sw') ? -1 : 1;
+        const signY = target.closest('.decor-resize-nw, .decor-resize-ne') ? -1 : 1;
+        const vertical = localDy * signY * box.offsetWidth / Math.max(box.offsetHeight, 1);
+        const horizontal = localDx * signX;
+        const delta = Math.abs(horizontal) >= Math.abs(vertical) ? horizontal : vertical;
+        placement.width = Math.round(clamp(origin.width + delta / bounds.width * 100 * fine, 1, 80) * 10) / 10;
       } else {
         const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
         const delta = (angle - startAngle) * 180 / Math.PI;
-        placement.rotation = Math.round(clamp(origin.rotation + delta * fine, -180, 180));
+        placement.rotation = Math.round(clamp(e.shiftKey ? Math.round((origin.rotation + delta) / 15) * 15 : origin.rotation + delta, -180, 180));
       }
       position(box, placement, sceneName, view);
       if (linkedBox) {
@@ -317,16 +370,79 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
       box.removeEventListener('pointerup', end);
       box.removeEventListener('pointercancel', end);
       box.removeEventListener('lostpointercapture', end);
+      parent.postMessage({ type: 'decor-gesture-end' }, location.origin);
     };
     box.addEventListener('pointermove', move);
     box.addEventListener('pointerup', end);
     box.addEventListener('pointercancel', end);
     box.addEventListener('lostpointercapture', end);
   });
+  box.addEventListener('dblclick', (event) => {
+    if (previewTool === 'pan') return;
+    event.preventDefault(); parent.postMessage({ type: 'decor-rename', id: box.dataset.id }, location.origin);
+  });
+  box.addEventListener('click', () => { if (placement.locked) parent.postMessage({ type: 'decor-gesture-end' }, location.origin); });
+  box.addEventListener('contextmenu', (event) => {
+    event.preventDefault(); event.stopPropagation();
+    parent.postMessage({ type: 'decor-context', id: box.dataset.id, x: event.clientX, y: event.clientY }, location.origin);
+  });
+  let wheelEnd: ReturnType<typeof setTimeout> | undefined;
+  box.addEventListener('wheel', (event) => {
+    if (event.ctrlKey || event.metaKey || placement.locked || previewTool === 'pan') return;
+    event.preventDefault(); event.stopPropagation();
+    if (!wheelEnd) parent.postMessage({ type: 'decor-gesture-start' }, location.origin);
+    if (event.altKey) placement.rotation = clamp(placement.rotation + Math.sign(event.deltaY) * (event.shiftKey ? 1 : 5), -180, 180);
+    else placement.width = Math.round(clamp(placement.width * Math.exp(-event.deltaY * (event.shiftKey ? .0005 : .002)), 1, 80) * 10) / 10;
+    position(box, placement, sceneName, view);
+    if (linkedBox) { position(linkedBox, placement, sceneName, view); box.style.height = `${linkedBox.offsetHeight}px`; }
+    parent.postMessage({ type: 'decor-change', id: box.dataset.id, x: placement.x, y: placement.y,
+      width: placement.width, rotation: placement.rotation }, location.origin);
+    clearTimeout(wheelEnd); wheelEnd = setTimeout(() => { wheelEnd = undefined;
+      parent.postMessage({ type: 'decor-gesture-end' }, location.origin); }, 220);
+  }, { passive: false });
 }
 
 let previewPinching = false;
 function initPreviewGestures() {
+  stage.tabIndex = 0;
+  let panOrigin: { x: number; y: number } | null = null;
+  let pointerOnDecoration = false, pointerMoved = false;
+  let pointerOrigin = { x: 0, y: 0 };
+  stage.addEventListener('pointerdown', event => {
+    pointerOnDecoration = Boolean((event.target as HTMLElement).closest('.decoration-box'));
+    pointerMoved = false; pointerOrigin = { x: event.clientX, y: event.clientY };
+    stage.focus({ preventScroll: true });
+    if (event.pointerType === 'touch' || !(event.button === 1 || (event.button === 0 && (spaceHeld || previewTool === 'pan')))) return;
+    event.preventDefault(); event.stopPropagation();
+    previewPanning = true; panOrigin = { x: event.screenX, y: event.screenY };
+    stage.classList.add('is-panning'); stage.setPointerCapture(event.pointerId);
+    parent.postMessage({ type: 'decor-pan-start' }, location.origin);
+  }, true);
+  stage.addEventListener('pointermove', event => {
+    if (Math.hypot(event.clientX - pointerOrigin.x, event.clientY - pointerOrigin.y) > 4) pointerMoved = true;
+    if (!previewPanning || !panOrigin) return;
+    event.preventDefault(); parent.postMessage({ type: 'decor-pan-move', dx: event.screenX - panOrigin.x, dy: event.screenY - panOrigin.y }, location.origin);
+  }, true);
+  const finishPan = () => { previewPanning = false; panOrigin = null; stage.classList.remove('is-panning'); };
+  stage.addEventListener('pointerup', finishPan);
+  stage.addEventListener('pointercancel', finishPan);
+  stage.addEventListener('lostpointercapture', finishPan);
+  stage.addEventListener('click', event => {
+    if (previewTool === 'pan' || spaceHeld || pointerOnDecoration || pointerMoved || (event.target as HTMLElement).closest('.decoration-box')) return;
+    parent.postMessage({ type: 'decor-select', id: null }, location.origin);
+    parent.postMessage({ type: 'decor-gesture-end' }, location.origin);
+  });
+  window.addEventListener('keydown', event => {
+    if (event.code === 'Space') { event.preventDefault(); spaceHeld = true; stage.classList.add('pan-tool'); return; }
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace', 'Escape', '[', ']'].includes(event.key) ||
+        ((event.ctrlKey || event.metaKey) && ['z', 'y', 'd', 's'].includes(event.key.toLowerCase())) || ['l', 'h'].includes(event.key.toLowerCase())) {
+      event.preventDefault(); parent.postMessage({ type: 'decor-shortcut', key: event.key, ctrlKey: event.ctrlKey || event.metaKey,
+        shiftKey: event.shiftKey, altKey: event.altKey }, location.origin);
+    }
+  });
+  window.addEventListener('keyup', event => { if (event.code === 'Space') { spaceHeld = false; stage.classList.toggle('pan-tool', previewTool === 'pan'); }
+    if (event.key.startsWith('Arrow')) parent.postMessage({ type: 'decor-key-end' }, location.origin); });
+  window.addEventListener('blur', () => { spaceHeld = false; finishPan(); stage.classList.toggle('pan-tool', previewTool === 'pan'); });
   let start: { distance: number; midX: number; midY: number } | null = null;
   const midpoint = (touches: TouchList) => ({
     x: (touches[0].screenX + touches[1].screenX) / 2,
@@ -356,16 +472,85 @@ function initPreviewGestures() {
   };
   stage.addEventListener('touchend', end, true);
   stage.addEventListener('touchcancel', end, true);
+  stage.addEventListener('contextmenu', event => event.preventDefault());
   stage.addEventListener('wheel', (event) => {
-    if (!event.ctrlKey) return;
+    if (!event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
     parent.postMessage({ type: 'decor-wheel-zoom', x: event.clientX, y: event.clientY,
       deltaY: event.deltaY }, location.origin);
   }, { passive: false });
 }
 
-function sendPreview() {
-  if (previewReady) preview.contentWindow?.postMessage({ type: 'decor-preview', manifest: draft, selected }, location.origin);
+function updateHistoryButtons() {
+  editorUndo.disabled = !history.canUndo; editorRedo.disabled = !history.canRedo;
+  editorDirty.textContent = JSON.stringify(draft) === JSON.stringify(saved) ? 'Sin cambios' : 'Cambios sin guardar';
+}
+function sendPreview(group?: string, record = true) {
+  if (record) history.record(draft, group);
+  updateHistoryButtons();
+  if (previewReady) preview.contentWindow?.postMessage({ type: 'decor-preview', manifest: draft, selected,
+    tool: editorTool, grid: editorGrid.checked, snap: editorSnap.checked }, location.origin);
+}
+
+function refreshMoodFields() {
+  const mood = draft.mood ?? { preset: 'neutral', intensity: 65, tvGlow: 100 };
+  editorMood.value = mood.preset; editorMoodIntensity.value = String(mood.intensity); editorTvGlow.value = String(mood.tvGlow);
+  document.querySelector<HTMLOutputElement>('#editorMoodIntensityValue')!.value = `${mood.intensity}%`;
+  document.querySelector<HTMLOutputElement>('#editorTvGlowValue')!.value = `${mood.tvGlow}%`;
+  editorMoodIntensity.disabled = mood.preset === 'neutral';
+  editorAmbient.value = String(draft.ambient ?? 62); editorAmbientValue.value = `${editorAmbient.value}%`;
+}
+
+function editorCommand(command: string) {
+  editorMenu.hidden = true; history.endGroup();
+  if (command === 'save') { editorSave.click(); return; }
+  if (command === 'undo' || command === 'redo') {
+    const restored = command === 'undo' ? history.undo() : history.redo();
+    if (!restored) return;
+    draft = restored; if (!selectedItem()) selected = null;
+    refreshMoodFields(); refreshItemList(); sendPreview(undefined, false);
+    status(command === 'undo' ? 'Cambio deshecho.' : 'Cambio rehecho.'); return;
+  }
+  if (command === 'deselect') { selected = null; refreshItemList(); sendPreview(); return; }
+  const item = selectedItem(), p = item?.placements[activeKey()];
+  if (!item || !p) return;
+  if (command === 'duplicate') {
+    if (item.kind === 'viewer-slot') return status('Los espacios de espectadores son únicos.');
+    if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= 60) return status('Máximo 60 decoraciones.');
+    const copy = structuredClone(item); copy.id = crypto.randomUUID(); copy.name = `${item.name.slice(0, 62)} · copia`;
+    const placement = copy.placements[activeKey()]!; placement.x = clamp(placement.x + 2, -30, 130); placement.y = clamp(placement.y + 2, -35, 145); placement.locked = false;
+    draft.items.push(copy); selected = copy.id; status('Copia creada. Guarda para compartirla.');
+  } else if (command === 'remove') {
+    if (item.kind === 'viewer-slot') return;
+    draft.items = draft.items.filter(i => i.id !== selected); selected = null; status('Decoración quitada. Puedes deshacer.');
+  } else if (command === 'lock') p.locked = !p.locked;
+  else if (command === 'hide') p.hidden = !p.hidden;
+  else if (command === 'depth' && editorScene.value === 'home') p.behindTv = !p.behindTv;
+  else if (command === 'forward') p.z = clamp(p.z + 1, 0, 99);
+  else if (command === 'backward') p.z = clamp(p.z - 1, 0, 99);
+  else if (command === 'center') { if (p.locked) return status('Desbloquea la posición antes de moverla.'); p.x = 50; p.y = 50; }
+  else return;
+  refreshItemList(); sendPreview();
+}
+
+function editorShortcut(event: { key: string; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }) {
+  const key = event.key.toLowerCase();
+  if (event.ctrlKey) {
+    const command = key === 'z' ? (event.shiftKey ? 'redo' : 'undo') : ({ y: 'redo', d: 'duplicate', s: 'save' } as Record<string, string>)[key];
+    if (command) editorCommand(command);
+    return;
+  }
+  const command = ({ delete: 'remove', backspace: 'remove', escape: 'deselect', l: 'lock', h: 'hide', '[': 'backward', ']': 'forward' } as Record<string, string>)[key];
+  if (command) return editorCommand(command);
+  const placement = selectedItem()?.placements[activeKey()];
+  if (!placement || placement.locked) return;
+  const delta = event.altKey ? .1 : event.shiftKey ? 5 : .5;
+  if (key === 'arrowleft') placement.x = clamp(placement.x - delta, -30, 130);
+  else if (key === 'arrowright') placement.x = clamp(placement.x + delta, -30, 130);
+  else if (key === 'arrowup') placement.y = clamp(placement.y - delta, -35, 145);
+  else if (key === 'arrowdown') placement.y = clamp(placement.y + delta, -35, 145);
+  else return;
+  refreshFields(); sendPreview('nudge');
 }
 
 function convertAnchor(placement: Placement, next: 'frame' | 'scene') {
@@ -476,6 +661,12 @@ function refreshFields() {
   editorProperties.hidden = !placement;
   editorNudge.hidden = !placement;
   if (!placement) return;
+  decorName.value = item!.name;
+  decorLocked.checked = placement.locked === true;
+  [...inputs.slice(0, 4), decorAnchor].forEach(input => { input.disabled = placement.locked === true; });
+  editorNudge.querySelectorAll<HTMLButtonElement>('button').forEach(button => { button.disabled = placement.locked === true; });
+  editorProperties.querySelector<HTMLButtonElement>('[data-editor-command="center"]')!.disabled = placement.locked === true;
+  editorProperties.querySelector<HTMLButtonElement>('[data-editor-command="duplicate"]')!.disabled = item?.kind === 'viewer-slot';
   decorRemove.hidden = item?.kind === 'viewer-slot';
   [placement.x, placement.y, placement.width, placement.rotation, placement.opacity * 100, placement.z]
     .forEach((value, index) => { inputs[index].value = String(Math.round(value * 10) / 10); });
@@ -537,6 +728,9 @@ export function initDecorations() {
     window.addEventListener('message', (event) => {
       if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'decor-preview') return;
       selected = typeof event.data.selected === 'string' ? event.data.selected : null;
+      previewTool = event.data.tool === 'pan' ? 'pan' : 'select';
+      previewSnap = event.data.snap === true; previewGrid = event.data.grid === true;
+      stage.classList.toggle('pan-tool', previewTool === 'pan' || spaceHeld);
       const manifest = event.data.manifest as Manifest;
       ensureViewerSlots(manifest);
       render(manifest, scene(), currentView(), true);
@@ -551,8 +745,62 @@ export function initDecorations() {
   setInterval(() => { if (editor.hidden && !document.hidden) loadDecorations(); }, 30000);
   window.addEventListener('resize', () => {
     render(saved, scene(), currentView(), false);
+    const compact = innerWidth <= 670;
+    if (compact !== compactEditor) { compactEditor = compact; editorEnvironment.open = !compact; }
     if (!editor.hidden) sizePreview();
   });
+  editorUndo.addEventListener('click', () => editorCommand('undo'));
+  editorRedo.addEventListener('click', () => editorCommand('redo'));
+  editor.addEventListener('click', event => {
+    const action = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-editor-command]');
+    if (action) editorCommand(action.dataset.editorCommand!);
+  });
+  document.addEventListener('pointerdown', event => {
+    if (!(event.target as HTMLElement).closest('#editorMenu')) editorMenu.hidden = true;
+    history.endGroup();
+  });
+  document.addEventListener('keydown', event => {
+    if (editor.hidden || editorWorkspace.hidden) return;
+    if (!editorMenu.hidden && (event.target as HTMLElement).closest('#editorMenu')) {
+      if (event.key === 'Escape') { event.preventDefault(); editorMenu.hidden = true;
+        preview.contentDocument?.querySelector<HTMLElement>('#stage')?.focus(); return; }
+      if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+        event.preventDefault();
+        const buttons = [...editorMenu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(button => !button.hidden);
+        const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+        buttons[next]?.focus(); return;
+      }
+    }
+    const typing = (event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]');
+    if (typing && !((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's')) return;
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace', 'Escape', '[', ']'].includes(event.key) ||
+        ((event.ctrlKey || event.metaKey) && ['z', 'y', 'd', 's'].includes(event.key.toLowerCase())) || ['l', 'h'].includes(event.key.toLowerCase())) {
+      event.preventDefault(); editorShortcut({ key: event.key, ctrlKey: event.ctrlKey || event.metaKey, shiftKey: event.shiftKey, altKey: event.altKey });
+    }
+  });
+  document.addEventListener('keyup', () => history.endGroup());
+  const setTool = (tool: 'select' | 'pan') => {
+    editorTool = tool; editorSelectTool.setAttribute('aria-pressed', String(tool === 'select'));
+    editorPanTool.setAttribute('aria-pressed', String(tool === 'pan')); sendPreview();
+  };
+  editorSelectTool.addEventListener('click', () => setTool('select'));
+  editorPanTool.addEventListener('click', () => setTool('pan'));
+  for (const field of [editorGrid, editorSnap]) field.addEventListener('change', () => sendPreview());
+  for (const field of [editorMood, editorMoodIntensity, editorTvGlow]) {
+    field.addEventListener('input', () => {
+      draft.mood = { preset: editorMood.value as RoomMood['preset'], intensity: Number(editorMoodIntensity.value), tvGlow: Number(editorTvGlow.value) };
+      refreshMoodFields(); sendPreview(`input:${field.id}`);
+    });
+    field.addEventListener('change', () => history.endGroup());
+  }
+  decorName.addEventListener('input', () => {
+    const item = selectedItem(); if (!item) return;
+    item.name = decorName.value.slice(0, 70);
+    const option = [...editorItem.options].find(option => option.value === item.id); if (option) option.textContent = item.name;
+    sendPreview('name');
+  });
+  decorName.addEventListener('change', () => history.endGroup());
   window.addEventListener('shis-scene-change', () => render(saved, scene(), currentView(), false));
   window.addEventListener('shis-aspect-change', () => render(saved, scene(), currentView(), false));
 
@@ -604,7 +852,7 @@ export function initDecorations() {
   editorNudge.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-dx], button[data-dy]');
     const placement = selectedItem()?.placements[activeKey()];
-    if (!button || !placement) return;
+    if (!button || !placement || placement.locked) return;
     placement.x = Math.round(clamp(placement.x + Number(button.dataset.dx || 0), -30, 130) * 10) / 10;
     placement.y = Math.round(clamp(placement.y + Number(button.dataset.dy || 0), -35, 145) * 10) / 10;
     refreshFields();
@@ -656,8 +904,9 @@ export function initDecorations() {
   editorAmbient.addEventListener('input', () => {
     draft.ambient = Number(editorAmbient.value);
     editorAmbientValue.value = `${draft.ambient}%`;
-    sendPreview();
+    sendPreview('ambient');
   });
+  editorAmbient.addEventListener('change', () => history.endGroup());
   editorAddLight.addEventListener('click', () => {
     if (draft.items.filter((item) => item.kind !== 'viewer-slot').length >= 60)
       return status('Máximo 60 decoraciones. Quita alguna antes de añadir otra.');
@@ -671,7 +920,7 @@ export function initDecorations() {
     status('Luz añadida. Ajusta color, intensidad y alcance; guarda para todos.');
   });
 
-  [...inputs, ...filters, decorHidden, decorForeground, decorBehindTv, decorEmitLight, decorLightColor,
+  [...inputs, ...filters, decorHidden, decorForeground, decorBehindTv, decorLocked, decorEmitLight, decorLightColor,
     decorLightIntensity, decorLightRadius, decorLightX, decorLightY].forEach((input) => input.addEventListener('input', () => {
     const placement = selectedItem()?.placements[activeKey()];
     if (!placement) return;
@@ -686,6 +935,7 @@ export function initDecorations() {
     placement.hidden = decorHidden.checked;
     placement.foreground = decorForeground.checked;
     placement.behindTv = decorBehindTv.checked;
+    placement.locked = decorLocked.checked;
     placement.brightness = Number(filters[0].value);
     placement.saturation = Number(filters[1].value);
     placement.hue = Number(filters[2].value);
@@ -697,15 +947,19 @@ export function initDecorations() {
     decorLightIntensityValue.value = `${decorLightIntensity.value}%`;
     decorLightRadiusValue.value = `${decorLightRadius.value}× el ancho`;
     filters.forEach((field, index) => { filterOutputs[index].value = `${field.value}${index === 2 ? '°' : '%'}`; });
-    sendPreview();
+    if (input === decorLocked) refreshFields();
+    sendPreview(`input:${input.id}`);
   }));
+  [...inputs, ...filters, decorHidden, decorForeground, decorBehindTv, decorLocked, decorEmitLight, decorLightColor,
+    decorLightIntensity, decorLightRadius, decorLightX, decorLightY].forEach(input => input.addEventListener('change', () => history.endGroup()));
   decorCopy.addEventListener('click', () => {
     const item = selectedItem();
     const placement = item?.placements[activeKey()];
     if (!item || !placement) return;
     for (const view of ['landscape', 'portrait', 'window'] as const) {
-      item.placements[key(editorScene.value as Scene, view, editorAspect.value as Aspect)] = { ...placement };
+      item.placements[key(editorScene.value as Scene, view, editorAspect.value as Aspect)] = structuredClone(placement);
     }
+    sendPreview();
     status('Posición copiada. Revisa y ajusta cada vista antes de guardar.');
   });
   decorCopyAspect.addEventListener('click', () => {
@@ -713,30 +967,56 @@ export function initDecorations() {
     const placement = item?.placements[activeKey()];
     if (!item || !placement || editorScene.value !== 'home') return;
     const other: Aspect = editorAspect.value === '4:3' ? '16:9' : '4:3';
-    item.placements[key('home', editorView.value as View, other)] = { ...placement };
+    item.placements[key('home', editorView.value as View, other)] = structuredClone(placement);
+    sendPreview();
     status(`Copiada a TV ${other}. Cambia el selector de tamaño para ajustarla antes de guardar.`);
   });
-  decorRemove.addEventListener('click', () => {
-    if (selectedItem()?.kind === 'viewer-slot') return;
-    draft.items = draft.items.filter((item) => item.id !== selected);
-    selected = null;
-    refreshItemList();
-    sendPreview();
-    status('Decoración quitada. Guarda para aplicar el cambio.');
-  });
+  decorRemove.addEventListener('click', () => editorCommand('remove'));
   editorSave.addEventListener('click', async () => {
+    const submitted = copyManifest(draft);
+    editorSave.disabled = true;
     try {
       status('Guardando…');
       await editorRequest('/api/decorations', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft),
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(submitted),
       });
-      saved = copyManifest(draft);
+      saved = submitted;
       render(saved, scene(), currentView(), false);
-      status('Guardado. Todos verán esta decoración.');
+      updateHistoryButtons();
+      status(JSON.stringify(draft) === JSON.stringify(saved) ? 'Guardado. Todos verán esta decoración.' : 'Guardado. Hay cambios nuevos pendientes.');
     } catch (error) { status(error instanceof Error ? error.message : 'No se pudo guardar'); }
+    finally { editorSave.disabled = false; }
   });
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
+    if (event.data?.type === 'decor-key-end') { history.endGroup(); return; }
+    if (event.data?.type === 'decor-shortcut') { editorShortcut(event.data); return; }
+    if (event.data?.type === 'decor-gesture-start') { history.endGroup(); editorMenu.hidden = true; return; }
+    if (event.data?.type === 'decor-gesture-end') { history.endGroup(); sendPreview(); return; }
+    if (event.data?.type === 'decor-pan-start') { panStart = { x: previewPanX, y: previewPanY }; editorMenu.hidden = true; return; }
+    if (event.data?.type === 'decor-pan-move' && panStart) {
+      const dx = Number(event.data.dx), dy = Number(event.data.dy);
+      if (![dx, dy].every(Number.isFinite)) return;
+      previewPanX = panStart.x + dx; previewPanY = panStart.y + dy; sizePreview(); return;
+    }
+    if (event.data?.type === 'decor-rename') {
+      selectItem(String(event.data.id)); decorName.focus(); decorName.select(); return;
+    }
+    if (event.data?.type === 'decor-context') {
+      const x = Number(event.data.x), y = Number(event.data.y);
+      if (![x, y].every(Number.isFinite)) return;
+      selectItem(String(event.data.id)); editorMenu.hidden = false;
+      const item = selectedItem(), p = item?.placements[activeKey()];
+      for (const button of editorMenu.querySelectorAll<HTMLButtonElement>('button')) {
+        const cmd = button.dataset.editorCommand;
+        button.disabled = ((cmd === 'duplicate' || cmd === 'remove') && item?.kind === 'viewer-slot') || (cmd === 'center' && p?.locked === true);
+        button.hidden = cmd === 'depth' && editorScene.value !== 'home';
+      }
+      const frame = preview.getBoundingClientRect();
+      editorMenu.style.left = `${clamp(frame.left + x * frame.width / preview.clientWidth, 12, innerWidth - editorMenu.offsetWidth - 12)}px`;
+      editorMenu.style.top = `${clamp(frame.top + y * frame.height / preview.clientHeight, 12, innerHeight - editorMenu.offsetHeight - 12)}px`;
+      editorMenu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus(); return;
+    }
     if (event.data?.type === 'decor-wheel-zoom') {
       const x = Number(event.data.x), y = Number(event.data.y), deltaY = Number(event.data.deltaY);
       if (![x, y, deltaY].every(Number.isFinite)) return;
@@ -770,7 +1050,8 @@ export function initDecorations() {
       return;
     }
     if (event.data?.type === 'decor-select') {
-      selected = String(event.data.id);
+      editorMenu.hidden = true;
+      selected = typeof event.data.id === 'string' ? event.data.id : null;
       const item = selectedItem();
       if (item && !item.placements[activeKey()]) {
         const placement = placementFor(item, editorScene.value as Scene,
@@ -782,14 +1063,15 @@ export function initDecorations() {
     if (event.data?.type === 'decor-change') {
       const item = draft.items.find((entry) => entry.id === event.data.id);
       const placement = item?.placements[activeKey()];
-      if (!placement) return;
-      placement.x = clamp(Number(event.data.x), -30, 130);
-      placement.y = clamp(Number(event.data.y), -35, 145);
-      placement.width = clamp(Number(event.data.width), 1, 80);
-      placement.rotation = clamp(Number(event.data.rotation), -180, 180);
+      if (!placement || placement.locked) return;
+      const values = [event.data.x, event.data.y, event.data.width, event.data.rotation].map(Number);
+      if (!values.every(Number.isFinite)) return;
+      placement.x = clamp(values[0], -30, 130); placement.y = clamp(values[1], -35, 145);
+      placement.width = clamp(values[2], 1, 80); placement.rotation = clamp(values[3], -180, 180);
       selected = item!.id;
       editorItem.value = selected;
       refreshFields();
+      history.record(draft, 'drag'); updateHistoryButtons();
     }
   });
 }
@@ -798,8 +1080,9 @@ function openWorkspace() {
   editorAuth.hidden = true;
   editorWorkspace.hidden = false;
   draft = copyManifest(saved);
-  editorAmbient.value = String(draft.ambient ?? 62);
-  editorAmbientValue.value = `${editorAmbient.value}%`;
+  history.reset(draft); refreshMoodFields(); updateHistoryButtons();
+  editorEnvironment.open = !compactEditor;
+  editorMenu.hidden = true;
   selected = null;
   editorScene.value = scene();
   editorView.value = currentView();
