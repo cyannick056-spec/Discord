@@ -1,5 +1,7 @@
 import { paintRoomGrade } from './room-grade';
 import { type Mood } from './studio-model';
+import { getPresentation } from './scene-presentation';
+import { videoCrop } from './presentation-model';
 import { frameColor, blendColor, type LightColor } from './light-color';
 
 export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number };
@@ -31,6 +33,7 @@ export function initRoomLighting() {
   let lastScreenSample = { ...dark }, lastFloorSample = { ...dark };
   let sampledVideo: HTMLVideoElement | null = null;
   let lastTime = -1;
+  let lastFraming = '';
   let blockedVideo: HTMLVideoElement | null = null;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const previewMode = new URLSearchParams(location.search).has('editorPreview');
@@ -88,13 +91,15 @@ export function initRoomLighting() {
     if (video && video.readyState >= 2 && video.videoWidth && stage.classList.contains('has-signal')) {
       // A future cross-origin iframe cannot be sampled. Failing a read must
       // never stop the existing stream or repeatedly throw on every tick.
-      if (video !== blockedVideo && (video !== sampledVideo || video.currentTime !== lastTime)) {
+      const framing = JSON.stringify([getPresentation()?.video, glass.width / glass.height]);
+      if (video !== blockedVideo && (video !== sampledVideo || video.currentTime !== lastTime || framing !== lastFraming)) {
         try {
-          sampleCtx.drawImage(video, 0, 0, 32, 18);
+          const crop = videoCrop(video.videoWidth, video.videoHeight, glass.width, glass.height, getPresentation()?.video, getComputedStyle(video).objectFit);
+          sampleCtx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, 32, 18);
           const pixels = sampleCtx.getImageData(0, 0, 32, 18).data;
           lastScreenSample = target = frameColor(pixels, 32, 18);
           lastFloorSample = floorTarget = frameColor(pixels, 32, 18, 12, 18);
-          sampledVideo = video; lastTime = video.currentTime;
+          sampledVideo = video; lastTime = video.currentTime; lastFraming = framing;
         } catch { blockedVideo = video; }
       } else if (video !== blockedVideo) { target = lastScreenSample; floorTarget = lastFloorSample; }
       if (video === blockedVideo) target = floorTarget = { r: 210, g: 220, b: 230, strength: .1 };
@@ -102,7 +107,7 @@ export function initRoomLighting() {
       // The no-signal phosphor emits only a very weak neutral glow.
       target = floorTarget = { r: 210, g: 220, b: 230, strength: .06 };
     }
-    if (previewColors) { target = previewColors.screen; floorTarget = previewColors.floor; }
+    if (previewColors && (!video || video.readyState < 2)) { target = previewColors.screen; floorTarget = previewColors.floor; }
     if (previewMode && testLight !== 'live') {
       const colors: Record<string, LightColor> = { red: { r: 255, g: 0, b: 0, strength: 1 }, blue: { r: 0, g: 80, b: 255, strength: 1 },
         white: { r: 255, g: 255, b: 255, strength: 1 }, dark: { ...dark } };
@@ -161,6 +166,11 @@ export function initRoomLighting() {
     }
   }
   draw();
+  let refreshPending = false;
+  window.addEventListener('shis-presentation-change', () => {
+    if (refreshPending) return; refreshPending = true;
+    requestAnimationFrame(() => { refreshPending = false; draw(); });
+  });
   // Eight tiny frame samples per second. Nothing is uploaded or sent to SFU.
   const timer = setInterval(draw, 125);
   window.addEventListener('pagehide', () => clearInterval(timer), { once: true });

@@ -1,6 +1,10 @@
 import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type DecorationLight, type RoomMood } from './lighting';
 import { objectTransform, gradeFilter, type Transform, type ContactShadow } from './studio-model';
 import { initStudio, refreshStudio, shapeAsset, rememberAssets } from './studio';
+import { applyPresentation, initVideoFraming } from './scene-presentation';
+import { cameraRect, freeRoom, type Presentation } from './presentation-model';
+import { sceneControls } from './scene-controls';
+import { straightCorners, validCorners } from './perspective';
 import { maskBehindTv } from './occlusion';
 import { EditorHistory } from './editor-history';
 
@@ -30,7 +34,7 @@ export type Decoration = {
   shape?: string; category?: string; favorite?: boolean; group?: string;
   placements: Partial<Record<PlacementKey, Placement>>;
 };
-export type RoomSnapshot = { items: Decoration[]; ambient?: number; mood?: RoomMood };
+export type RoomSnapshot = { items: Decoration[]; ambient?: number; mood?: RoomMood; presentations?: Partial<Record<PlacementKey, Presentation>> };
 export type Manifest = RoomSnapshot & { library?: Omit<Decoration, 'placements'>[];
   profiles?: { id: string; name: string; room: RoomSnapshot }[];
   versions?: { id: string; name: string; room: RoomSnapshot }[] };
@@ -105,8 +109,9 @@ const editorSelectTool = document.querySelector<HTMLButtonElement>('#editorSelec
 const editorPanTool = document.querySelector<HTMLButtonElement>('#editorPanTool')!;
 const editorEnvironment = document.querySelector<HTMLDetailsElement>('#editorEnvironment')!;
 const history = new EditorHistory<Manifest>();
-let editorTool: 'select' | 'pan' = 'select';
-let previewTool: 'select' | 'pan' = 'select';
+type EditorTool = 'select' | 'pan' | 'tv' | 'camera' | 'warp';
+let editorTool: EditorTool = 'select';
+let previewTool: EditorTool = 'select';
 let previewSnap = false;
 let previewGrid = false;
 let spaceHeld = false;
@@ -123,6 +128,8 @@ let previewTest = 'live';
 let batchCommand = false;
 let editKey = '';
 let previewReady = false;
+let previewVideoSource: HTMLVideoElement | null = null;
+let previewFeed: MediaStream | null = null;
 let lastRender: { manifest: Manifest; sceneName: Scene; view: View; editable: boolean } | null = null;
 let viewers: Viewer[] = [];
 let previewZoom = 1;
@@ -195,7 +202,12 @@ function frameElement(sceneName: Scene, view: View): HTMLElement {
 function basis(placement: Placement, sceneName: Scene, view: View): DOMRect {
   const frame = frameElement(sceneName, view).getBoundingClientRect();
   return placement.anchor === 'frame' && frame.width && frame.height ?
-    frame : layer.getBoundingClientRect();
+    frame : sceneBounds(layer, lastRender?.manifest, key(sceneName, view, currentAspect()));
+}
+
+function sceneBounds(element: HTMLElement, manifest: RoomSnapshot | undefined, viewKey: PlacementKey) {
+  const b = cameraRect(element.getBoundingClientRect(), manifest?.presentations?.[viewKey]);
+  return new DOMRect(b.x, b.y, b.width, b.height);
 }
 
 function position(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View) {
@@ -206,7 +218,7 @@ function position(box: HTMLDivElement, placement: Placement, sceneName: Scene, v
   box.style.width = `${bounds.width * placement.width / 100}px`;
   box.style.opacity = String(placement.opacity);
   box.style.zIndex = String(placement.z + (placement.foreground ? 100 : 0));
-  box.style.transform = objectTransform(placement.rotation, placement.transform, placement.x);
+  box.style.transform = objectTransform(placement.rotation, placement.transform, placement.x, parseFloat(box.style.width), box.offsetHeight || parseFloat(box.style.width));
 }
 
 function ambientFilter(placement: Placement): string {
@@ -218,6 +230,7 @@ function ambientFilter(placement: Placement): string {
 
 function render(manifest: Manifest, sceneName: Scene, view: View, editable: boolean) {
   lastRender = { manifest, sceneName, view, editable };
+  applyPresentation(manifest.presentations?.[key(sceneName, view, currentAspect())], manifest.mood);
   layer.replaceChildren();
   const behind = document.createElement('div');
   behind.className = 'decorations-behind-tv';
@@ -268,6 +281,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       image.alt = '';
       image.draggable = false;
       image.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, 'figures')}`;
+      image.addEventListener('load', () => position(box, placement, sceneName, view), { once: true });
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
     }
@@ -298,13 +312,18 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       outline.classList.toggle('is-locked', placement.locked === true);
       position(outline, placement, sceneName, view);
       outline.style.zIndex = '210';
-      const sizeOutline = () => { outline.style.height = `${box.offsetHeight}px`; };
+      const sizeOutline = () => { outline.style.height = `${box.offsetHeight}px`; position(outline, placement, sceneName, view); outline.style.zIndex = '210'; };
       box.querySelector('img')?.addEventListener('load', sizeOutline, { once: true });
       for (const className of ['decor-resize decor-resize-se', 'decor-resize decor-resize-nw', 'decor-resize decor-resize-ne', 'decor-resize decor-resize-sw', 'decor-rotate', 'decor-depth-move']) {
         const handle = document.createElement('span');
         handle.className = `decor-handle ${className}`;
         handle.title = className === 'decor-depth-move' ? 'Mover decoración' : className.startsWith('decor-resize') ? 'Cambiar tamaño' : 'Girar';
         outline.append(handle);
+      }
+      if (previewTool === 'warp') {
+        outline.classList.add('warp-active');
+        for (let i = 0; i < 4; i++) { const handle = document.createElement('span'); handle.className = 'decor-warp-handle'; handle.dataset.corner = String(i);
+          handle.title = `Perspectiva · esquina ${i + 1}`; handle.style.left = `${[0, 100, 100, 0][i]}%`; handle.style.top = `${[0, 0, 100, 100][i]}%`; outline.append(handle); }
       }
       layer.append(outline);
       sizeOutline();
@@ -322,11 +341,19 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     layer.append(grid);
   }
   setDecorationLights(lights);
+  if (editable && (previewTool === 'tv' || previewTool === 'camera') && view !== 'window') {
+    const p = (manifest.presentations ??= {})[key(sceneName, view, currentAspect())] ??= {};
+    sceneControls(layer, p, manifest.mood, previewTool, () => {
+      for (const item of manifest.items) { const placement = placementFor(item, sceneName, view, currentAspect()); if (!placement) continue;
+        for (const el of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (el.dataset.id === item.id) position(el, placement, sceneName, view); }
+      if (sceneName === 'home') maskBehindTv(behind, layer, document.querySelector<HTMLElement>('.tv-face')!);
+    }, () => previewPinching);
+  }
 }
 
 function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View, linkedBox?: HTMLDivElement) {
   box.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || previewPanning || spaceHeld || previewTool === 'pan' || previewPinching) return;
+    if (event.button !== 0 || previewPanning || spaceHeld || !['select', 'warp'].includes(previewTool) || previewPinching) return;
     event.preventDefault();
     const click = { id: box.dataset.id!, time: performance.now(), x: event.clientX, y: event.clientY };
     if (event.pointerType === 'mouse' && previewLastClick && previewLastClick.id === click.id && click.time - previewLastClick.time < 350 &&
@@ -335,7 +362,7 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
     }
     previewLastClick = click;
     const target = event.target as HTMLElement;
-    const action = target.closest('.decor-resize') ? 'resize' :
+    const action = target.closest('.decor-warp-handle') ? 'warp' : target.closest('.decor-resize') ? 'resize' :
       target.closest('.decor-rotate') ? 'rotate' : 'move';
     const bounds = basis(placement, sceneName, view);
     const center = box.getBoundingClientRect();
@@ -344,6 +371,18 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
     const startAngle = Math.atan2(event.clientY - cy, event.clientX - cx);
     const origin = { x: event.clientX, y: event.clientY, left: placement.x,
       top: placement.y, width: placement.width, rotation: placement.rotation };
+    const cornerIndex = Number(target.closest<HTMLElement>('.decor-warp-handle')?.dataset.corner ?? 0), corners = structuredClone(placement.transform?.corners ?? straightCorners());
+    let unproject = (_x: number, _y: number) => [0, 0];
+    if (action === 'warp') {
+      const existing = box.style.transform, w = box.offsetWidth, h = box.offsetHeight;
+      box.style.transform = objectTransform(placement.rotation, { ...placement.transform, corners: undefined }, placement.x, w, h);
+      const m = new DOMMatrix(getComputedStyle(box).transform); box.style.transform = existing;
+      const room = layer.getBoundingClientRect(), ox = room.left + parseFloat(box.style.left) + w / 2, oy = room.top + parseFloat(box.style.top) + h / 2;
+      unproject = (x, y) => { const u = x - ox, v = y - oy, a = m.m11 - u * m.m14, b = m.m21 - u * m.m24, c = m.m12 - v * m.m14, d = m.m22 - v * m.m24;
+        const e = u * m.m44 - m.m41, f = v * m.m44 - m.m42, det = a * d - b * c;
+        return Math.abs(det) < 1e-8 ? [NaN, NaN] : [((e * d - b * f) / det / w + .5) * 100, ((a * f - e * c) / det / h + .5) * 100]; };
+    }
+    const warpStart = unproject(event.clientX, event.clientY);
     const clickedItem = lastRender?.manifest.items.find(i => i.id === box.dataset.id);
     const peerIds = new Set(selection.has(box.dataset.id!) || event.shiftKey || event.ctrlKey || event.metaKey ? selection : []);
     if (clickedItem?.group && !event.altKey) lastRender?.manifest.items.filter(i => i.group === clickedItem.group).forEach(i => peerIds.add(i.id));
@@ -364,7 +403,11 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
       const dy = e.clientY - origin.y;
       if (Math.hypot(dx, dy) > 4) previewLastClick = null;
       const fine = e.shiftKey ? .2 : 1;
-      if (action === 'move') {
+      if (action === 'warp') {
+        const point = unproject(e.clientX, e.clientY), next = structuredClone(corners);
+        next[cornerIndex] = point.map((v, i) => Math.round(clamp(corners[cornerIndex][i] + v - warpStart[i], -60, 160) * 10) / 10);
+        if (!validCorners(next)) return; (placement.transform ??= {}).corners = next;
+      } else if (action === 'move') {
         const step = previewSnap && !e.shiftKey ? 5 : .1;
         placement.x = clamp(Math.round((origin.left + dx / bounds.width * 100 * fine) / step) * step, -30, 130);
         placement.y = clamp(Math.round((origin.top + dy / bounds.height * 100 * fine) / step) * step, -35, 145);
@@ -396,7 +439,7 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
         for (const element of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (element.dataset.id === peer.id) position(element, peer.p, sceneName, view);
       }
       parent.postMessage({ type: 'decor-change', id: box.dataset.id,
-        x: placement.x, y: placement.y, width: placement.width, rotation: placement.rotation }, location.origin);
+        x: placement.x, y: placement.y, width: placement.width, rotation: placement.rotation, corners: action === 'warp' ? placement.transform?.corners : undefined }, location.origin);
     };
     const end = () => {
       box.removeEventListener('pointermove', move);
@@ -461,7 +504,7 @@ function initPreviewGestures() {
   stage.addEventListener('pointercancel', finishPan);
   stage.addEventListener('lostpointercapture', finishPan);
   stage.addEventListener('click', event => {
-    if (previewTool === 'pan' || spaceHeld || pointerOnDecoration || pointerMoved || (event.target as HTMLElement).closest('.decoration-box')) return;
+    if (previewTool !== 'select' || spaceHeld || pointerOnDecoration || pointerMoved || (event.target as HTMLElement).closest('.decoration-box')) return;
     parent.postMessage({ type: 'decor-select', id: null }, location.origin);
     parent.postMessage({ type: 'decor-gesture-end' }, location.origin);
   });
@@ -525,6 +568,12 @@ function sendPreview(group?: string, record = true) {
   if (previewReady) preview.contentWindow?.postMessage({ type: 'decor-preview', manifest: compareSaved ? saved : draft, selected: compareSaved ? null : selected,
     selectedIds: compareSaved ? [] : [...selection], testLight: previewTest,
     tool: compareSaved ? 'pan' : editorTool, grid: editorGrid.checked, snap: editorSnap.checked }, location.origin);
+}
+
+function setEditorTool(tool: EditorTool) {
+  editorTool = tool;
+  for (const [id, value] of [['editorSelectTool', 'select'], ['editorPanTool', 'pan'], ['studioTvTool', 'tv'], ['studioCameraTool', 'camera'], ['studioWarpTool', 'warp']]) document.getElementById(id)?.setAttribute('aria-pressed', String(tool === value));
+  sendPreview(undefined, false);
 }
 
 function refreshMoodFields() {
@@ -602,7 +651,8 @@ function editorShortcut(event: { key: string; ctrlKey: boolean; shiftKey: boolea
 
 function shiftPeers(source: Placement, id: string, dx: number, dy: number, scale = 1, turn = 0) {
   const doc = preview.contentDocument;
-  const bounds = (p: Placement) => doc?.querySelector(p.anchor === 'frame' ? editorScene.value === 'home' ? '.screen-wrap' : editorView.value === 'portrait' ? '.arcade-scene' : '.arcade-screen' : '#decorationLayer')?.getBoundingClientRect();
+  const nativeBounds = (p: Placement) => doc?.querySelector(p.anchor === 'frame' ? editorScene.value === 'home' ? '.screen-wrap' : editorView.value === 'portrait' ? '.arcade-scene' : '.arcade-screen' : '#decorationLayer')?.getBoundingClientRect();
+  const bounds = (p: Placement) => { const b = nativeBounds(p); return b && p.anchor !== 'frame' ? cameraRect(b, draft.presentations?.[activeKey()]) : b; };
   const a = bounds(source);
   for (const item of draft.items.filter(i => selection.has(i.id) && i.id !== id)) {
     const p = item.placements[activeKey()]; if (!p || p.locked) continue;
@@ -617,15 +667,17 @@ function convertAnchor(placement: Placement, next: 'frame' | 'scene') {
   const doc = preview.contentDocument;
   const sceneName = editorScene.value as Scene;
   const view = editorView.value as View;
-  const sceneBounds = doc?.querySelector('#decorationLayer')?.getBoundingClientRect();
+  const sceneElement = doc?.querySelector<HTMLElement>('#decorationLayer');
+  const sceneBounds = sceneElement ? cameraRect(sceneElement.getBoundingClientRect(), draft.presentations?.[activeKey()]) : undefined;
   const selector = sceneName === 'home' ? '.screen-wrap' :
     view === 'portrait' ? '.arcade-scene' : '.arcade-screen';
   const frameBounds = doc?.querySelector(selector)?.getBoundingClientRect();
   if (!sceneBounds?.width || !sceneBounds.height || !frameBounds?.width || !frameBounds.height) return false;
   const before = placement.anchor === 'frame' ? frameBounds : sceneBounds;
   const after = next === 'frame' ? frameBounds : sceneBounds;
-  const x = (before.left + before.width * placement.x / 100 - after.left) / after.width * 100;
-  const y = (before.top + before.height * placement.y / 100 - after.top) / after.height * 100;
+  const bx = before.x, by = before.y, ax = after.x, ay = after.y;
+  const x = (bx + before.width * placement.x / 100 - ax) / after.width * 100;
+  const y = (by + before.height * placement.y / 100 - ay) / after.height * 100;
   const width = before.width * placement.width / after.width;
   placement.x = Math.round(clamp(x, -30, 130) * 10) / 10;
   placement.y = Math.round(clamp(y, -35, 145) * 10) / 10;
@@ -700,6 +752,32 @@ function reloadPreview() {
   const params = new URLSearchParams({ editorPreview: '1', scene: editorScene.value, aspect: editorAspect.value });
   if (activityTicket) params.set('ticket', activityTicket);
   preview.src = `/?${params}`;
+}
+
+function connectPreviewVideo() {
+  if (!previewReady || editor.hidden) return;
+  const doc = preview.contentDocument, mount = doc?.querySelector('#videoMount'); if (!doc || !mount) return;
+  const source = document.querySelector<HTMLVideoElement>('#videoMount video');
+  let video = mount.querySelector<HTMLVideoElement>('video');
+  if (!source) { if (video?.dataset.editorFeed) { video.srcObject = null; video.remove(); }
+    doc.querySelector('#stage')!.classList.remove('has-signal'); doc.querySelector<HTMLElement>('#emptyState')!.style.display = '';
+    doc.querySelector('#liveBadge')!.textContent = 'STANDBY'; doc.querySelector('#statusText')!.textContent = 'ESPERANDO SEÑAL';
+    previewVideoSource = null; previewFeed = null; return; }
+  if (source !== previewVideoSource || (source.srcObject instanceof MediaStream && source.srcObject !== previewFeed)) {
+    previewVideoSource = source;
+    try { previewFeed = source.srcObject instanceof MediaStream ? source.srcObject :
+      (source as HTMLVideoElement & { captureStream?: () => MediaStream }).captureStream?.() ?? null; }
+    catch { previewFeed = null; }
+  }
+  if (!previewFeed) return;
+  if (!video) { video = doc.createElement('video'); video.muted = true; video.autoplay = true; video.playsInline = true; mount.append(video); }
+  video.dataset.editorFeed = 'true';
+  if (video.srcObject !== previewFeed) { video.srcObject = previewFeed; void video.play().catch(() => {}); }
+  const live = stage.classList.contains('has-signal') && source.readyState >= 2;
+  doc.querySelector('#stage')!.classList.toggle('has-signal', live);
+  doc.querySelector<HTMLElement>('#emptyState')!.style.display = live ? 'none' : '';
+  doc.querySelector('#liveBadge')!.textContent = live ? 'VISTA PREVIA' : 'STANDBY';
+  doc.querySelector('#statusText')!.textContent = live ? 'VÍDEO EN DIRECTO' : 'ESPERANDO SEÑAL';
 }
 
 function refreshItemList() {
@@ -784,6 +862,7 @@ async function loadDecorations() {
 }
 
 export function initDecorations() {
+  initVideoFraming();
   if (previewMode) {
     stage.classList.add('preview-mode');
     initPreviewGestures();
@@ -792,7 +871,7 @@ export function initDecorations() {
       selected = typeof event.data.selected === 'string' ? event.data.selected : null;
       selection = new Set(Array.isArray(event.data.selectedIds) ? event.data.selectedIds : selected ? [selected] : []);
       setTestLight(event.data.testLight ?? 'live');
-      previewTool = event.data.tool === 'pan' ? 'pan' : 'select';
+      previewTool = ['select', 'pan', 'tv', 'camera', 'warp'].includes(event.data.tool) ? event.data.tool : 'select';
       previewSnap = event.data.snap === true; previewGrid = event.data.grid === true;
       stage.classList.toggle('pan-tool', previewTool === 'pan' || spaceHeld);
       const manifest = event.data.manifest as Manifest;
@@ -806,6 +885,10 @@ export function initDecorations() {
   }
 
   const initialLoad = loadDecorations();
+  new MutationObserver(connectPreviewVideo).observe(document.querySelector('#videoMount')!, { childList: true });
+  new MutationObserver(connectPreviewVideo).observe(stage, { attributes: true, attributeFilter: ['class'] });
+  document.querySelector('#videoMount')!.addEventListener('loadeddata', connectPreviewVideo, true);
+  document.querySelector('#videoMount')!.addEventListener('loadedmetadata', connectPreviewVideo, true);
   initStudio({
     draft: () => draft, saved: () => saved, item: selectedItem, key: activeKey,
     selected: () => [...selection].filter(id => draft.items.some(i => i.id === id)),
@@ -821,7 +904,16 @@ export function initDecorations() {
     compare: value => { compareSaved = value; sendPreview(undefined, false); },
     test: value => { previewTest = value; sendPreview(undefined, false); },
     asset: authorizedUrl, resize: sizePreview,
-    restore: room => { const copy = structuredClone(room); draft.items = copy.items; draft.ambient = copy.ambient; draft.mood = copy.mood; selected = null; selection.clear(); refreshItemList(); refreshMoodFields(); sendPreview(); }
+    tool: setEditorTool,
+    restore: room => { const copy = structuredClone(room); draft.items = copy.items; draft.ambient = copy.ambient; draft.mood = copy.mood; draft.presentations = copy.presentations; selected = null; selection.clear(); refreshItemList(); refreshMoodFields(); sendPreview(); },
+    background: async file => {
+      if ((draft.library?.length ?? 0) >= 120) throw new Error('La biblioteca está llena (120 imágenes).');
+      if (file.size > 2 * 1024 * 1024) throw new Error('La imagen debe pesar menos de 2 MB.');
+      const response = await editorRequest('/api/decorations/assets', { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
+      const { asset } = await response.json();
+      (draft.library ??= []).push({ id: crypto.randomUUID(), name: file.name.slice(0, 70), asset, category: 'poster' });
+      return asset as string;
+    }
   });
   setInterval(() => { if (editor.hidden && !document.hidden) loadDecorations(); }, 30000);
   window.addEventListener('resize', () => {
@@ -860,12 +952,8 @@ export function initDecorations() {
     }
   });
   document.addEventListener('keyup', () => history.endGroup());
-  const setTool = (tool: 'select' | 'pan') => {
-    editorTool = tool; editorSelectTool.setAttribute('aria-pressed', String(tool === 'select'));
-    editorPanTool.setAttribute('aria-pressed', String(tool === 'pan')); sendPreview();
-  };
-  editorSelectTool.addEventListener('click', () => setTool('select'));
-  editorPanTool.addEventListener('click', () => setTool('pan'));
+  editorSelectTool.addEventListener('click', () => setEditorTool('select'));
+  editorPanTool.addEventListener('click', () => setEditorTool('pan'));
   for (const field of [editorGrid, editorSnap]) field.addEventListener('change', () => sendPreview());
   for (const field of [editorMood, editorMoodIntensity, editorTvGlow]) {
     field.addEventListener('input', () => {
@@ -917,6 +1005,7 @@ export function initDecorations() {
   editorKey.addEventListener('keydown', (event) => { if (event.key === 'Enter') editorUnlock.click(); });
   preview.addEventListener('load', () => {
     previewReady = preview.src !== 'about:blank';
+    connectPreviewVideo();
     if (previewReady) migrateLegacyInView();
     sendPreview();
   });
@@ -1060,8 +1149,8 @@ export function initDecorations() {
   decorRemove.addEventListener('click', () => editorCommand('remove'));
   editorSave.addEventListener('click', async () => {
     rememberAssets();
-    if (JSON.stringify(draft.items) !== JSON.stringify(saved.items) || JSON.stringify(draft.mood) !== JSON.stringify(saved.mood) || draft.ambient !== saved.ambient) {
-      draft.versions = [{ id: crypto.randomUUID(), name: new Date().toLocaleString('es'), room: { items: structuredClone(saved.items), ambient: saved.ambient, mood: structuredClone(saved.mood) } }, ...(draft.versions ?? [])].slice(0, 3);
+    if (JSON.stringify(draft.items) !== JSON.stringify(saved.items) || JSON.stringify(draft.mood) !== JSON.stringify(saved.mood) || draft.ambient !== saved.ambient || JSON.stringify(draft.presentations) !== JSON.stringify(saved.presentations)) {
+      draft.versions = [{ id: crypto.randomUUID(), name: new Date().toLocaleString('es'), room: { items: structuredClone(saved.items), ambient: saved.ambient, mood: structuredClone(saved.mood), presentations: structuredClone(saved.presentations) } }, ...(draft.versions ?? [])].slice(0, 3);
     }
     const submitted = copyManifest(draft);
     editorSave.disabled = true;
@@ -1080,6 +1169,14 @@ export function initDecorations() {
   });
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
+    if (event.data?.type === 'presentation-change') {
+      if (compareSaved || !['tv', 'camera'].includes(event.data.kind)) return;
+      const f = event.data.framing; if (!f || !['x', 'y', 'zoom'].every(key => f[key] === undefined || Number.isFinite(f[key]))) return;
+      const kind = event.data.kind as 'tv' | 'camera', limit = kind === 'tv' ? 80 : 50;
+      const p = (draft.presentations ??= {})[activeKey()] ??= {};
+      p[kind] = { x: clamp(f.x ?? 0, -limit, limit), y: clamp(f.y ?? 0, -limit, limit), zoom: clamp(f.zoom ?? 1, kind === 'tv' ? .3 : .5, 2.5) };
+      refreshStudio(); history.record(draft, 'scene-drag'); updateHistoryButtons(); return;
+    }
     if (event.data?.type === 'decor-key-end') { history.endGroup(); return; }
     if (event.data?.type === 'decor-shortcut') { editorShortcut(event.data); return; }
     if (event.data?.type === 'decor-gesture-start') { history.endGroup(); editorMenu.hidden = true; return; }
@@ -1164,6 +1261,7 @@ export function initDecorations() {
       if (!placement || placement.locked) return;
       const values = [event.data.x, event.data.y, event.data.width, event.data.rotation].map(Number);
       if (!values.every(Number.isFinite)) return;
+      if (event.data.corners && validCorners(event.data.corners)) (placement.transform ??= {}).corners = structuredClone(event.data.corners);
       const dx = values[0] - placement.x, dy = values[1] - placement.y;
       const scale = values[2] / placement.width, turn = values[3] - placement.rotation;
       shiftPeers(placement, item!.id, dx, dy, scale, turn);

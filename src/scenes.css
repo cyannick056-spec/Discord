@@ -1226,3 +1226,43 @@
   .studio-immersive .preview-frame { flex: 1; }
   .editor-footer #editorSave { min-height: 38px; }
 }
+
+.room-backdrop { display: none; position: absolute; inset: 0; z-index: 0; pointer-events: none; transform-origin: 50% 50%; }
+.free-room .room-backdrop { display: block; }
+.room-backdrop > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.room-backdrop > img[hidden] { display: none; }
+.studio-wall { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 25%, #ffffff0c, #0005), var(--wall-color); }
+[data-texture=wood] .studio-wall { background: repeating-linear-gradient(90deg, #0003 0 2px, transparent 2px 80px), radial-gradient(ellipse at top, #ffffff0c, #0006), var(--wall-color); }
+[data-texture=brick] .studio-wall { background: repeating-linear-gradient(0deg, #0004 0 2px, transparent 2px 40px), repeating-linear-gradient(90deg, #0004 0 2px, transparent 2px 95px), var(--wall-color); }
+.studio-cabinet { position: absolute; left: 5%; right: 5%; top: var(--cabinet-y); bottom: calc(100% - var(--floor-y)); min-height: 4px; background: repeating-linear-gradient(0deg, #0001 0 1px, transparent 1px 10px), linear-gradient(90deg, transparent 49.7%, #0006 49.8% 50.2%, transparent 50.3%), linear-gradient(#ffffff14, #0004), var(--cabinet-color); border-top: 9px solid #ffffff0b; border-bottom: 8px solid #0008; box-shadow: 0 16px 25px #0005; }
+.studio-floor { position: absolute; inset: var(--floor-y) 0 0; background: repeating-linear-gradient(0deg, #0003 0 1px, transparent 1px 42px), repeating-linear-gradient(100deg, #0002 0 1px, transparent 1px 160px), linear-gradient(#0004, transparent 45%), var(--floor-color); }
+.studio-cabinet[hidden], .studio-floor[hidden] { display: none; }
+.home-mode.free-room .tv-face { background: transparent !important; }
+.home-mode.free-room .tv-face::before { display: none !important; }
+.home-mode.free-room .tv-face::after { mask-image: var(--detached-mask); -webkit-mask-image: var(--detached-mask); mask-size: 100% 100%; -webkit-mask-size: 100% 100%; }
+.classic-room .tv-face { --room-art: url('/crt-room-wide.webp') !important; }
+.classic-room .aspect-4x3 .tv-face { --room-art: url('/crt-room-4x3.webp') !important; }
+@media (orientation: portrait) and (min-height: 430px) {
+  .classic-room .tv-face { --room-art: url('/crt-room-portrait-wide.webp') !important; }
+  .classic-room .aspect-4x3 .tv-face { --room-art: url('/crt-room-portrait-4x3.webp') !important; }
+}
+.scene-edit-outline { position: absolute; z-index: 215; outline: 1px solid #a5d9de; border-radius: 9px; cursor: move; touch-action: none; pointer-events: auto; background: #a5d9de05; }
+.scene-edit-outline::before { content: 'TV · arrastra para mover'; position: absolute; top: -24px; left: 0; padding: 3px 7px; border-radius: 5px; color: #ccebef; background: #12212be8; font: 11px system-ui; white-space: nowrap; }
+.scene-edit-outline[data-camera=true] { outline-style: dashed; }
+.scene-edit-outline[data-camera=true]::before { content: 'Escenario · arrastra para encuadrar'; top: 5px; }
+.scene-edit-resize { position: absolute; right: -8px; bottom: -8px; width: 18px; height: 18px; border: 2px solid #d6f6fc; border-radius: 5px; background: #477680; cursor: nwse-resize; }
+.studio-template-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.studio-template-grid button { padding: 12px 5px; background: linear-gradient(140deg, var(--swatch), #10151d); min-height: 50px; }
+.decor-warp-handle { position: absolute; width: 17px; height: 17px; border: 2px solid #dcfbff; border-radius: 4px; background: #527f94; transform: translate(-50%, -50%); cursor: crosshair; pointer-events: auto; touch-action: none; }
+.warp-active .decor-handle:not(.decor-depth-move) { display: none !important; }
+.studio-corner-fields { display: flex; flex-direction: column; gap: 7px; }
+.studio-corner-fields label { display: flex; flex-direction: column; font-size: 10px; }
+.studio-corner-fields label span { display: flex; gap: 5px; }
+.studio-corner-fields input { min-width: 0; width: 50%; }
+.studio-tabs button { padding-inline: 4px; }
+.studio-focus .editor-toolbar, .studio-focus .editor-header strong { display: none; }
+.studio-focus .editor-header { justify-content: flex-end; }
+.studio-focus .editor-tools { position: absolute; z-index: 4; top: 50px; left: 24px; right: 24px; padding: 5px; border: 1px solid #ffffff18; border-radius: 10px; background: #111c26b8; backdrop-filter: blur(12px); }
+.studio-focus .editor-tools > label { display: none; }
+.studio-focus #studioImmersive { background: #3a6471; }
+.studio-focus .editor-body { position: relative; }

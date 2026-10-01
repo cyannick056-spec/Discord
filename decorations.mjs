@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
-import { validMood, validMetadata, validStudioPlacement, validCollections } from './studio-validation.mjs';
+import { validMood, validMetadata, validStudioPlacement, validCollections, validPresentations } from './studio-validation.mjs';
 
 const views = new Set([
   'home-landscape', 'home-portrait', 'home-window',
@@ -33,6 +33,7 @@ function validManifest(input) {
   if (input.ambient !== undefined && !inRange(input.ambient, 25, 100)) return false;
   if (input.mood !== undefined && !validMood(input.mood)) return false;
   if (!validCollections(input, validManifest)) return false;
+  if (!validPresentations(input.presentations, views)) return false;
   const ids = new Set();
   let decorations = 0;
   return input.items.every((item) => {
@@ -136,7 +137,8 @@ export function installDecorations(app, { directory, editKey }) {
         ...(req.body.mood !== undefined ? { mood: req.body.mood } : {}),
         ...(req.body.library !== undefined ? { library: req.body.library } : {}),
         ...(req.body.profiles !== undefined ? { profiles: req.body.profiles } : {}),
-        ...(req.body.versions !== undefined ? { versions: req.body.versions } : {}) }));
+        ...(req.body.versions !== undefined ? { versions: req.body.versions } : {}),
+        ...(req.body.presentations !== undefined ? { presentations: req.body.presentations } : {}) }));
       await rename(temporary, manifestPath);
       res.set('Cache-Control', 'no-store').json({ ok: true });
     } catch (error) {

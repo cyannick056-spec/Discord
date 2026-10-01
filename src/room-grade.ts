@@ -1,6 +1,7 @@
 import { gradeFilter, type Mood, type Zone } from './studio-model';
 type Rect = { x: number; y: number; width: number; height: number };
 const textures = new Map<string, HTMLImageElement>();
+let cached: { key: string; canvas: HTMLCanvasElement } | undefined;
 
 // Grade the photograph under the objects, preserving its black pixels. The
 // video aperture is removed after compositing, just like the lighting layers.
@@ -18,7 +19,13 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const cabinet = y + h * (value('tv-feet-y') + value('tv-feet-h'));
   const floor = cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75);
   const power = mood.intensity / 100;
+  const free = document.querySelector('#stage')?.classList.contains('free-room');
+  const key = JSON.stringify([url, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
+  if (cached?.key === key) { ctx.drawImage(cached.canvas, 0, 0); return; }
+  const target = ctx, buffer = document.createElement('canvas'); buffer.width = ctx.canvas.width; buffer.height = ctx.canvas.height;
+  const bufferContext = buffer.getContext('2d'); if (!bufferContext) return; ctx = bufferContext;
   for (const zone of ['wall', 'cabinet', 'floor', 'tv'] as Zone[]) {
+    if (free && zone !== 'tv') continue;
     const grade = { ...mood.grade, ...mood.zones?.[zone] };
     const influence = (grade.influence ?? (zone === 'tv' ? 30 : 100)) / 100;
     ctx.save(); ctx.beginPath();
@@ -43,4 +50,5 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   ctx.save(); ctx.globalCompositeOperation = 'destination-out';
   ctx.beginPath(); ctx.roundRect(glass.x, glass.y, glass.width, glass.height, Math.min(glass.width * .025, glass.height * .04));
   ctx.fillStyle = '#000'; ctx.fill(); ctx.restore();
+  cached = { key, canvas: buffer }; target.drawImage(buffer, 0, 0);
 }
