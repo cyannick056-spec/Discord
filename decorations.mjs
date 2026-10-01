@@ -30,23 +30,25 @@ function inRange(value, low, high) {
 }
 
 function validManifest(input) {
-  if (!input || !Array.isArray(input.items) || input.items.length > 65) return false;
+  if (!input || !Array.isArray(input.items) || input.items.length > 137) return false;
   if (input.ambient !== undefined && !inRange(input.ambient, 25, 100)) return false;
   if (input.mood !== undefined && !validMood(input.mood)) return false;
   if (!validCollections(input, validManifest)) return false;
   if (!validPresentations(input.presentations, views)) return false;
   const ids = new Set();
   let decorations = 0;
+  let builtins = 0;
   return input.items.every((item) => {
     const slot = item?.kind === 'viewer-slot';
     const light = item?.kind === 'light';
     const shape = item?.kind === 'shape';
-    if (!slot) decorations++;
+    const builtin = item?.kind === 'builtin';
+    if (builtin) builtins++; else if (!slot) decorations++;
     if (!item || typeof item.id !== 'string' ||
         (slot ? !viewerSlotIds.has(item.id) : !/^[a-f0-9-]{36}$/.test(item.id)) ||
-        decorations > 60 || ids.has(item.id) ||
-        (item.kind !== undefined && !slot && !light && !shape) ||
-        (!slot && !light && !shape && (typeof item.asset !== 'string' || !assetPattern.test(item.asset))) ||
+        decorations > 60 || builtins > 72 || ids.has(item.id) ||
+        (item.kind !== undefined && !slot && !light && !shape && !builtin) ||
+        (!slot && !light && !shape && !builtin && (typeof item.asset !== 'string' || !assetPattern.test(item.asset))) ||
         !validMetadata(item) ||
         typeof item.name !== 'string' || item.name.length > 70 ||
         !item.placements || typeof item.placements !== 'object') return false;
@@ -54,7 +56,7 @@ function validManifest(input) {
     return Object.entries(item.placements).every(([view, p]) =>
       views.has(view) && p && validStudioPlacement(p) &&
       inRange(p.x, -30, 130) && inRange(p.y, -35, 145) &&
-      inRange(p.width, 1, 80) && inRange(p.rotation, -180, 180) &&
+      inRange(p.width, 1, 130) && inRange(p.rotation, -180, 180) &&
       inRange(p.opacity, 0, 1) && inRange(p.z, 0, 99) &&
       typeof p.hidden === 'boolean' &&
       (p.foreground === undefined || typeof p.foreground === 'boolean') &&

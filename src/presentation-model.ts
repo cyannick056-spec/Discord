@@ -1,8 +1,10 @@
+import type { RoomId } from '../room-catalog.mjs';
 export type Framing = { x?: number; y?: number; zoom?: number };
 export type ScreenAdjustment = { x?: number; y?: number; width?: number; height?: number };
 export type TvPaint = { enabled?: boolean; body?: string; bezel?: string; panel?: string; strength?: number; hue?: number; saturation?: number; exposure?: number; contrast?: number; finish?: 'matte' | 'satin' | 'gloss' };
 export type Reflection = { enabled?: boolean; intensity?: number; table?: number; floor?: number; blur?: number; reach?: number; spread?: number; offset?: number; texture?: number };
 export type Presentation = {
+  environment?: RoomId; tvModel?: 'original' | 'silver' | 'charcoal';
   style?: 'original' | 'classic' | 'minimal' | 'wood' | 'brick' | 'custom'; background?: string;
   wall?: string; cabinet?: string; floor?: string; cabinetY?: number; cabinetHeight?: number; hideCabinet?: boolean;
   camera?: Framing; tv?: Framing; video?: Framing;

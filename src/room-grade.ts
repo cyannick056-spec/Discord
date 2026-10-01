@@ -21,8 +21,9 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const backdrop = document.querySelector<HTMLImageElement>('#roomBackdrop img'), back = backdrop?.getBoundingClientRect();
   const detached = document.querySelector('#stage')?.classList.contains('free-room');
   const bx = back ? (back.x - scene.x) * scale : x, by = back ? (back.y - scene.y) * scale : y, bw = back ? back.width * scale : w, bh = back ? back.height * scale : h;
-  const cabinet = Math.round(detached ? by + bh * (innerHeight > innerWidth ? .47 : .9) : y + h * (value('tv-feet-y') + value('tv-feet-h')));
-  const floor = Math.round(detached ? by + bh * (innerHeight > innerWidth ? .62 : 1) : cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75));
+  const modular = Boolean(getPresentation()?.environment);
+  const cabinet = Math.round(modular ? by + bh * .65 : detached ? by + bh * (innerHeight > innerWidth ? .47 : .9) : y + h * (value('tv-feet-y') + value('tv-feet-h')));
+  const floor = modular ? cabinet : Math.round(detached ? by + bh * (innerHeight > innerWidth ? .62 : 1) : cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75));
   const power = mood.intensity / 100;
   const free = document.querySelector('#stage')?.classList.contains('free-room');
   const key = JSON.stringify([url, getPresentation()?.tvPaint, backdrop?.src, bx, by, bw, bh, backdrop?.complete, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
@@ -37,12 +38,16 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
     const grade = { ...mood.grade, ...mood.zones?.[zone] };
     const influence = (grade.influence ?? (zone === 'tv' ? 30 : 100)) / 100;
     if (influence === 0) continue;
-    const photo = free && zone !== 'tv' ? { x: bx, y: by, width: bw, height: bh } : { x, y, width: w, height: h };
+    const photo = free && zone !== 'tv' ? { x: bx, y: by, width: bw, height: bh } : face.dataset.tvModel && face.dataset.tvModel !== 'original' ? tv : { x, y, width: w, height: h };
+    const cover = free && zone !== 'tv' && getComputedStyle(backgroundImage).objectFit === 'cover';
+    const ratio = cover ? Math.max(photo.width / backgroundImage.naturalWidth, photo.height / backgroundImage.naturalHeight) : 1;
+    const sw = cover ? photo.width / ratio : backgroundImage.naturalWidth, sh = cover ? photo.height / ratio : backgroundImage.naturalHeight;
+    const drawTexture = () => textureCtx.drawImage(backgroundImage, (backgroundImage.naturalWidth - sw) / 2, (backgroundImage.naturalHeight - sh) / 2, sw, sh, photo.x, photo.y, photo.width, photo.height);
     // Color the full texture before cutting its silhouette. Multiply fills on
     // antialiased clip edges used to turn the TV contour and zone seams white.
     textureCtx.clearRect(0, 0, texture.width, texture.height);
     textureCtx.filter = gradeFilter(mood, zone);
-    textureCtx.drawImage(backgroundImage, photo.x, photo.y, photo.width, photo.height); textureCtx.filter = 'none';
+    drawTexture(); textureCtx.filter = 'none';
     textureCtx.globalCompositeOperation = 'multiply';
     const cool = ['blue-night', 'classic-night', 'moonlight', 'soft-night'].includes(mood.preset);
     const temperature = (grade.temperature ?? (mood.preset === 'warm' ? 28 : cool ? -18 * power : 0)) / 100;
@@ -59,7 +64,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
     }
     // Restore the source alpha, including transparent custom backgrounds.
     textureCtx.globalCompositeOperation = 'destination-in';
-    textureCtx.drawImage(backgroundImage, photo.x, photo.y, photo.width, photo.height);
+    drawTexture();
     textureCtx.globalCompositeOperation = 'source-over';
     ctx.save(); ctx.beginPath();
     if (zone === 'tv') ctx.roundRect(tv.x, tv.y, tv.width, tv.height, Math.min(tv.width, tv.height) * .012);
@@ -75,7 +80,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
     ctx.drawImage(texture, 0, 0); ctx.restore();
   }
   const aperture = { x: x + w * value('glass-x'), y: y + h * value('glass-y'), width: w * value('glass-w'), height: h * value('glass-h') };
-  paintTv(ctx, image, { x, y, width: w, height: h }, tv, aperture, getPresentation()?.tvPaint);
+  paintTv(ctx, image, face.dataset.tvModel && face.dataset.tvModel !== 'original' ? tv : { x, y, width: w, height: h }, tv, aperture, getPresentation()?.tvPaint);
   ctx.save(); ctx.globalCompositeOperation = 'destination-out';
   ctx.beginPath(); ctx.roundRect(glass.x, glass.y, glass.width, glass.height, Math.min(glass.width * .025, glass.height * .04));
   ctx.fillStyle = '#000'; ctx.fill(); ctx.restore();

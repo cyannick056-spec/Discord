@@ -1,8 +1,9 @@
+import { roomIds, propIds } from './room-catalog.mjs';
 const finite = (value, low, high) => typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high;
 const optionalNumbers = (object, fields) => Object.entries(fields).every(([key, [lo, hi]]) => object[key] === undefined || finite(object[key], lo, hi));
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const uuid = value => typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value);
-const categories = ['figurine', 'sticker', 'poster', 'frame', 'lamp'];
+const categories = ['figurine', 'sticker', 'poster', 'frame', 'lamp', 'furniture', 'game'];
 function validCorners(points) {
   if (!Array.isArray(points) || points.length !== 4 || points.some(p => !Array.isArray(p) || p.length !== 2 || p.some(v => !finite(v, -60, 160)))) return false;
   const crosses = points.map((p, i) => { const q = points[(i + 1) % 4], r = points[(i + 2) % 4]; return (q[0] - p[0]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[0] - q[0]); });
@@ -12,6 +13,8 @@ export function validPresentations(settings, views) {
   if (settings === undefined) return true;
   if (!object(settings)) return false;
   return Object.entries(settings).every(([view, p]) => views.has(view) && object(p) &&
+    (p.environment === undefined || roomIds.has(p.environment)) &&
+    (p.tvModel === undefined || ['original', 'silver', 'charcoal'].includes(p.tvModel)) &&
     (p.style === undefined || ['original', 'classic', 'minimal', 'wood', 'brick', 'custom'].includes(p.style)) &&
     ['wall', 'cabinet', 'floor'].every(key => p[key] === undefined || (typeof p[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p[key]))) &&
     (p.background === undefined || (typeof p.background === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(p.background))) &&
@@ -23,6 +26,8 @@ export function validPresentations(settings, views) {
 }
 export function validMetadata(item) {
   return (item.category === undefined || categories.includes(item.category)) &&
+    (item.roomKit === undefined || (item.kind === 'builtin' && roomIds.has(item.roomKit))) &&
+    (item.kind !== 'builtin' || propIds.has(item.asset)) &&
     (item.favorite === undefined || typeof item.favorite === 'boolean') &&
     (item.group === undefined || uuid(item.group)) &&
     (item.kind !== 'shape' || ['star', 'robot', 'frame', 'poster'].includes(item.shape));
@@ -54,5 +59,5 @@ export function validCollections(input, validateRoom) {
     new Set(input[key].map(v => v?.id)).size === input[key].length && input[key].every(v => object(v) && uuid(v.id) && typeof v.name === 'string' && v.name.length <= 70 && object(v.room) &&
       !['profiles', 'versions', 'library'].some(key => v.room[key] !== undefined) && validateRoom(v.room)))) &&
     (input.library === undefined || (Array.isArray(input.library) && input.library.length <= 120 && input.library.every(i => object(i) && uuid(i.id) && typeof i.name === 'string' && i.name.length <= 70 && validMetadata(i) &&
-      (i.kind === 'shape' || (i.kind === undefined && typeof i.asset === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(i.asset))))));
+      (i.kind === 'shape' || i.kind === 'builtin' || (i.kind === undefined && typeof i.asset === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(i.asset))))));
 }
