@@ -1,3 +1,4 @@
+import { paintReflections } from './reflections';
 import { paintRoomGrade } from './room-grade';
 import { type Mood } from './studio-model';
 import { getPresentation } from './scene-presentation';
@@ -24,8 +25,11 @@ export function initRoomLighting() {
   const tintCtx = tint.getContext('2d');
   const grade = document.querySelector<HTMLCanvasElement>('#roomGrade')!;
   const gradeCtx = grade.getContext('2d');
+  const reflection = document.querySelector<HTMLCanvasElement>('#roomReflection')!, reflectionCtx = reflection.getContext('2d');
   const sample = document.createElement('canvas');
-  sample.width = 32; sample.height = 18;
+  sample.width = 64; sample.height = 36;
+  const testSample = document.createElement('canvas'); testSample.width = 64; testSample.height = 36;
+  const testSampleCtx = testSample.getContext('2d');
   const sampleCtx = sample.getContext('2d', { willReadFrequently: true });
   if (!shadowCtx || !tintCtx || !sampleCtx) return;
   const dark: LightColor = { r: 0, g: 0, b: 0, strength: 0 };
@@ -33,6 +37,7 @@ export function initRoomLighting() {
   let lastScreenSample = { ...dark }, lastFloorSample = { ...dark };
   let sampledVideo: HTMLVideoElement | null = null;
   let lastTime = -1;
+  let reflectionReady = false;
   let lastFraming = '';
   let blockedVideo: HTMLVideoElement | null = null;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -73,8 +78,9 @@ export function initRoomLighting() {
     const scale = Math.min(1, 960 / Math.max(bounds.width, bounds.height));
     const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
     if (shade.width !== width || shade.height !== height) {
-      shade.width = tint.width = grade.width = width; shade.height = tint.height = grade.height = height;
+      shade.width = tint.width = grade.width = reflection.width = width; shade.height = tint.height = grade.height = reflection.height = height;
     }
+    reflectionCtx?.clearRect(0, 0, width, height);
     shadowCtx.clearRect(0, 0, width, height);
     tintCtx.clearRect(0, 0, width, height);
     gradeCtx?.clearRect(0, 0, width, height);
@@ -95,23 +101,25 @@ export function initRoomLighting() {
       if (video !== blockedVideo && (video !== sampledVideo || video.currentTime !== lastTime || framing !== lastFraming)) {
         try {
           const crop = videoCrop(video.videoWidth, video.videoHeight, glass.width, glass.height, getPresentation()?.video, getComputedStyle(video).objectFit);
-          sampleCtx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, 32, 18);
-          const pixels = sampleCtx.getImageData(0, 0, 32, 18).data;
-          lastScreenSample = target = frameColor(pixels, 32, 18);
-          lastFloorSample = floorTarget = frameColor(pixels, 32, 18, 12, 18);
-          sampledVideo = video; lastTime = video.currentTime; lastFraming = framing;
-        } catch { blockedVideo = video; }
+          sampleCtx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, 64, 36);
+          const pixels = sampleCtx.getImageData(0, 0, 64, 36).data;
+          lastScreenSample = target = frameColor(pixels, 64, 36);
+          lastFloorSample = floorTarget = frameColor(pixels, 64, 36, 24, 36);
+          reflectionReady = true; sampledVideo = video; lastTime = video.currentTime; lastFraming = framing;
+        } catch { reflectionReady = false; blockedVideo = video; }
       } else if (video !== blockedVideo) { target = lastScreenSample; floorTarget = lastFloorSample; }
       if (video === blockedVideo) target = floorTarget = { r: 210, g: 220, b: 230, strength: .1 };
     } else if (!stage.classList.contains('has-signal')) {
+      reflectionReady = false;
       // The no-signal phosphor emits only a very weak neutral glow.
       target = floorTarget = { r: 210, g: 220, b: 230, strength: .06 };
     }
     if (previewColors && (!video || video.readyState < 2)) { target = previewColors.screen; floorTarget = previewColors.floor; }
+    let reflectionFrame = sample, mirrorReady = reflectionReady && Boolean(video && video.readyState >= 2 && stage.classList.contains('has-signal'));
     if (previewMode && testLight !== 'live') {
       const colors: Record<string, LightColor> = { red: { r: 255, g: 0, b: 0, strength: 1 }, blue: { r: 0, g: 80, b: 255, strength: 1 },
         white: { r: 255, g: 255, b: 255, strength: 1 }, dark: { ...dark } };
-      if (colors[testLight]) target = floorTarget = colors[testLight];
+      if (colors[testLight]) { target = floorTarget = colors[testLight]; if (testSampleCtx) { testSampleCtx.fillStyle = `rgb(${target.r},${target.g},${target.b})`; testSampleCtx.fillRect(0, 0, 64, 36); } reflectionFrame = testSample; mirrorReady = testLight !== 'dark'; }
     }
     const easing = reducedMotion.matches ? .08 : 1 - Math.exp(-125 / (mood.transition ?? 380));
     screenColor = blendColor(screenColor, target, easing);
@@ -119,7 +127,17 @@ export function initRoomLighting() {
     if (!previewMode) document.querySelector<HTMLIFrameElement>('#editorPreview')?.contentWindow?.postMessage(
       { type: 'room-video-light', screen: screenColor, floor: floorColor }, location.origin);
     const tvGain = mood.tvGlow / 100;
-    const rimGain = tvGain * (mood.rim ?? 100) / 100;
+    const paint = getPresentation()?.tvPaint;
+    const finish = paint?.enabled ? paint.finish === 'gloss' ? 1.35 : paint.finish === 'satin' ? 1 : .7 : 1;
+    const rimGain = tvGain * (mood.rim ?? 100) / 100 * finish;
+    if (reflectionCtx && mirrorReady && stage.classList.contains('home-mode')) {
+      const background = document.querySelector<HTMLElement>('#roomBackdrop')!.getBoundingClientRect();
+      const face = document.querySelector<HTMLElement>('.tv-face')!, art = face.getBoundingClientRect(), s = getComputedStyle(face);
+      const n = (key: string) => parseFloat(s.getPropertyValue('--tv-body-' + key)) / 100;
+      paintReflections(reflectionCtx, reflectionFrame, { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale },
+        { x: gx, y: gy, width: gw, height: gh }, innerHeight > innerWidth, screenColor.strength * tvGain, getPresentation()?.reflection,
+        { x: (art.x - bounds.x + art.width * n('x')) * scale, y: (art.y - bounds.y + art.height * n('y')) * scale, width: art.width * n('w') * scale, height: art.height * n('h') * scale });
+    }
     const reach = (mood.reach ?? 100) / 100;
     glow(gx + gw / 2, gy + gh / 2, gw * .88 * reach, gh * 1.05 * reach, screenColor, .7 * tvGain);
     // Narrow pools on the bezel make the screen's color visible on the TV
@@ -158,7 +176,7 @@ export function initRoomLighting() {
       glow(x, y, radius, radius * (light.shape === 'strip' ? .16 : light.shape === 'spot' ? .4 : 1), color, 1, light.angle ?? 0, light.softness ?? 60);
     }
     // Preserve the live picture and its native CRT treatment exactly.
-    for (const ctx of [shadowCtx, tintCtx]) {
+    for (const ctx of [shadowCtx, tintCtx, reflectionCtx].filter((c): c is CanvasRenderingContext2D => Boolean(c))) {
       ctx.save(); ctx.globalCompositeOperation = 'destination-out';
       const radius = stage.classList.contains('arcade-mode') ? Math.min(gw, gh) * .01 : Math.min(gw * .025, gh * .04);
       ctx.beginPath(); ctx.roundRect(gx, gy, gw, gh, radius);

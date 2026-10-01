@@ -1115,6 +1115,7 @@
 }
 #roomShade { z-index: 20; }
 #roomGrade { z-index: 8; }
+#roomReflection { z-index: 19; mix-blend-mode: screen; }
 #roomTint { z-index: 21; mix-blend-mode: screen; }
 .decor-light-bulb {
   width: 100%;

@@ -3,7 +3,7 @@ import type { Mood } from './studio-model';
 let current: Presentation | undefined;
 let screenBase = { x: 0, y: 0, width: 1, height: 1 };
 export function getPresentation() { return current; }
-export function applyPresentation(p: Presentation | undefined, _mood?: Mood) {
+export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   current = p;
   const stage = document.querySelector<HTMLElement>('#stage')!, room = document.querySelector<HTMLElement>('.room-scene')!;
   const home = stage.classList.contains('home-mode'), face = document.querySelector<HTMLElement>('.tv-face')!;
@@ -25,7 +25,9 @@ export function applyPresentation(p: Presentation | undefined, _mood?: Mood) {
     width: `${home && !custom ? a.width : b.width}px`, height: `${home && !custom ? a.height : b.height}px`,
     transform: `translate(${b.width * (camera?.x ?? 0) / 100}px,${b.height * (camera?.y ?? 0) / 100}px) scale(${zoom})` });
   image.hidden = !home && !custom; image.style.filter = '';
-  let src = innerHeight > innerWidth && innerHeight >= 430 ? '/crt-room-plate-portrait.webp' : '/crt-room-plate-wide.webp';
+  const orientation = innerHeight > innerWidth && innerHeight >= 430 ? 'portrait' : 'wide';
+  const daytime = mood?.daytime ?? 'night';
+  let src = daytime === 'night' ? `/crt-room-plate-${orientation}.webp` : `/crt-room-${daytime}-${orientation}.webp`;
   if (custom) {
     const ticket = new URLSearchParams(location.search).get('ticket');
     const url = new URL(`/api/decorations/assets/${encodeURIComponent(p!.background!)}`, location.origin);

@@ -16,6 +16,8 @@ export function validPresentations(settings, views) {
     ['wall', 'cabinet', 'floor'].every(key => p[key] === undefined || (typeof p[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p[key]))) &&
     (p.background === undefined || (typeof p.background === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(p.background))) &&
     (p.hideCabinet === undefined || typeof p.hideCabinet === 'boolean') && optionalNumbers(p, { cabinetY: [15, 90], cabinetHeight: [5, 45] }) &&
+    (p.tvPaint === undefined || (object(p.tvPaint) && (p.tvPaint.enabled === undefined || typeof p.tvPaint.enabled === 'boolean') && ['body','bezel','panel'].every(key => p.tvPaint[key] === undefined || (typeof p.tvPaint[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p.tvPaint[key]))) && (p.tvPaint.finish === undefined || ['matte','satin','gloss'].includes(p.tvPaint.finish)) && optionalNumbers(p.tvPaint, { strength: [0,100], hue: [-180,180], saturation: [0,200], exposure: [-60,60], contrast: [50,150] }))) &&
+    (p.reflection === undefined || (object(p.reflection) && (p.reflection.enabled === undefined || typeof p.reflection.enabled === 'boolean') && optionalNumbers(p.reflection, { intensity: [0,150], table: [0,200], floor: [0,200], blur: [0,30], reach: [30,180], spread: [50,180], offset: [-20,30], texture: [0,100] }))) &&
     (p.screen === undefined || (object(p.screen) && optionalNumbers(p.screen, { x: [-50, 50], y: [-50, 50], width: [50, 150], height: [50, 150] }))) &&
     ['camera', 'tv', 'video'].every(key => p[key] === undefined || (object(p[key]) && optionalNumbers(p[key], { x: [key === 'tv' ? -80 : -50, key === 'tv' ? 80 : 50], y: [key === 'tv' ? -80 : -50, key === 'tv' ? 80 : 50], zoom: [key === 'tv' ? .3 : key === 'camera' ? .5 : 1, key === 'video' ? 3 : 2.5] }))));
 }
@@ -29,7 +31,7 @@ function validGrade(g) {
   return object(g) && optionalNumbers(g, { exposure: [-60, 60], contrast: [50, 150], saturation: [0, 150], temperature: [-100, 100], shadows: [0, 60], influence: [0, 100] });
 }
 export function validMood(m) {
-  return object(m) && ['neutral', 'blue-night', 'warm', 'classic-night', 'tv-only', 'moonlight', 'soft-night', 'neon'].includes(m.preset) &&
+  return object(m) && (m.daytime === undefined || ['morning', 'day', 'evening', 'night'].includes(m.daytime)) && ['neutral', 'blue-night', 'warm', 'classic-night', 'tv-only', 'moonlight', 'soft-night', 'neon'].includes(m.preset) &&
     ['accent', 'accent2'].every(key => m[key] === undefined || (typeof m[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(m[key]))) &&
     finite(m.intensity, 0, 100) && finite(m.tvGlow, 0, 200) &&
     optionalNumbers(m, { rim: [0, 200], cabinet: [0, 200], floor: [0, 200], reach: [30, 180], transition: [150, 2000] }) &&
