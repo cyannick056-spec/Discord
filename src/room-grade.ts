@@ -26,7 +26,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const floor = modular ? cabinet : Math.round(detached ? by + bh * (innerHeight > innerWidth ? .62 : 1) : cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75));
   const power = mood.intensity / 100;
   const free = document.querySelector('#stage')?.classList.contains('free-room');
-  const key = JSON.stringify([url, getPresentation()?.tvPaint, backdrop?.src, backdrop?.style.objectPosition, bx, by, bw, bh, backdrop?.complete, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
+  const key = JSON.stringify([url, getPresentation()?.tvPaint, getPresentation()?.screen?.rounded, backdrop?.src, backdrop?.style.objectPosition, bx, by, bw, bh, backdrop?.complete, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
   if (cached?.key === key) { ctx.drawImage(cached.canvas, 0, 0); return; }
   const target = ctx, buffer = document.createElement('canvas'); buffer.width = ctx.canvas.width; buffer.height = ctx.canvas.height;
   const bufferContext = buffer.getContext('2d'); if (!bufferContext) return; ctx = bufferContext;
@@ -83,7 +83,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const aperture = { x: x + w * value('glass-x'), y: y + h * value('glass-y'), width: w * value('glass-w'), height: h * value('glass-h') };
   paintTv(ctx, image, face.dataset.tvModel && face.dataset.tvModel !== 'original' ? { x: x + w * value('photo-x'), y: y + h * value('photo-y'), width: w * value('photo-w'), height: h * value('photo-h') } : { x, y, width: w, height: h }, tv, aperture, getPresentation()?.tvPaint);
   ctx.save(); ctx.globalCompositeOperation = 'destination-out';
-  ctx.beginPath(); ctx.roundRect(glass.x, glass.y, glass.width, glass.height, Math.min(glass.width * .025, glass.height * .04));
+  ctx.beginPath(); ctx.roundRect(glass.x, glass.y, glass.width, glass.height, getPresentation()?.screen?.rounded === false ? 0 : Math.min(glass.width * .025, glass.height * .04));
   ctx.fillStyle = '#000'; ctx.fill(); ctx.restore();
   cached = { key, canvas: buffer }; target.drawImage(buffer, 0, 0);
 }

@@ -33,8 +33,11 @@ export function roomPlacement(prop: string, portrait = false): Placement {
     console: [33, 63.5, 10, 14], controller: [50, 63.5, 7, 15], games: [67, 63.5, 8, 14], poster: [84, 24, 11, 1], lamp: [17, 63, 8, 12],
   };
   Object.assign(coords, portrait ? { 'floor-lamp': [10, 53, 38, 12], 'mushroom-lamp': [15, 42, 14, 12], 'desk-lamp': [15, 41, 14, 12], 'lava-lamp': [15, 41, 10, 12] } : { 'floor-lamp': [9, 61, 20, 12], 'mushroom-lamp': [17, 62, 10, 12], 'desk-lamp': [17, 62, 10, 12], 'lava-lamp': [17, 60, 7, 12] });
+  for (const id of ['cabinet-black', 'gaming-desk', 'tv-cart', 'floating-shelf', 'tv-riser']) coords[id] = [...coords.cabinet];
+  coords['tv-cart'][2] = portrait ? 72 : 46; coords['tv-riser'][2] = portrait ? 65 : 42;
+  coords['floating-shelf'][1] = portrait ? 48 : 71;
   const [x, y, width, z] = coords[prop] ?? [50, 50, 15, 10];
-  return { x, y, width, z, rotation: 0, opacity: 1, hidden: false, anchor: 'scene', behindTv: ['rug', 'cabinet', 'sofa', 'bed', 'shelf', 'poster'].includes(prop),
+  return { x, y, width, z, rotation: 0, opacity: 1, hidden: false, anchor: 'scene', behindTv: Boolean(props.find(p => p.id === prop)?.support) || ['rug', 'cabinet', 'sofa', 'bed', 'shelf', 'poster'].includes(prop),
     brightness: 100, saturation: 100, shadow: 25,
     ...((props.find(p => p.id === prop)?.category === 'lamp') ? { light: { color: prop === 'lava-lamp' ? '#ff6aa3' : '#ffca90', intensity: 55, radius: 5, x: 50, y: 24 }, ...(prop === 'lava-lamp' ? { lava: { motion: true, speed: 1 } } : {}) } : {}) };
 }

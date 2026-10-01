@@ -41,3 +41,11 @@ Se mantienen las tres TVs fotográficas: CRT original, plateada y carbón, en 4:
 La lluvia reparte las gotas móviles entre ambos cristales, también en vertical. Los surcos y las gotas grandes avanzan de forma visible; las gotas pequeñas originales de la foto siguen fijas. El editor indica cuando la preferencia de movimiento reducido pausa la animación y permite autorizarla expresamente con «Animar aunque el dispositivo reduzca el movimiento».
 
 En pantallas estrechas el recorte de la habitación con lluvia se alinea a la izquierda para conservar la ventana. La lluvia se compone por encima de la fotografía graduada, debajo de muebles y luces; la TV la oculta cuando se mueve delante del cristal.
+
+## Muebles, pantalla y reflejos
+
+Se añadieron mueble negro, escritorio, carrito, repisa flotante y base elevada. Se eligen en Objetos → Añadir muebles y bases y se pueden mover como las otras decoraciones. Escena → Modelo, posición y tamaño de la TV permite elegir el mueble o base de apoyo; la TV sigue su superficie cuando se mueve, gira o cambia su perspectiva. Los pies integrados de los modelos de TV se recortan en el render sin cambiar los archivos fuente.
+
+El editor usa las dimensiones reales de la actividad para la vista actual; al cambiar orientación intercambia esas dimensiones. El zoom de trabajo sigue siendo independiente del zoom guardado. Ajustar a pantalla conserva todo el vídeo, con bandas negras si cambia su proporción, e ignora el zoom y desplazamiento guardados hasta volver a Llenar pantalla. Se puede desactivar el redondeo. Las bandas también se respetan al calcular la luz.
+
+El reflejo de la mesa se recorta al cuadrilátero de la superficie elegida. El suelo se dibuja detrás de las decoraciones. Se redujeron la intensidad predeterminada y el brillo máximo para mantener la textura de la madera frente a vídeos blancos.

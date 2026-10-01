@@ -9,7 +9,7 @@ import { sceneControls } from './scene-controls';
 import { straightCorners, validCorners } from './perspective';
 import { maskBehindTv } from './occlusion';
 import { EditorHistory } from './editor-history';
-import { builtinUrl, visibleInRoom } from '../room-catalog.mjs';
+import { builtinUrl, visibleInRoom, props } from '../room-catalog.mjs';
 
 type Scene = 'home' | 'arcade';
 type View = 'landscape' | 'portrait' | 'window';
@@ -256,6 +256,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     box.className = 'decoration-box';
     box.dataset.id = item.id;
     if (item.kind === 'builtin') box.dataset.prop = item.asset;
+    if (item.category === 'furniture' && (item.kind !== 'builtin' || props.find(p => p.id === item.asset)?.support)) box.dataset.support = 'true';
     box.classList.toggle('is-locked', placement.locked === true);
     position(box, placement, sceneName, view);
     if (editable && item.id === selected) box.classList.add('is-selected');
@@ -721,9 +722,17 @@ function migrateLegacyInView() {
   }
 }
 
-function sizePreview() {
+// Match the actual activity viewport, including mobile aspect ratios and
+// viewport media queries. Other orientations use the same device dimensions.
+function previewDimensions(): [number, number] {
   const view = editorView.value as View;
-  const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
+  if (view === 'window') return innerWidth <= 520 && innerHeight <= 360 ? [innerWidth, innerHeight] : [480, 270];
+  const portrait = innerHeight > innerWidth;
+  return (view === 'portrait') === portrait ? [innerWidth, innerHeight] : [innerHeight, innerWidth];
+}
+
+function sizePreview() {
+  const [width, height] = previewDimensions();
   const baseScale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1);
   const scale = baseScale * previewZoom;
   previewPanX = clamp(previewPanX, -Math.max(0, (width * scale - previewFrame.clientWidth) / 2),
@@ -745,8 +754,7 @@ function changeZoom(next: number) {
 }
 
 function zoomAt(next: number, x: number, y: number) {
-  const view = editorView.value as View;
-  const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
+  const [width, height] = previewDimensions();
   const baseScale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1);
   const before = baseScale * previewZoom;
   const sceneX = (x - (previewFrame.clientWidth - width * before) / 2 - previewPanX) / before;
@@ -1234,8 +1242,7 @@ export function initDecorations() {
       return;
     }
     if (event.data?.type === 'decor-zoom-start') {
-      const view = editorView.value as View;
-      const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
+      const [width, height] = previewDimensions();
       const scale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1) * previewZoom;
       const x = Number(event.data.x), y = Number(event.data.y);
       if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -1247,8 +1254,7 @@ export function initDecorations() {
     if (event.data?.type === 'decor-zoom-move' && gestureStart) {
       const ratio = Number(event.data.ratio), dx = Number(event.data.dx), dy = Number(event.data.dy);
       if (![ratio, dx, dy].every(Number.isFinite)) return;
-      const view = editorView.value as View;
-      const [width, height] = view === 'portrait' ? [360, 640] : view === 'window' ? [480, 270] : [800, 450];
+      const [width, height] = previewDimensions();
       previewZoom = clamp(gestureStart.zoom * ratio, 1, 4);
       const scale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1) * previewZoom;
       previewPanX = gestureStart.targetX + dx - (previewFrame.clientWidth - width * scale) / 2 - gestureStart.x * scale;
