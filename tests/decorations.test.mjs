@@ -44,7 +44,7 @@ test('lighting saves round-trip without losing legacy placements and reject inva
     const invalidDepth = structuredClone(updated);
     invalidDepth.items[0].placements['home-landscape'].behindTv = 'yes';
     assert.equal((await save(invalidDepth)).status, 400);
-    for (const mood of [{ preset: 'neon', intensity: 60, tvGlow: 100 },
+    for (const mood of [{ preset: 'unknown-preset', intensity: 60, tvGlow: 100 },
       { preset: 'blue-night', intensity: -1, tvGlow: 100 }, { preset: 'warm', intensity: 50, tvGlow: 201 },
       { preset: 'neutral', intensity: '65', tvGlow: 100 }]) {
       assert.equal((await save({ ...updated, mood })).status, 400);

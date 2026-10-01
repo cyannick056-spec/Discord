@@ -9,6 +9,7 @@ on:
       - 'server.mjs'
       - 'cloudflare.mjs'
       - 'decorations.mjs'
+      - 'studio-validation.mjs'
       - 'index.html'
       - 'public/crt-room-neutral*'
       - 'tests/**'

@@ -1114,6 +1114,7 @@
   pointer-events: none;
 }
 #roomShade { z-index: 20; }
+#roomGrade { z-index: 8; }
 #roomTint { z-index: 21; mix-blend-mode: screen; }
 .decor-light-bulb {
   width: 100%;
@@ -1127,4 +1128,101 @@
 #editorAmbientValue { min-width: 3em; }
 @media (max-width: 520px) and (max-height: 360px) {
   .room-lighting canvas { display: none; }
+}
+
+/* Studio: the scene stays central; advanced tools live in the side sheet. */
+.decor-editor { background: #0e131bd9; backdrop-filter: blur(22px); border-color: #ffffff20; border-radius: 18px; }
+.decor-editor button, .decor-editor input, .decor-editor select { background: #1a222d; border-color: #ffffff1c; border-radius: 8px; }
+.decor-editor input[type=range] { accent-color: #9ec8cf; }
+.decor-editor button:hover { background: #283643; }
+.editor-header { font-size: 14px; }
+.editor-header strong { font-weight: 550; }
+.editor-workspace { gap: 8px; }
+.editor-toolbar { gap: 10px; }
+.editor-toolbar label { font-size: 11px; color: #a8b8c4; }
+.editor-toolbar select { min-width: 95px; }
+.editor-tools { padding: 6px 0; border-color: #ffffff12; font-size: 11px; }
+.editor-tools button { min-height: 32px; }
+.editor-tools #studioImmersive { margin-left: auto; }
+.editor-body { grid-template-columns: minmax(0, 1fr) clamp(295px, 30vw, 370px); gap: 10px; }
+.preview-frame { border-color: #ffffff12; border-radius: 12px; background: radial-gradient(ellipse at center, #17212b, #070b11); }
+.editor-sidebar { overflow: hidden; padding: 0; gap: 0; border: 1px solid #ffffff12; border-radius: 12px; background: #101721; }
+.studio-tabs { display: flex; flex: 0 0 auto; align-items: center; padding: 5px; gap: 3px; border-bottom: 1px solid #ffffff0d; }
+.studio-tabs button { flex: 1; border: 0; background: transparent; color: #9cacb8; }
+.studio-tabs button[aria-selected=true] { background: #263a44; color: #d8eaf0; }
+#studioCollapse { flex: 0 0 30px; }
+.studio-scroll { min-height: 0; overflow: auto; padding: 11px; scrollbar-width: thin; scrollbar-color: #334552 transparent; }
+.studio-scroll > section { display: flex; flex-direction: column; gap: 10px; }
+.studio-scroll > section[hidden] { display: none !important; }
+.studio-search { display: flex; gap: 5px; }
+.studio-search input { min-width: 0; width: 60%; }
+.studio-search select { min-width: 0; width: 40%; }
+.studio-list { display: flex; flex-direction: column; gap: 3px; max-height: 210px; overflow: auto; }
+.studio-object-row { display: flex; align-items: center; gap: 3px; padding: 3px; border-radius: 8px; background: #151e29; }
+.studio-object-row.is-selected { background: #243943; outline: 1px solid #78a4b955; outline-offset: -1px; }
+.studio-object-row button { border: 0; background: transparent; padding: 4px; min-width: 24px; min-height: 32px; font-size: 14px; }
+.studio-object-row > input { margin: 0 3px; accent-color: #a3cbd5; width: 14px; height: 14px; }
+.studio-object-row > button[aria-pressed=true] { color: #ffd993; }
+.studio-object-row .studio-object-select { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; font-size: 11px; text-align: left; }
+.studio-object-select img { width: 30px; height: 32px; object-fit: contain; }
+.studio-object-select span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-native-select { font-size: 10px; color: #92a4b1; }
+.studio-native-select select { min-width: 0; flex: 1; }
+.studio-native-select select[size] { min-height: 32px; height: 32px; }
+.editor-properties { gap: 7px; }
+.editor-properties[hidden] { display: none !important; }
+.editor-properties label { font-size: 11px; }
+.editor-properties .editor-check { font-size: 11px; }
+.studio-section { border-top: 1px solid #ffffff12; padding-top: 1px; }
+.studio-section summary { padding: 11px 0; cursor: pointer; font-size: 12px; color: #c9d8e1; }
+.studio-fields { display: flex; flex-direction: column; gap: 9px; padding-bottom: 10px; }
+.studio-fields label, #studioMood > label { display: flex; flex-direction: column; align-items: stretch; font-size: 11px; color: #aebfc9; gap: 4px; }
+.studio-fields label span { display: flex; gap: 10px; align-items: center; }
+.studio-fields input[type=range] { flex: 1; min-width: 0; width: 100%; padding: 0; }
+.studio-fields output { min-width: 3em; font-size: 10px; text-align: right; color: #bfd4df; }
+.studio-fields .studio-check { flex-direction: row; align-items: center; }
+.studio-note { font-size: 10px; line-height: 1.5; color: #8fa4b2; margin: 0; }
+.studio-buttons { display: flex; flex-wrap: wrap; gap: 5px; }
+.studio-buttons button { flex: 1 1 42%; font-size: 11px; }
+.studio-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.studio-gallery button { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; font-size: 10px; }
+.studio-gallery img { width: 48px; height: 48px; object-fit: contain; }
+.studio-gallery span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-environment { width: 100%; }
+.editor-environment > summary { display: none !important; }
+.editor-light-tools { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.editor-light-tools label { display: flex; flex-wrap: wrap; font-size: 11px; }
+.editor-light-tools label:first-child { flex-direction: column; align-items: stretch; }
+.editor-light-tools input[type=range] { flex: 1; min-width: 0; width: 100%; }
+#studioMood #editorAmbient { width: 100%; max-width: none; }
+.editor-sidebar.is-collapsed .studio-scroll { display: none; }
+.studio-immersive { grid-template-columns: minmax(0, 1fr); }
+.studio-immersive .editor-sidebar { display: none; }
+.decor-contact-shadow { position: absolute; height: 9%; border-radius: 50%; background: #000; transform: translate(-50%, -50%); pointer-events: none; z-index: -1; }
+.editor-footer { padding-top: 6px; border-color: #ffffff12; }
+.editor-footer #editorSave { background: #31515c; border-color: #91c5cb33; }
+@media (max-width: 670px) {
+  .decor-editor { padding: 8px; gap: 6px; border-radius: 13px; }
+  .editor-header { font-size: 12px; }
+  .editor-toolbar { display: flex; flex-wrap: nowrap; gap: 5px; }
+  .editor-toolbar label { flex: 1; min-width: 0; font-size: 10px; }
+  .editor-toolbar select { min-width: 0; width: 100%; min-height: 32px; padding: 5px; }
+  .editor-tools { font-size: 10px; gap: 4px; }
+  .editor-tools > label { font-size: 10px; }
+  .editor-tools button { min-height: 30px; font-size: 10px; padding: 5px 6px; }
+  .editor-tools #studioImmersive { margin-left: 0; }
+  .editor-body { gap: 7px; }
+  .preview-frame { flex: 1 1 55%; min-height: 150px; }
+  .editor-sidebar { flex: 0 1 38%; min-height: 43px; }
+  .editor-sidebar.is-collapsed { flex: 0 0 43px; }
+  .studio-tabs { min-height: 33px; }
+  .studio-tabs button { min-height: 32px; font-size: 12px; }
+  .studio-scroll { padding: 9px; }
+  .studio-object-row > input { min-height: 18px !important; }
+  .studio-object-row button { min-height: 34px; }
+  .studio-list { max-height: 140px; }
+  .editor-sidebar select[size] { min-height: 32px; }
+  .editor-properties label, .studio-fields label { font-size: 11px; }
+  .studio-immersive .preview-frame { flex: 1; }
+  .editor-footer #editorSave { min-height: 38px; }
 }
