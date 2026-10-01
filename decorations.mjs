@@ -6,6 +6,8 @@ import path from 'node:path';
 import express from 'express';
 import { validMood, validMetadata, validStudioPlacement, validCollections, validPresentations } from './studio-validation.mjs';
 import { restoreOriginalRoom } from './original-room.mjs';
+import { rebuildRealRooms } from './real-room.mjs';
+import { roomIds, legacyRoomIds } from './room-catalog.mjs';
 
 const views = new Set([
   'home-landscape', 'home-portrait', 'home-window',
@@ -75,14 +77,14 @@ function validManifest(input) {
   });
 }
 
-export function installDecorations(app, { directory, editKey, restoreOriginal = false }) {
+export function installDecorations(app, { directory, editKey, restoreOriginal = false, rebuildRooms = false }) {
   const assetsDir = path.join(directory, 'assets');
   const manifestPath = path.join(directory, 'manifest.json');
   const blank = { items: [] };
 
   // Apply the requested shared-room restoration once, with a full backup.
   // Subsequent deployments and editor saves keep the user's newer choices.
-  const ready = restoreOriginal ? (async () => {
+  const originalReady = restoreOriginal ? (async () => {
     const marker = path.join(directory, 'original-room-restored-v1.json');
     try { await readFile(marker); return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const data = await readFile(manifestPath, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
@@ -98,9 +100,24 @@ export function installDecorations(app, { directory, editKey, restoreOriginal = 
     await writeFile(marker, JSON.stringify({ restoredAt: new Date().toISOString() }));
     console.info(`Original photo room restored; ${manifest.items.length} decorations preserved`);
   })().then(() => null, error => error) : Promise.resolve(null);
+  const ready = rebuildRooms ? originalReady.then(async error => {
+    if (error) throw error;
+    const marker = path.join(directory, 'real-rooms-rebuilt-v1.json');
+    try { await readFile(marker); return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const data = await readFile(manifestPath, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    const manifest = data === null ? structuredClone(blank) : JSON.parse(data);
+    if (!validManifest(manifest)) throw new Error('Cannot replace an invalid shared scene');
+    await mkdir(directory, { recursive: true });
+    if (data !== null) await writeFile(path.join(directory, 'manifest-before-real-rooms-v1.json'), data, { flag: 'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+    rebuildRealRooms(manifest);
+    if (!validManifest(manifest)) throw new Error('Replacement scene failed validation');
+    const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);
+    await writeFile(temporary, JSON.stringify(manifest)); await rename(temporary, manifestPath);
+    await writeFile(marker, JSON.stringify({ rebuiltAt: new Date().toISOString() }));
+  }).then(() => null, error => error) : originalReady;
   app.use('/api/decorations', async (_req, res, next) => {
     const error = await ready;
-    if (error) { console.error('Original room restoration failed:', error); return res.status(500).json({ error: 'No se pudo restaurar el entorno original' }); }
+    if (error) { console.error('Room preparation failed:', error); return res.status(500).json({ error: 'No se pudo preparar el entorno' }); }
     next();
   });
 
@@ -157,6 +174,11 @@ export function installDecorations(app, { directory, editKey, restoreOriginal = 
 
   app.put('/api/decorations', editorOnly, async (req, res) => {
     if (!validManifest(req.body)) return res.status(400).json({ error: 'Decoración inválida' });
+    if (rebuildRooms && req.body && (
+      Object.entries(req.body.presentations ?? {}).some(([key,p]) => key.startsWith('home-') && (!p || (!roomIds.has(p.environment) && !(p.style === 'custom' && p.background)))) ||
+      (req.body.items ?? []).some(i => legacyRoomIds.has(i.roomKit)))) {
+      return res.status(409).json({ error: 'Los escenarios anteriores se reemplazaron. Vuelve a abrir la actividad antes de guardar.' });
+    }
     try {
       await mkdir(directory, { recursive: true });
       const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);

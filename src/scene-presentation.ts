@@ -1,6 +1,6 @@
 import { configureWindowRain } from './window-rain';
 import { tvModels } from '../tv-catalog.mjs';
-import { screenRect, type Presentation } from './presentation-model';
+import { screenRect, resolvedCamera, type Presentation } from './presentation-model';
 import { supportPlane, supportContact } from './support-surfaces';
 import type { Mood } from './studio-model';
 let current: Presentation | undefined;
@@ -23,14 +23,15 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   art.style.removeProperty('translate');
   art.style.removeProperty('transform');
   const base = getComputedStyle(art).transform, b = room.getBoundingClientRect(), a = art.getBoundingClientRect();
-  const camera = p?.camera, tv = p?.tv, zoom = camera?.zoom ?? 1;
+  const camera = resolvedCamera(p), tv = p?.tv, zoom = camera.zoom;
   const dx = b.width * ((camera?.x ?? 0) + (tv?.x ?? 0) * zoom) / 100;
   const dy = b.height * ((camera?.y ?? 0) + (tv?.y ?? 0) * zoom) / 100;
   if (p) art.style.transform = `translate(${dx}px,${dy}px) ${base === 'none' ? '' : base} scale(${zoom * (tv?.zoom ?? 1)})`;
   const custom = p?.style === 'custom' && Boolean(p.background), image = backdrop.querySelector<HTMLImageElement>('img')!;
   const original = home && !custom && !p?.environment;
-  Object.assign(backdrop.style, { left: `${original ? a.left - b.left : 0}px`, top: `${original ? a.top - b.top : 0}px`,
-    width: `${original ? a.width : b.width}px`, height: `${original ? a.height : b.height}px`,
+  const overscan = Boolean(p?.environment);
+  Object.assign(backdrop.style, { left: `${original ? a.left - b.left : overscan ? -b.width / 2 : 0}px`, top: `${original ? a.top - b.top : overscan ? -b.height / 2 : 0}px`,
+    width: `${original ? a.width : b.width * (overscan ? 2 : 1)}px`, height: `${original ? a.height : b.height * (overscan ? 2 : 1)}px`,
     transform: `translate(${b.width * (camera?.x ?? 0) / 100}px,${b.height * (camera?.y ?? 0) / 100}px) scale(${zoom})` });
   image.hidden = !home && !custom; image.style.filter = '';
   const orientation = innerHeight > innerWidth && innerHeight >= 430 ? 'portrait' : 'wide';
@@ -45,7 +46,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   if (!image.hidden && image.getAttribute('src') !== src) image.src = src;
   image.style.objectFit = custom || p?.environment ? 'cover' : 'fill';
   // Keep the side window inside narrow mobile crops instead of centering it away.
-  image.style.objectPosition = p?.environment === 'rain' && !custom ? 'left center' : 'center';
+  image.style.objectPosition = 'center';
   configureWindowRain(backdrop, image, home && !tiny ? p : undefined, orientation === 'portrait', mood);
   applyScreenFraming();
   if (home && !tiny) {

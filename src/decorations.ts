@@ -12,11 +12,13 @@ import { straightCorners, validCorners } from './perspective';
 import { maskBehindTv } from './occlusion';
 import { EditorHistory } from './editor-history';
 import { builtinUrl, visibleInRoom, props } from '../room-catalog.mjs';
+import { restOnSurface } from './resting-placement';
+import { applyPhotoLight } from './room-geometry';
 
 type Scene = 'home' | 'arcade';
 type View = 'landscape' | 'portrait' | 'window';
 type Aspect = '16:9' | '4:3';
-type PlacementKey = `${Scene}-${View}` | `home-${View}-16x9` | `home-${View}-4x3`;
+export type PlacementKey = `${Scene}-${View}` | `home-${View}-16x9` | `home-${View}-4x3`;
 type SlotColor = 'red' | 'blue' | 'green' | 'yellow' | 'black';
 type Viewer = { id: string; name: string; avatar: string };
 const slotColors: { id: SlotColor; name: string }[] = [
@@ -194,7 +196,7 @@ function ensureViewerSlots(manifest: Manifest) {
     }
     for (const [sceneName, view, aspect] of keys) {
       const placementKey = key(sceneName, view, aspect);
-      item.placements[placementKey] ??= slotPlacement(sceneName, view, index);
+      item.placements[placementKey] ??= { ...slotPlacement(sceneName, view, index), ...(sceneName === 'home' && manifest.presentations?.[placementKey]?.environment ? { hidden: true } : {}) };
     }
     return item;
   });
@@ -293,7 +295,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       image.alt = '';
       image.draggable = false;
       image.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, item.kind === 'builtin' ? item.asset === 'rug' ? 'floor' : item.category === 'furniture' ? 'cabinet' : 'figures' : 'figures')}`;
-      image.addEventListener('load', () => { position(box, placement, sceneName, view); syncSupport(); }, { once: true });
+      image.addEventListener('load', () => { position(box, placement, sceneName, view); syncSupport(); if (sceneName === 'home') void applyPhotoLight(box,image); }, { once: true });
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
       if (item.category === 'furniture') { if (placement.material) { box.dataset.material = placement.material.preset; box.dataset.roughness = String(placement.material.roughness ?? 65); } void applyFurnitureMaterial(box, image, item.asset, placement.material); }
@@ -892,6 +894,15 @@ async function loadDecorations() {
 export function initDecorations() {
   initVideoFraming();
   if (previewMode) {
+    window.addEventListener('message', async event => {
+      if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'decor-rest-on' || !lastRender) return;
+      const ids = Array.isArray(event.data.ids) ? event.data.ids.filter((id: unknown) => typeof id === 'string') : [];
+      if (typeof event.data.supportId !== 'string') return;
+      const { manifest, sceneName, view } = lastRender;
+      const values = await restOnSurface(manifest, key(sceneName,view,currentAspect()), ids, event.data.supportId,
+        manifest.presentations?.[key(sceneName,view,currentAspect())], p => basis(p,sceneName,view), (box,p) => position(box,p,sceneName,view));
+      parent.postMessage({ type:'decor-rested', values }, location.origin);
+    });
     stage.classList.add('preview-mode');
     initPreviewGestures();
     window.addEventListener('message', (event) => {
@@ -929,6 +940,7 @@ export function initDecorations() {
     convert: p => convertAnchor(p, 'scene'), command: editorCommand, status,
     create: (item) => { if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= MAX_SCENE_ITEMS) return status(`Máximo ${MAX_SCENE_ITEMS} piezas; combina muebles e imágenes libremente.`);
       item.placements[activeKey()] ??= defaultPlacement(); draft.items.push(item); selectItem(item.id); },
+    rest: (ids, supportId) => { sendPreview(); preview.contentWindow?.postMessage({ type:'decor-rest-on',ids,supportId },location.origin); },
     compare: value => { compareSaved = value; sendPreview(undefined, false); },
     test: value => { previewTest = value; sendPreview(undefined, false); },
     asset: authorizedUrl, resize: sizePreview,
@@ -1197,6 +1209,15 @@ export function initDecorations() {
   });
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
+    if (event.data?.type === 'decor-rested') {
+      if (compareSaved || !Array.isArray(event.data.values)) return;
+      for (const value of event.data.values) {
+        const p = draft.items.find(i=>i.id===value.id)?.placements[activeKey()];
+        if (!p || p.locked || ![value.x,value.y].every(Number.isFinite)) continue;
+        p.x=clamp(value.x,-30,130);p.y=clamp(value.y,-35,145);
+      }
+      history.record(draft,'rest-on');history.endGroup();refreshFields();sendPreview(undefined,false);status('Objeto apoyado. Puedes moverlo y ajustar su perspectiva.');return;
+    }
     if (event.data?.type === 'presentation-change') {
       if (compareSaved || !['tv', 'camera', 'screen'].includes(event.data.kind)) return;
       const f = event.data.framing; if (!f || !['x', 'y', 'zoom', 'width', 'height'].every(key => f[key] === undefined || Number.isFinite(f[key]))) return;

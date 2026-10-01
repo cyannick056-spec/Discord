@@ -4,7 +4,8 @@ import { type Mood } from './studio-model';
 import { getPresentation } from './scene-presentation';
 import { videoCrop } from './presentation-model';
 import { frameColor, blendColor, type LightColor } from './light-color';
-import { supportPlane } from './support-surfaces';
+import { supportPlane, supportElement } from './support-surfaces';
+import { photoFloor } from './room-geometry';
 
 export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number };
 let sources: DecorationLight[] = [];
@@ -54,12 +55,13 @@ export function initRoomLighting() {
     if (valid(event.data.screen) && valid(event.data.floor)) previewColors = event.data;
   });
 
-  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60, onTv = false) {
+  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60, onTv = false, clip?: { x:number;y:number;width:number;height:number }) {
     if (!shadowCtx || !tintCtx || rx <= 0 || ry <= 0) return;
     const power = Math.min(2, color.strength * gain);
     if (power < .005) return;
     for (const [ctx, isTint] of [[shadowCtx, false], [tintCtx, true]] as const) {
       ctx.save();
+      if (clip) { ctx.beginPath();ctx.rect(clip.x,clip.y,clip.width,clip.height);ctx.clip(); }
       // Room light must not wash over the photographed plastic. Only the
       // separately controlled bezel light may illuminate the TV itself.
       if (tvBounds && !onTv) {
@@ -158,9 +160,10 @@ export function initRoomLighting() {
       const surface = supportPlane(getPresentation());
       const table = surface ? { ...surface, x: (surface.x - bounds.x) * scale, y: (surface.y - bounds.y) * scale, width: surface.width * scale, height: surface.height * scale,
         quad: surface.quad?.map(([x, y]) => [(x - bounds.x) * scale, (y - bounds.y) * scale] as [number, number]) } : undefined;
+      const floor = photoFloor();
       const surfaces = stage.classList.contains('modular-room') || table ? {
         table: table ?? { x: 0, y: 0, width: 0, height: 0 },
-        floor: stage.classList.contains('modular-room') ? { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y + background.height * .65) * scale, width: background.width * scale, height: background.height * .35 * scale } : reflectionPlanes({ x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale }, innerHeight > innerWidth).floor,
+        floor: stage.classList.contains('modular-room') ? { ...floor, x: (floor.x - bounds.x) * scale, y: (floor.y - bounds.y) * scale, width: floor.width * scale, height: floor.height * scale } : reflectionPlanes({ x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale }, innerHeight > innerWidth).floor,
       } : undefined;
       paintReflections(reflectionCtx, reflectionFrame, { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale },
         { x: gx, y: gy, width: gw, height: gh }, innerHeight > innerWidth, screenColor.strength * tvGain, { ...getPresentation()?.reflection, floor: 0 },
@@ -177,8 +180,12 @@ export function initRoomLighting() {
     glow(gx + gw, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain, 0, 60, true);
     glow(gx + gw / 2, gy + gh, gw * .64, Math.max(gh * .17, 8), floorColor, rimGain, 0, 60, true);
     // Project a wider pool below the glass: cabinet first, floor further away.
-    glow(gx + gw / 2, gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain * (mood.cabinet ?? 100) / 100);
-    glow(gx + gw / 2, gy + gh + height * .29, gw * .95, height * .25, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100);
+    const cabinetBox=supportElement(getPresentation())?.getBoundingClientRect(), floorPlane=photoFloor();
+    const toScene=(r: {x:number;y:number;width:number;height:number})=>({x:(r.x-bounds.x)*scale,y:(r.y-bounds.y)*scale,width:r.width*scale,height:r.height*scale});
+    const cabinetClip=stage.classList.contains('modular-room') && cabinetBox ? toScene(cabinetBox) : undefined;
+    const floorClip=stage.classList.contains('modular-room') ? toScene(floorPlane) : undefined;
+    glow(gx + gw / 2, cabinetClip ? cabinetClip.y + cabinetClip.height*.35 : gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain * (mood.cabinet ?? 100) / 100,0,60,false,cabinetClip);
+    glow(gx + gw / 2, floorClip ? Math.max(floorClip.y,gy+gh) + height*.12 : gy + gh + height * .29, gw * .95, height * .25, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100,0,60,false,floorClip);
     const power = mood.intensity / 100;
     if (['blue-night', 'classic-night', 'moonlight'].includes(mood.preset)) glow(width * .12, height * .25, width * .6, height * .7,
       { r: 100, g: 140, b: 210, strength: power * .09 });

@@ -1,6 +1,7 @@
 import { getPresentation } from './scene-presentation';
 import { paintTv } from './tv-paint';
 import { gradeFilter, type Mood, type Zone } from './studio-model';
+import { photoFloor } from './room-geometry';
 type Rect = { x: number; y: number; width: number; height: number };
 const textures = new Map<string, HTMLImageElement>();
 let cached: { key: string; canvas: HTMLCanvasElement } | undefined;
@@ -22,7 +23,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const detached = document.querySelector('#stage')?.classList.contains('free-room');
   const bx = back ? (back.x - scene.x) * scale : x, by = back ? (back.y - scene.y) * scale : y, bw = back ? back.width * scale : w, bh = back ? back.height * scale : h;
   const modular = Boolean(getPresentation()?.environment);
-  const cabinet = Math.round(modular ? by + bh * .65 : detached ? by + bh * (innerHeight > innerWidth ? .47 : .9) : y + h * (value('tv-feet-y') + value('tv-feet-h')));
+  const cabinet = Math.round(modular ? (photoFloor().y - scene.y) * scale : detached ? by + bh * (innerHeight > innerWidth ? .47 : .9) : y + h * (value('tv-feet-y') + value('tv-feet-h')));
   const floor = modular ? cabinet : Math.round(detached ? by + bh * (innerHeight > innerWidth ? .62 : 1) : cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75));
   const power = mood.intensity / 100;
   const free = document.querySelector('#stage')?.classList.contains('free-room');
@@ -33,6 +34,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const texture = document.createElement('canvas'); texture.width = buffer.width; texture.height = buffer.height;
   const textureCtx = texture.getContext('2d'); if (!textureCtx) return;
   for (const zone of ['wall', 'cabinet', 'floor', 'tv'] as Zone[]) {
+    if (zone !== 'tv' && mood.preset === 'neutral' && !mood.grade && !mood.zones?.[zone]) continue;
     const backgroundImage = free && zone !== 'tv' ? backdrop : image;
     if (!backgroundImage?.complete || !backgroundImage.naturalWidth) continue;
     const grade = { ...mood.grade, ...mood.zones?.[zone] };
