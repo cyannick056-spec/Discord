@@ -453,7 +453,7 @@
 }
 .home-mode .tv-face,
 .home-mode .tv-scene.aspect-4x3 .tv-face {
-  --room-art: url('/crt-room-wide.webp');
+  --room-art: url('/crt-room-neutral-wide.webp');
   --glass-x: 19.1%;
   --glass-y: 15.5%;
   --glass-w: 61.9%;
@@ -472,7 +472,7 @@
   filter: none;
 }
 .home-mode .tv-scene.aspect-4x3 .tv-face {
-  --room-art: url('/crt-room-4x3.webp');
+  --room-art: url('/crt-room-neutral-4x3.webp');
   --glass-x: 27.2%;
   --glass-y: 14.1%;
   --glass-w: 47.6%;
@@ -548,7 +548,7 @@
   }
   .home-mode .tv-face,
   .home-mode .tv-scene.aspect-4x3 .tv-face {
-    --room-art: url('/crt-room-portrait-wide.webp');
+    --room-art: url('/crt-room-neutral-portrait-wide.webp');
     --glass-x: 16%;
     --glass-y: 16.5%;
     --glass-w: 68.5%;
@@ -557,7 +557,7 @@
     --status-light-y: 39.8%;
   }
   .home-mode .tv-scene.aspect-4x3 .tv-face {
-    --room-art: url('/crt-room-portrait-4x3.webp');
+    --room-art: url('/crt-room-neutral-portrait-4x3.webp');
     --glass-x: 19.5%;
     --glass-y: 13.2%;
     --glass-w: 61%;
@@ -1044,4 +1044,33 @@
   .editor-sidebar select[size] { min-height: 62px; }
   .editor-nudge button { min-width: 42px; min-height: 42px; }
   #editorSave { position: sticky; bottom: 0; z-index: 3; min-height: 45px; background: #315865; }
+}
+
+/* Neutral room textures receive their illumination from the scene canvases.
+   This overrides the old baked 3 a.m. dimming, including the phone variant. */
+.home-mode .tv-face::before,
+.home-mode .tv-face::after { filter: none; }
+.room-scene { isolation: isolate; }
+.room-lighting { display: contents; pointer-events: none; }
+.room-lighting canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#roomShade { z-index: 20; }
+#roomTint { z-index: 21; mix-blend-mode: screen; }
+.decor-light-bulb {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 9%, var(--bulb-color) 20%, transparent 70%);
+}
+.decor-light-bulb.is-off { background: radial-gradient(circle, #575b60 0 13%, #25292d 22%, transparent 50%); }
+.editor-properties input[type=color] { width: 100%; height: 34px; padding: 2px; }
+#editorAmbient { max-width: 110px; }
+#editorAmbientValue { min-width: 3em; }
+@media (max-width: 520px) and (max-height: 360px) {
+  .room-lighting canvas { display: none; }
 }

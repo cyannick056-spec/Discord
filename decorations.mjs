@@ -29,15 +29,18 @@ function inRange(value, low, high) {
 
 function validManifest(input) {
   if (!input || !Array.isArray(input.items) || input.items.length > 65) return false;
+  if (input.ambient !== undefined && !inRange(input.ambient, 25, 100)) return false;
   const ids = new Set();
   let decorations = 0;
   return input.items.every((item) => {
     const slot = item?.kind === 'viewer-slot';
+    const light = item?.kind === 'light';
     if (!slot) decorations++;
     if (!item || typeof item.id !== 'string' ||
         (slot ? !viewerSlotIds.has(item.id) : !/^[a-f0-9-]{36}$/.test(item.id)) ||
         decorations > 60 || ids.has(item.id) ||
-        (!slot && (typeof item.asset !== 'string' || !assetPattern.test(item.asset))) ||
+        (item.kind !== undefined && !slot && !light) ||
+        (!slot && !light && (typeof item.asset !== 'string' || !assetPattern.test(item.asset))) ||
         typeof item.name !== 'string' || item.name.length > 70 ||
         !item.placements || typeof item.placements !== 'object') return false;
     ids.add(item.id);
@@ -52,7 +55,11 @@ function validManifest(input) {
       (p.brightness === undefined || inRange(p.brightness, 35, 130)) &&
       (p.saturation === undefined || inRange(p.saturation, 0, 150)) &&
       (p.hue === undefined || inRange(p.hue, -60, 60)) &&
-      (p.shadow === undefined || inRange(p.shadow, 0, 100)));
+      (p.shadow === undefined || inRange(p.shadow, 0, 100)) &&
+      (p.light === undefined || (p.light && /^#[a-fA-F0-9]{6}$/.test(p.light.color) &&
+        inRange(p.light.intensity, 0, 100) && inRange(p.light.radius, 1, 12) &&
+        (p.light.x === undefined || inRange(p.light.x, 0, 100)) &&
+        (p.light.y === undefined || inRange(p.light.y, 0, 100)))));
   });
 }
 
@@ -117,7 +124,8 @@ export function installDecorations(app, { directory, editKey }) {
     try {
       await mkdir(directory, { recursive: true });
       const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);
-      await writeFile(temporary, JSON.stringify({ items: req.body.items }));
+      await writeFile(temporary, JSON.stringify({ items: req.body.items,
+        ...(req.body.ambient !== undefined ? { ambient: req.body.ambient } : {}) }));
       await rename(temporary, manifestPath);
       res.set('Cache-Control', 'no-store').json({ ok: true });
     } catch (error) {
