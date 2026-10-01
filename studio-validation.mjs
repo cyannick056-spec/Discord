@@ -1,3 +1,4 @@
+import { materialIds, MAX_LIBRARY_ITEMS } from './material-catalog.mjs';
 import { tvIds } from './tv-catalog.mjs';
 import { roomIds, propIds } from './room-catalog.mjs';
 const finite = (value, low, high) => typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high;
@@ -50,7 +51,8 @@ export function validMood(m) {
 }
 export function validStudioPlacement(p) {
   const t = p.transform;
-  return (p.lava === undefined || (object(p.lava) && (p.lava.motion === undefined || typeof p.lava.motion === 'boolean') && optionalNumbers(p.lava, { speed: [.2, 3] }))) &&
+  return (p.material === undefined || (object(p.material) && materialIds.has(p.material.preset) && (p.material.scope === undefined || ['top','all'].includes(p.material.scope)) && (p.material.color === undefined || /^#[a-fA-F0-9]{6}$/.test(p.material.color)) && optionalNumbers(p.material, { strength: [0,100], scale: [.25,4], roughness: [0,100] }))) &&
+    (p.lava === undefined || (object(p.lava) && (p.lava.motion === undefined || typeof p.lava.motion === 'boolean') && optionalNumbers(p.lava, { speed: [.2, 3] }))) &&
     (t === undefined || (object(t) &&
     (t.surface === undefined || ['free', 'wall', 'cabinet', 'floor', 'ceiling', 'left-wall', 'right-wall', 'shelf'].includes(t.surface)) &&
     ['auto', 'flipX', 'flipY'].every(key => t[key] === undefined || typeof t[key] === 'boolean') &&
@@ -64,6 +66,6 @@ export function validCollections(input, validateRoom) {
   return ['profiles', 'versions'].every(key => input[key] === undefined || (Array.isArray(input[key]) && input[key].length <= (key === 'profiles' ? 6 : 3) &&
     new Set(input[key].map(v => v?.id)).size === input[key].length && input[key].every(v => object(v) && uuid(v.id) && typeof v.name === 'string' && v.name.length <= 70 && object(v.room) &&
       !['profiles', 'versions', 'library'].some(key => v.room[key] !== undefined) && validateRoom(v.room)))) &&
-    (input.library === undefined || (Array.isArray(input.library) && input.library.length <= 120 && input.library.every(i => object(i) && uuid(i.id) && typeof i.name === 'string' && i.name.length <= 70 && validMetadata(i) &&
+    (input.library === undefined || (Array.isArray(input.library) && input.library.length <= MAX_LIBRARY_ITEMS && input.library.every(i => object(i) && uuid(i.id) && typeof i.name === 'string' && i.name.length <= 70 && validMetadata(i) &&
       (i.kind === 'shape' || i.kind === 'builtin' || (i.kind === undefined && typeof i.asset === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(i.asset))))));
 }

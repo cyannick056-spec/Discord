@@ -46,7 +46,7 @@ export function paintReflections(ctx: CanvasRenderingContext2D, frame: HTMLCanva
     else { ctx.moveTo(plane.x + plane.width * .06, plane.y); ctx.lineTo(plane.x + plane.width * .94, plane.y); ctx.lineTo(plane.x + plane.width, plane.y + plane.height); ctx.lineTo(plane.x, plane.y + plane.height); }
     ctx.closePath(); ctx.clip();
     ctx.beginPath(); ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height); if (tv) ctx.roundRect(tv.x, tv.y, tv.width, tv.height, Math.min(tv.width, tv.height) * .012); ctx.clip('evenodd');
-    const materialGain = plane.material === 'glass' ? 1.4 : plane.material === 'matte' ? .45 : 1;
+    const materialGain = (plane.material === 'glass' ? 1.4 : plane.material === 'metal' ? 1.25 : plane.material === 'satin' ? 1.1 : plane.material === 'stone' ? .8 : plane.material === 'matte' ? .45 : 1) * (plane.roughness === undefined ? 1 : 1.3 - plane.roughness / 100);
     // Wood scatters light; a white frame must not turn the whole floor white.
     ctx.globalAlpha = Math.min(.4, strength * (settings?.intensity ?? 65) / 100 * gain * materialGain * (name === 'table' ? .32 : .16));
     ctx.filter = `blur(${settings?.blur ?? 12}px)`; ctx.drawImage(buffer, cx - targetWidth / 2, top, targetWidth, targetHeight); ctx.restore();

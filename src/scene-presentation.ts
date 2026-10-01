@@ -15,6 +15,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   const tiny = innerWidth <= 520 && innerHeight <= 360;
   configureTvModel(face, p, tiny);
   stage.classList.toggle('modular-room', home && Boolean(p?.environment));
+  stage.classList.toggle('flat-panel', home && p?.tvModel === 'flat-modern');
   // All built-in choices use the original photographed room. Legacy CSS-room
   // manifests retain their saved geometry but never recreate synthetic furniture.
   stage.classList.toggle('free-room', home && !tiny || p?.style === 'custom');

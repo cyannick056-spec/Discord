@@ -6,6 +6,11 @@ const panes = {
   wide: [[[0, 0], [.073, .006], [.073, .69], [0, .732]], [[.096, .033], [.134, .088], [.134, .661], [.096, .682]]],
   portrait: [[[0, .023], [.037, .047], [.037, .552], [0, .569]], [[.064, .076], [.099, .104], [.099, .532], [.064, .547]]],
 };
+const closePanes = {
+  wide: [[[.041,.071],[.267,.071],[.267,.681],[.041,.681]], [[.281,.071],[.493,.071],[.493,.681],[.281,.681]]],
+  portrait: [[[.045,.087],[.294,.087],[.294,.563],[.045,.563]], [[.314,.087],[.581,.087],[.581,.563],[.314,.563]]],
+};
+let closeRoom = false;
 let canvas: HTMLCanvasElement | undefined, image: HTMLImageElement, config: Presentation['rain'];
 let layer: HTMLDivElement;
 let orientation: 'wide' | 'portrait' = 'wide', active = false, animation = 0, last = 0, elapsed = 0;
@@ -24,7 +29,8 @@ export function configureWindowRain(backdrop: HTMLElement, photo: HTMLImageEleme
   layer.style.cssText = backdrop.style.cssText;
   canvas.style.filter = mood ? gradeFilter(mood, 'wall') : '';
   image = photo; config = p?.rain; orientation = portrait ? 'portrait' : 'wide';
-  active = p?.environment === 'rain' && config?.enabled !== false && (config?.intensity ?? 55) > 0 && !photo.hidden;
+  closeRoom = p?.environment === 'rain-close';
+  active = (p?.environment === 'rain' || closeRoom) && config?.enabled !== false && (config?.intensity ?? 55) > 0 && !photo.hidden;
   canvas.hidden = !active;
   layer.hidden = !active;
   canvas.dataset.motion = motionPaused() ? 'reduced' : 'running';
@@ -46,8 +52,9 @@ function draw(time: number) {
   c.clearRect(0, 0, w, h);
   const cover = Math.max(w / image.naturalWidth, h / image.naturalHeight), iw = image.naturalWidth * cover, ih = image.naturalHeight * cover;
   const ox = image.style.objectPosition === 'left center' ? 0 : (w - iw) / 2, oy = (h - ih) / 2;
+  const glassPanes = (closeRoom ? closePanes : panes)[orientation];
   c.save(); c.beginPath();
-  for (const pane of panes[orientation]) { pane.forEach(([x,y], i) => i ? c.lineTo(ox + x * iw, oy + y * ih) : c.moveTo(ox + x * iw, oy + y * ih)); c.closePath(); } c.clip();
+  for (const pane of glassPanes) { pane.forEach(([x,y], i) => i ? c.lineTo(ox + x * iw, oy + y * ih) : c.moveTo(ox + x * iw, oy + y * ih)); c.closePath(); } c.clip();
   // A TV moved in front of the window still occludes its rain, including its bezel.
   const face = document.querySelector<HTMLElement>('.tv-face');
   if (face) {
@@ -58,7 +65,7 @@ function draw(time: number) {
   }
   const strength = (config?.intensity ?? 55) / 100;
   // Allocate particles inside each pane, including the narrow portrait window.
-  for (const [index, pane] of panes[orientation].entries()) {
+  for (const [index, pane] of glassPanes.entries()) {
     const point = (u: number, v: number) => {
       const topX = pane[0][0] + (pane[1][0] - pane[0][0]) * u, topY = pane[0][1] + (pane[1][1] - pane[0][1]) * u;
       const bottomX = pane[3][0] + (pane[2][0] - pane[3][0]) * u, bottomY = pane[3][1] + (pane[2][1] - pane[3][1]) * u;

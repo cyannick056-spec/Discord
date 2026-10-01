@@ -1,7 +1,8 @@
+import { materials } from '../material-catalog.mjs';
 import { props } from '../room-catalog.mjs';
 import type { Presentation } from './presentation-model';
 export type Point = [number, number];
-export type SurfacePlane = { x: number; y: number; width: number; height: number; quad?: Point[]; material?: 'wood' | 'matte' | 'glass' };
+export type SurfacePlane = { x: number; y: number; width: number; height: number; quad?: Point[]; material?: 'wood' | 'matte' | 'glass' | 'satin' | 'metal' | 'stone'; roughness?: number };
 
 export function supportElement(p?: Presentation) {
   const boxes = [...document.querySelectorAll<HTMLElement>('.decoration-box[data-support=true]:not(.decor-depth-outline)')].filter(el => el.offsetHeight > 0);
@@ -21,7 +22,7 @@ export function supportPlane(p?: Presentation): SurfacePlane | undefined {
   });
   if (quad.some(q => q.some(v => !Number.isFinite(v)))) return;
   const xs = quad.map(q => q[0]), ys = quad.map(q => q[1]);
-  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys), quad, material: meta?.material ?? 'wood' };
+  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys), quad, material: materials.find(m => m.id === box.dataset.material && m.id !== 'original')?.finish ?? meta?.material ?? 'wood', roughness: box.dataset.roughness ? Number(box.dataset.roughness) : undefined };
 }
 export function supportContact(plane: SurfacePlane) {
   if (!plane.quad) return { x: plane.x + plane.width / 2, y: plane.y + plane.height * .5 };
