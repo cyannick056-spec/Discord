@@ -26,7 +26,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const floor = modular ? cabinet : Math.round(detached ? by + bh * (innerHeight > innerWidth ? .62 : 1) : cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75));
   const power = mood.intensity / 100;
   const free = document.querySelector('#stage')?.classList.contains('free-room');
-  const key = JSON.stringify([url, getPresentation()?.tvPaint, backdrop?.src, bx, by, bw, bh, backdrop?.complete, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
+  const key = JSON.stringify([url, getPresentation()?.tvPaint, backdrop?.src, backdrop?.style.objectPosition, bx, by, bw, bh, backdrop?.complete, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
   if (cached?.key === key) { ctx.drawImage(cached.canvas, 0, 0); return; }
   const target = ctx, buffer = document.createElement('canvas'); buffer.width = ctx.canvas.width; buffer.height = ctx.canvas.height;
   const bufferContext = buffer.getContext('2d'); if (!bufferContext) return; ctx = bufferContext;
@@ -42,7 +42,8 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
     const cover = free && zone !== 'tv' && getComputedStyle(backgroundImage).objectFit === 'cover';
     const ratio = cover ? Math.max(photo.width / backgroundImage.naturalWidth, photo.height / backgroundImage.naturalHeight) : 1;
     const sw = cover ? photo.width / ratio : backgroundImage.naturalWidth, sh = cover ? photo.height / ratio : backgroundImage.naturalHeight;
-    const drawTexture = () => textureCtx.drawImage(backgroundImage, (backgroundImage.naturalWidth - sw) / 2, (backgroundImage.naturalHeight - sh) / 2, sw, sh, photo.x, photo.y, photo.width, photo.height);
+    const sx = cover && backgroundImage.style.objectPosition === 'left center' ? 0 : (backgroundImage.naturalWidth - sw) / 2;
+    const drawTexture = () => textureCtx.drawImage(backgroundImage, sx, (backgroundImage.naturalHeight - sh) / 2, sw, sh, photo.x, photo.y, photo.width, photo.height);
     // Color the full texture before cutting its silhouette. Multiply fills on
     // antialiased clip edges used to turn the TV contour and zone seams white.
     textureCtx.clearRect(0, 0, texture.width, texture.height);
