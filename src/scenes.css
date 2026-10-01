@@ -941,6 +941,15 @@
 .preview-mode .decor-rotate { left: calc(50% - 8px); top: -25px; cursor: grab; }
 .preview-mode .decor-depth-outline { pointer-events: none; }
 .preview-mode .decor-depth-move { left: calc(50% - 8px); top: calc(50% - 8px); cursor: move; }
+.preview-mode .decor-resize-se { inset: auto -9px -9px auto; cursor: nwse-resize; }
+.preview-mode .decor-resize-nw { inset: -9px auto auto -9px; cursor: nwse-resize; }
+.preview-mode .decor-resize-ne { inset: -9px -9px auto auto; cursor: nesw-resize; }
+.preview-mode .decor-resize-sw { inset: auto auto -9px -9px; cursor: nesw-resize; }
+.preview-mode .decoration-box.is-locked { cursor: default; }
+.preview-mode .decoration-box.is-locked .decor-handle { display: none; }
+.preview-mode.pan-tool, .preview-mode.pan-tool .decoration-box { cursor: grab; }
+.preview-mode.is-panning, .preview-mode.is-panning .decoration-box { cursor: grabbing; }
+.decor-grid { position: absolute; z-index: 1000; pointer-events: none; background-image: linear-gradient(to right, #c6e6ff40 1px, transparent 1px), linear-gradient(to bottom, #c6e6ff40 1px, transparent 1px); background-size: 5% 5%; border: 1px solid #c6e6ff70; }
 .preview-mode .scene-controls { display: none !important; }
 
 .stage.arcade-mode .arcade-scene { z-index: 2; }
@@ -1002,21 +1011,22 @@
 .editor-toolbar { flex: 0 0 auto; }
 .editor-upload { padding: 6px 9px; border-radius: 6px; border: 1px solid #647d8b; background: #1d2b36; cursor: pointer; }
 .editor-upload input { display: none; }
-.editor-body { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 12px; flex: 1; min-height: 0; }
+.editor-body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(270px, 27vw, 340px); gap: 12px; flex: 1; min-height: 0; }
 .preview-frame { position: relative; min-height: 0; overflow: hidden; border: 1px solid #536772; background: #05080c; }
 .preview-frame iframe { position: absolute; border: 0; transform-origin: top left; }
 .preview-zoom { position: absolute; z-index: 2; right: 7px; bottom: 7px; display: flex; gap: 3px; padding: 3px; border-radius: 9px; background: #08121bdc; box-shadow: 0 2px 8px #0009; }
 .preview-zoom button { min-width: 35px; min-height: 35px; padding: 4px; font-size: 16px; }
 .preview-zoom #previewZoomReset { min-width: 52px; font-size: 12px; }
-.editor-sidebar { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow-y: auto; }
+.editor-sidebar { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 2px 5px 8px 2px; }
 .editor-nudge { display: flex; gap: 5px; align-items: center; }
 .editor-nudge[hidden] { display: none; }
 .editor-nudge span { margin-right: auto; }
 .editor-nudge button { min-width: 35px; min-height: 35px; padding: 3px; font-size: 17px; }
 .editor-sidebar > label { align-items: stretch; flex-direction: column; }
 .editor-sidebar select[size] { width: 100%; min-height: 84px; }
-.editor-properties { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.editor-properties { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .editor-properties label { display: flex; flex-direction: column; align-items: stretch; font-size: 10px; }
+.editor-properties > *, .editor-properties input, .editor-properties select { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .editor-properties input[type=number] { width: 100%; box-sizing: border-box; }
 .editor-properties .editor-wide { grid-column: span 2; }
 .editor-properties .editor-wide select { width: 100%; }
@@ -1027,6 +1037,27 @@
 #editorAspectLabel[hidden], #decorCopyAspect[hidden] { display: none !important; }
 #editorStatus { min-height: 2em; color: #b7dae8; }
 .editor-tip { color: #9aafb9; line-height: 1.3; }
+.editor-tip summary { cursor: pointer; padding: 8px 0; color: #d4e9f4; }
+.editor-history, .editor-tools, .editor-object-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.editor-history button:disabled, .decor-editor button:disabled { opacity: .4; cursor: default; }
+.editor-tools { border-block: 1px solid #304553; padding: 8px 0; }
+.editor-tools label { display: flex; align-items: center; gap: 5px; }
+.editor-tools input[type=range] { width: 80px; padding: 0; }
+.editor-tools button[aria-pressed=true] { background: #315f75; border-color: #a4d7ed; }
+.editor-tools output { min-width: 3em; }
+.editor-environment { min-width: 0; }
+.editor-environment > summary { display: none; }
+.editor-light-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.editor-object-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.editor-object-actions button { grid-column: auto; }
+.editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #304553; padding-top: 8px; }
+.editor-footer > div { display: flex; flex-direction: column; min-width: 0; }
+#editorDirty { font-size: 10px; color: #9fbacb; }
+.editor-footer #editorStatus { min-height: 1.3em; }
+.editor-footer #editorSave { flex: 0 0 auto; min-height: 40px; background: #315865; }
+.editor-menu { position: fixed; z-index: 110; width: 230px; padding: 6px; border: 1px solid #6d94aa; border-radius: 10px; background: #101e2c; box-shadow: 0 8px 24px #000b; }
+.editor-menu[hidden] { display: none !important; }
+.editor-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 8px; }
 /* Keep the photographed TV inside the phone's landscape Activity viewport. */
 @media (pointer: coarse) and (orientation: landscape) and (min-height: 361px) {
   .home-mode .tv-scene,
@@ -1055,6 +1086,17 @@
   .decor-editor button, .decor-editor select, .decor-editor input:not([type=range]) { min-height: 39px; box-sizing: border-box; }
   .editor-sidebar select[size] { min-height: 62px; }
   .editor-nudge button { min-width: 42px; min-height: 42px; }
+  .editor-tools { flex-wrap: wrap; flex-shrink: 0; gap: 6px; padding-block: 6px; }
+  .editor-tools > * { flex: 0 0 auto; white-space: nowrap; }
+  .editor-tools > label { font-size: 11px; }
+  .editor-environment { width: 100%; }
+  .editor-environment > summary { display: block; padding: 7px; cursor: pointer; border: 1px solid #647d8b; border-radius: 6px; background: #1d2b36; }
+  .editor-light-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: 6px; }
+  .editor-light-tools label { flex-wrap: wrap; white-space: normal; font-size: 11px; }
+  .editor-history { gap: 3px; }
+  .editor-history button { padding-inline: 5px; font-size: 11px; }
+  .editor-header { font-size: 13px; flex-wrap: nowrap; }
+  .editor-footer { gap: 6px; font-size: 11px; }
   #editorSave { position: sticky; bottom: 0; z-index: 3; min-height: 45px; background: #315865; }
 }
 

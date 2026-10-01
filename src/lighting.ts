@@ -3,8 +3,11 @@ import { frameColor, blendColor, type LightColor } from './light-color';
 export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number };
 let sources: DecorationLight[] = [];
 let ambient = 62;
+export type RoomMood = { preset: 'neutral' | 'blue-night' | 'warm'; intensity: number; tvGlow: number };
+let mood: RoomMood = { preset: 'neutral', intensity: 65, tvGlow: 100 };
 export function setDecorationLights(lights: DecorationLight[]) { sources = lights; }
 export function setRoomAmbient(value: number) { ambient = Math.min(100, Math.max(25, value)); }
+export function setRoomMood(value?: RoomMood) { mood = value ?? { preset: 'neutral', intensity: 65, tvGlow: 100 }; }
 
 export function initRoomLighting() {
   const stage = document.querySelector<HTMLElement>('#stage')!;
@@ -35,7 +38,7 @@ export function initRoomLighting() {
 
   function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1) {
     if (!shadowCtx || !tintCtx || rx <= 0 || ry <= 0) return;
-    const power = Math.min(1, color.strength * gain);
+    const power = Math.min(2, color.strength * gain);
     if (power < .005) return;
     for (const [ctx, isTint] of [[shadowCtx, false], [tintCtx, true]] as const) {
       ctx.save();
@@ -43,7 +46,7 @@ export function initRoomLighting() {
       ctx.globalCompositeOperation = isTint ? 'source-over' : 'destination-out';
       const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
       const rgb = `${Math.round(color.r)},${Math.round(color.g)},${Math.round(color.b)}`;
-      const alpha = power * (isTint ? .23 : .9);
+      const alpha = Math.min(.95, power * (isTint ? .23 : .9));
       gradient.addColorStop(0, `rgba(${isTint ? rgb : '0,0,0'},${alpha})`);
       gradient.addColorStop(.35, `rgba(${isTint ? rgb : '0,0,0'},${alpha * .6})`);
       gradient.addColorStop(1, `rgba(${isTint ? rgb : '0,0,0'},0)`);
@@ -65,8 +68,15 @@ export function initRoomLighting() {
     }
     shadowCtx.clearRect(0, 0, width, height);
     tintCtx.clearRect(0, 0, width, height);
-    shadowCtx.fillStyle = `rgba(0,0,0,${1 - ambient / 100})`;
+    const blueNight = mood.preset === 'blue-night';
+    const colored = mood.preset !== 'neutral';
+    const filterPower = colored ? mood.intensity / 100 : 0;
+    shadowCtx.fillStyle = `rgba(${blueNight ? '2,7,20' : '0,0,0'},${Math.min(.9, 1 - ambient / 100 + (blueNight ? filterPower * .12 : 0))})`;
     shadowCtx.fillRect(0, 0, width, height);
+    if (colored) {
+      tintCtx.fillStyle = `rgba(${blueNight ? '32,73,175' : '164,89,35'},${filterPower * .32})`;
+      tintCtx.fillRect(0, 0, width, height);
+    }
     const screen = document.querySelector<HTMLElement>(stage.classList.contains('arcade-mode') ? '#arcadeScreen' : '#homeScreenMount')!;
     const glass = screen.getBoundingClientRect();
     const gx = (glass.left - bounds.left) * scale, gy = (glass.top - bounds.top) * scale;
@@ -96,10 +106,17 @@ export function initRoomLighting() {
     floorColor = blendColor(floorColor, floorTarget, easing);
     if (!previewMode) document.querySelector<HTMLIFrameElement>('#editorPreview')?.contentWindow?.postMessage(
       { type: 'room-video-light', screen: screenColor, floor: floorColor }, location.origin);
-    glow(gx + gw / 2, gy + gh / 2, gw * .88, gh * 1.05, screenColor, .7);
+    const tvGain = mood.tvGlow / 100;
+    glow(gx + gw / 2, gy + gh / 2, gw * .88, gh * 1.05, screenColor, .7 * tvGain);
+    // Narrow pools on the bezel make the screen's color visible on the TV
+    // itself as well as the room. The live glass is cut out afterwards.
+    glow(gx + gw / 2, gy, gw * .62, Math.max(gh * .12, 8), screenColor, tvGain);
+    glow(gx, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, tvGain);
+    glow(gx + gw, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, tvGain);
+    glow(gx + gw / 2, gy + gh, gw * .64, Math.max(gh * .17, 8), floorColor, tvGain);
     // Project a wider pool below the glass: cabinet first, floor further away.
-    glow(gx + gw / 2, gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor);
-    glow(gx + gw / 2, gy + gh + height * .29, gw * .95, height * .25, floorColor, .46);
+    glow(gx + gw / 2, gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain);
+    glow(gx + gw / 2, gy + gh + height * .29, gw * .95, height * .25, floorColor, .65 * tvGain);
     const boxes = new Map([...document.querySelectorAll<HTMLElement>('.decoration-box:not(.decor-depth-outline)')].map(el => [el.dataset.id, el]));
     for (const light of sources) {
       const box = boxes.get(light.id);

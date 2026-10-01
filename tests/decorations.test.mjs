@@ -24,8 +24,10 @@ test('lighting saves round-trip without losing legacy placements and reject inva
     assert.deepEqual(await (await fetch(url)).json(), legacy);
     const updated = structuredClone(legacy);
     updated.ambient = 62;
+    updated.mood = { preset: 'blue-night', intensity: 65, tvGlow: 150 };
     updated.items[0].placements['home-landscape'].light = { color: '#ffcc88', intensity: 75, radius: 6, x: 50, y: 20 };
     updated.items[0].placements['home-landscape'].behindTv = true;
+    updated.items[0].placements['home-landscape'].locked = true;
     updated.items.push({ id: '22222222-2222-4222-8222-222222222222', kind: 'light', asset: '', name: 'Lámpara',
       placements: { 'home-portrait-4x3': { ...placement, light: { color: '#8899ff', intensity: 50, radius: 4 } } } });
     assert.equal((await save(updated)).status, 200);
@@ -42,6 +44,13 @@ test('lighting saves round-trip without losing legacy placements and reject inva
     const invalidDepth = structuredClone(updated);
     invalidDepth.items[0].placements['home-landscape'].behindTv = 'yes';
     assert.equal((await save(invalidDepth)).status, 400);
+    for (const mood of [{ preset: 'neon', intensity: 60, tvGlow: 100 },
+      { preset: 'blue-night', intensity: -1, tvGlow: 100 }, { preset: 'warm', intensity: 50, tvGlow: 201 },
+      { preset: 'neutral', intensity: '65', tvGlow: 100 }]) {
+      assert.equal((await save({ ...updated, mood })).status, 400);
+    }
+    const invalidLock = structuredClone(updated); invalidLock.items[0].placements['home-landscape'].locked = 1;
+    assert.equal((await save(invalidLock)).status, 400);
     assert.deepEqual(await (await fetch(url)).json(), updated);
   } finally {
     await new Promise(resolve => server.close(resolve));

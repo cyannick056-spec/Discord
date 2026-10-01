@@ -98,7 +98,7 @@
         <section id="decorEditor" class="decor-editor" role="dialog" aria-modal="true" aria-label="Editor de decoración" hidden>
           <header class="editor-header">
             <strong>Decorar Shis Stream</strong>
-            <button id="editorClose" type="button" aria-label="Cerrar editor">×</button>
+            <div class="editor-history"><button id="editorUndo" type="button" disabled title="Ctrl + Z">Deshacer</button><button id="editorRedo" type="button" disabled title="Ctrl + Shift + Z">Rehacer</button><button id="editorClose" type="button" aria-label="Cerrar editor">×</button></div>
           </header>
           <div id="editorAuth" class="editor-auth">
             <p>Introduce tu clave de edición para cambiar la decoración compartida.</p>
@@ -113,6 +113,17 @@
               <label class="editor-upload">Añadir imagen<input id="editorUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" /></label>
               <button id="editorAddLight" type="button">Añadir luz</button>
               <label>Ambiente <input id="editorAmbient" type="range" min="25" max="100" value="62" /><output id="editorAmbientValue">62%</output></label>
+            </div>
+            <div class="editor-tools" aria-label="Herramientas de edición">
+              <button id="editorSelectTool" type="button" aria-pressed="true">Seleccionar</button>
+              <button id="editorPanTool" type="button" aria-pressed="false">Mano</button>
+              <label><input id="editorGrid" type="checkbox" /> Rejilla</label>
+              <label><input id="editorSnap" type="checkbox" /> Ajustar a rejilla</label>
+              <details id="editorEnvironment" class="editor-environment" open><summary>Ambiente y filtros</summary><div class="editor-light-tools">
+              <label>Filtro del entorno <select id="editorMood"><option value="neutral">Neutro</option><option value="blue-night">Noche azul</option><option value="warm">Cálido</option></select></label>
+              <label>Filtro <input id="editorMoodIntensity" type="range" min="0" max="100" value="65" /><output id="editorMoodIntensityValue">65%</output></label>
+              <label>Luz TV <input id="editorTvGlow" type="range" min="0" max="200" value="100" /><output id="editorTvGlowValue">100%</output></label>
+              </div></details>
             </div>
             <div class="editor-body">
               <div id="previewFrame" class="preview-frame">
@@ -133,6 +144,9 @@
                   <button type="button" data-dx="0.5" aria-label="Mover a la derecha">→</button>
                 </div>
                 <div id="editorProperties" class="editor-properties" hidden>
+                  <label class="editor-wide">Nombre <input id="decorName" type="text" maxlength="70" /></label>
+                  <div class="editor-object-actions editor-wide"><button type="button" data-editor-command="duplicate">Duplicar</button><button type="button" data-editor-command="center">Centrar</button><button type="button" data-editor-command="backward" title="Bajar una capa">Capa −</button><button type="button" data-editor-command="forward" title="Subir una capa">Capa +</button></div>
+                  <label class="editor-check"><input id="decorLocked" type="checkbox" /> Bloquear posición</label>
                   <label class="editor-wide">Posición relativa a <select id="decorAnchor"><option value="frame">TV / máquina arcade</option><option value="scene">Escena completa</option></select></label>
                   <label>Izquierda % <input id="decorX" type="number" min="-30" max="130" step="0.1" /></label>
                   <label>Arriba % <input id="decorY" type="number" min="-35" max="145" step="0.1" /></label>
@@ -159,10 +173,12 @@
                   <button id="decorCopyAspect" type="button">Copiar al otro tamaño TV</button>
                   <button id="decorRemove" type="button">Quitar decoración</button>
                 </div>
-                <button id="editorSave" type="button">Guardar para todos</button>
-                <span id="editorStatus" role="status"></span>
-                <small class="editor-tip">Los espacios Espectador 1–5 muestran bases roja, azul, verde, amarilla y negra. En Discord se llenan por orden de llegada; sin espectadores solo aparecen aquí para editarlos. Arrastra para mover, tira de la esquina para cambiar tamaño y del círculo para girar. En PC usa Ctrl + rueda sobre la vista previa para acercar donde apunta el cursor. En móvil pellizca con dos dedos para acercar y desplazar la escena; las flechas ajustan la posición. Shift da más precisión con ratón.</small>
+                <details class="editor-tip"><summary>Ratón y atajos</summary><p>Clic para seleccionar; doble clic para renombrar; clic derecho para acciones. Arrastra para mover, usa las esquinas para cambiar tamaño y el círculo para girar. Rueda sobre una figura: tamaño; Alt + rueda: giro; Ctrl + rueda: zoom. Mano, botón central o Espacio + arrastrar: desplazar la vista.</p><p>Flechas: mover; Shift: pasos grandes; Alt: precisión. Ctrl + D: duplicar; Supr: quitar; L: bloquear; H: ocultar; Ctrl + Z / Ctrl + Shift + Z: deshacer/rehacer; Ctrl + S: guardar. Shift afina el arrastre y ajusta el giro a pasos de 15°. En móvil, pellizca para acercar y desplazar.</p><p>Los espacios Espectador 1–5 se llenan por orden de llegada. El filtro y las luces cambian el entorno y las figuras; el vídeo conserva sus colores.</p></details>
               </div>
+            </div>
+            <footer class="editor-footer"><div><span id="editorDirty">Sin cambios</span><span id="editorStatus" role="status"></span></div><button id="editorSave" type="button">Guardar para todos</button></footer>
+            <div id="editorMenu" class="editor-menu" role="menu" aria-label="Acciones de decoración" hidden>
+              <button type="button" role="menuitem" data-editor-command="duplicate">Duplicar · Ctrl D</button><button type="button" role="menuitem" data-editor-command="lock">Bloquear / desbloquear · L</button><button type="button" role="menuitem" data-editor-command="hide">Ocultar / mostrar · H</button><button type="button" role="menuitem" data-editor-command="depth">Delante / detrás de la TV</button><button type="button" role="menuitem" data-editor-command="forward">Subir una capa</button><button type="button" role="menuitem" data-editor-command="backward">Bajar una capa</button><button type="button" role="menuitem" data-editor-command="center">Centrar</button><button type="button" role="menuitem" data-editor-command="remove">Quitar · Supr</button>
             </div>
           </div>
         </section>

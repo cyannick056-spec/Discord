@@ -30,6 +30,8 @@ function inRange(value, low, high) {
 function validManifest(input) {
   if (!input || !Array.isArray(input.items) || input.items.length > 65) return false;
   if (input.ambient !== undefined && !inRange(input.ambient, 25, 100)) return false;
+  if (input.mood !== undefined && (!input.mood || !['neutral', 'blue-night', 'warm'].includes(input.mood.preset) ||
+      !inRange(input.mood.intensity, 0, 100) || !inRange(input.mood.tvGlow, 0, 200))) return false;
   const ids = new Set();
   let decorations = 0;
   return input.items.every((item) => {
@@ -52,6 +54,7 @@ function validManifest(input) {
       typeof p.hidden === 'boolean' &&
       (p.foreground === undefined || typeof p.foreground === 'boolean') &&
       (p.behindTv === undefined || typeof p.behindTv === 'boolean') &&
+      (p.locked === undefined || typeof p.locked === 'boolean') &&
       (p.anchor === undefined || p.anchor === 'scene' || p.anchor === 'frame') &&
       (p.brightness === undefined || inRange(p.brightness, 35, 130)) &&
       (p.saturation === undefined || inRange(p.saturation, 0, 150)) &&
@@ -126,7 +129,8 @@ export function installDecorations(app, { directory, editKey }) {
       await mkdir(directory, { recursive: true });
       const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);
       await writeFile(temporary, JSON.stringify({ items: req.body.items,
-        ...(req.body.ambient !== undefined ? { ambient: req.body.ambient } : {}) }));
+        ...(req.body.ambient !== undefined ? { ambient: req.body.ambient } : {}),
+        ...(req.body.mood !== undefined ? { mood: req.body.mood } : {}) }));
       await rename(temporary, manifestPath);
       res.set('Cache-Control', 'no-store').json({ ok: true });
     } catch (error) {
