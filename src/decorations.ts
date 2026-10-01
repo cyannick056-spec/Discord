@@ -1,4 +1,5 @@
 import { setDecorationLights, setRoomAmbient, type DecorationLight } from './lighting';
+import { maskBehindTv } from './occlusion';
 
 type Scene = 'home' | 'arcade';
 type View = 'landscape' | 'portrait' | 'window';
@@ -16,6 +17,7 @@ const slotColors: { id: SlotColor; name: string }[] = [
 type Placement = {
   x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
   foreground?: boolean; anchor?: 'scene' | 'frame';
+  behindTv?: boolean;
   brightness?: number; saturation?: number; hue?: number; shadow?: number;
   light?: { color: string; intensity: number; radius: number; x?: number; y?: number };
 };
@@ -67,6 +69,8 @@ const filters = filterIds.map((id) => document.querySelector<HTMLInputElement>(`
 const filterOutputs = filterIds.map((id) => document.querySelector<HTMLOutputElement>(`#${id}Value`)!);
 const decorHidden = document.querySelector<HTMLInputElement>('#decorHidden')!;
 const decorForeground = document.querySelector<HTMLInputElement>('#decorForeground')!;
+const decorBehindTv = document.querySelector<HTMLInputElement>('#decorBehindTv')!;
+const decorBehindTvLabel = document.querySelector<HTMLLabelElement>('#decorBehindTvLabel')!;
 const editorAddLight = document.querySelector<HTMLButtonElement>('#editorAddLight')!;
 const editorAmbient = document.querySelector<HTMLInputElement>('#editorAmbient')!;
 const editorAmbientValue = document.querySelector<HTMLOutputElement>('#editorAmbientValue')!;
@@ -180,6 +184,10 @@ function ambientFilter(placement: Placement): string {
 function render(manifest: Manifest, sceneName: Scene, view: View, editable: boolean) {
   lastRender = { manifest, sceneName, view, editable };
   layer.replaceChildren();
+  const behind = document.createElement('div');
+  behind.className = 'decorations-behind-tv';
+  layer.append(behind);
+  if (sceneName === 'home') maskBehindTv(behind, layer, document.querySelector<HTMLElement>('.tv-face')!);
   const lights: DecorationLight[] = [];
   setRoomAmbient(manifest.ambient ?? 62);
   for (const item of manifest.items) {
@@ -235,7 +243,26 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       }
       attachDrag(box, placement, sceneName, view);
     }
-    layer.append(box);
+    (sceneName === 'home' && placement.behindTv ? behind : layer).append(box);
+    if (editable && sceneName === 'home' && placement.behindTv && item.id === selected) {
+      // Keep handles usable even when the photograph completely hides a figure.
+      // Only an outline is drawn in front; the artwork still obeys occlusion.
+      const outline = document.createElement('div');
+      outline.className = 'decoration-box decor-depth-outline is-selected';
+      outline.dataset.id = item.id;
+      position(outline, placement, sceneName, view);
+      const sizeOutline = () => { outline.style.height = `${box.offsetHeight}px`; };
+      box.querySelector('img')?.addEventListener('load', sizeOutline, { once: true });
+      for (const className of ['decor-resize', 'decor-rotate', 'decor-depth-move']) {
+        const handle = document.createElement('span');
+        handle.className = `decor-handle ${className}`;
+        handle.title = className === 'decor-depth-move' ? 'Mover figura detrás de la TV' : className === 'decor-resize' ? 'Cambiar tamaño' : 'Girar';
+        outline.append(handle);
+      }
+      layer.append(outline);
+      sizeOutline();
+      attachDrag(outline, placement, sceneName, view, box);
+    }
     if (placement.light && placement.opacity > 0 && placement.light.intensity > 0) {
       lights.push({ id: item.id, ...placement.light, intensity: placement.light.intensity * placement.opacity });
     }
@@ -243,7 +270,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
   setDecorationLights(lights);
 }
 
-function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View) {
+function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View, linkedBox?: HTMLDivElement) {
   box.addEventListener('pointerdown', (event) => {
     event.preventDefault();
     const target = event.target as HTMLElement;
@@ -278,6 +305,10 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
         placement.rotation = Math.round(clamp(origin.rotation + delta * fine, -180, 180));
       }
       position(box, placement, sceneName, view);
+      if (linkedBox) {
+        position(linkedBox, placement, sceneName, view);
+        box.style.height = `${linkedBox.offsetHeight}px`;
+      }
       parent.postMessage({ type: 'decor-change', id: box.dataset.id,
         x: placement.x, y: placement.y, width: placement.width, rotation: placement.rotation }, location.origin);
     };
@@ -453,6 +484,8 @@ function refreshFields() {
     .forEach((value, index) => { filters[index].value = String(value); filterOutputs[index].value = `${value}${index === 2 ? '°' : '%'}`; });
   decorHidden.checked = placement.hidden;
   decorForeground.checked = placement.foreground === true;
+  decorBehindTv.checked = placement.behindTv === true;
+  decorBehindTvLabel.hidden = editorScene.value !== 'home';
   decorEmitLight.checked = Boolean(placement.light);
   decorLightColor.value = placement.light?.color ?? '#ffc68a';
   decorLightIntensity.value = String(placement.light?.intensity ?? 80);
@@ -638,7 +671,7 @@ export function initDecorations() {
     status('Luz añadida. Ajusta color, intensidad y alcance; guarda para todos.');
   });
 
-  [...inputs, ...filters, decorHidden, decorForeground, decorEmitLight, decorLightColor,
+  [...inputs, ...filters, decorHidden, decorForeground, decorBehindTv, decorEmitLight, decorLightColor,
     decorLightIntensity, decorLightRadius, decorLightX, decorLightY].forEach((input) => input.addEventListener('input', () => {
     const placement = selectedItem()?.placements[activeKey()];
     if (!placement) return;
@@ -652,6 +685,7 @@ export function initDecorations() {
     placement.z = clamp(values[5], 0, 99);
     placement.hidden = decorHidden.checked;
     placement.foreground = decorForeground.checked;
+    placement.behindTv = decorBehindTv.checked;
     placement.brightness = Number(filters[0].value);
     placement.saturation = Number(filters[1].value);
     placement.hue = Number(filters[2].value);

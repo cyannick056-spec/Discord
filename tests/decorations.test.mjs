@@ -25,6 +25,7 @@ test('lighting saves round-trip without losing legacy placements and reject inva
     const updated = structuredClone(legacy);
     updated.ambient = 62;
     updated.items[0].placements['home-landscape'].light = { color: '#ffcc88', intensity: 75, radius: 6, x: 50, y: 20 };
+    updated.items[0].placements['home-landscape'].behindTv = true;
     updated.items.push({ id: '22222222-2222-4222-8222-222222222222', kind: 'light', asset: '', name: 'Lámpara',
       placements: { 'home-portrait-4x3': { ...placement, light: { color: '#8899ff', intensity: 50, radius: 4 } } } });
     assert.equal((await save(updated)).status, 200);
@@ -38,6 +39,9 @@ test('lighting saves round-trip without losing legacy placements and reject inva
       assert.equal((await save(invalid)).status, 400);
     }
     assert.equal((await save({ ...updated, ambient: 0 })).status, 400);
+    const invalidDepth = structuredClone(updated);
+    invalidDepth.items[0].placements['home-landscape'].behindTv = 'yes';
+    assert.equal((await save(invalidDepth)).status, 400);
     assert.deepEqual(await (await fetch(url)).json(), updated);
   } finally {
     await new Promise(resolve => server.close(resolve));

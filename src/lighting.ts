@@ -100,7 +100,7 @@ export function initRoomLighting() {
     // Project a wider pool below the glass: cabinet first, floor further away.
     glow(gx + gw / 2, gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor);
     glow(gx + gw / 2, gy + gh + height * .29, gw * .95, height * .25, floorColor, .46);
-    const boxes = new Map([...document.querySelectorAll<HTMLElement>('.decoration-box')].map(el => [el.dataset.id, el]));
+    const boxes = new Map([...document.querySelectorAll<HTMLElement>('.decoration-box:not(.decor-depth-outline)')].map(el => [el.dataset.id, el]));
     for (const light of sources) {
       const box = boxes.get(light.id);
       if (!box) continue;

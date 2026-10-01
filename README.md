@@ -64,6 +64,8 @@ Add `DISCORD_CLIENT_SECRET` to the Activity service's server environment (from i
 
 ### Room lighting
 
+For Casa, select **Detrás de la TV** on a decoration to hide the part covered by the physical TV body and feet. Its layer/foreground settings continue to order it relative to other figures at the same depth. Artwork and shadows are clipped at the scene edges, including when rotated or moved outside the scene. In the editor, a selected hidden figure keeps an outline with a central move handle so it remains adjustable. Depth saves separately for each view and TV aspect; old decorations stay in front until enabled. In a tiny call tile the TV fills the scene, so figures assigned behind it are hidden.
+
 The four neutral CRT backdrops have no fixed lamp, poster or colored light reflections. The room is moderately dim by default. In **Decorar**, **Ambiente** controls its base brightness (25–100%) and is saved for everyone along with the decorations.
 
 Upload a lamp image, select it and enable **Emitir luz**. Set its color, intensity and reach; **Origen luz X/Y** positions the light at the bulb inside the image. Rotation moves this origin with the image. **Añadir luz** creates a simple light point without uploading artwork. Lights follow the same per-scene, per-view and per-aspect placement/copy/hide controls as other decorations. Hidden or fully transparent sources do not emit light. The original image brightness/color/shadow adjustments still apply.
