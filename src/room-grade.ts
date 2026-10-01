@@ -21,44 +21,58 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const backdrop = document.querySelector<HTMLImageElement>('#roomBackdrop img'), back = backdrop?.getBoundingClientRect();
   const detached = document.querySelector('#stage')?.classList.contains('free-room');
   const bx = back ? (back.x - scene.x) * scale : x, by = back ? (back.y - scene.y) * scale : y, bw = back ? back.width * scale : w, bh = back ? back.height * scale : h;
-  const cabinet = detached ? by + bh * (innerHeight > innerWidth ? .47 : .9) : y + h * (value('tv-feet-y') + value('tv-feet-h'));
-  const floor = detached ? by + bh * (innerHeight > innerWidth ? .62 : 1) : cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75);
+  const cabinet = Math.round(detached ? by + bh * (innerHeight > innerWidth ? .47 : .9) : y + h * (value('tv-feet-y') + value('tv-feet-h')));
+  const floor = Math.round(detached ? by + bh * (innerHeight > innerWidth ? .62 : 1) : cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75));
   const power = mood.intensity / 100;
   const free = document.querySelector('#stage')?.classList.contains('free-room');
   const key = JSON.stringify([url, getPresentation()?.tvPaint, backdrop?.src, bx, by, bw, bh, backdrop?.complete, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
   if (cached?.key === key) { ctx.drawImage(cached.canvas, 0, 0); return; }
   const target = ctx, buffer = document.createElement('canvas'); buffer.width = ctx.canvas.width; buffer.height = ctx.canvas.height;
   const bufferContext = buffer.getContext('2d'); if (!bufferContext) return; ctx = bufferContext;
+  const texture = document.createElement('canvas'); texture.width = buffer.width; texture.height = buffer.height;
+  const textureCtx = texture.getContext('2d'); if (!textureCtx) return;
   for (const zone of ['wall', 'cabinet', 'floor', 'tv'] as Zone[]) {
     const backgroundImage = free && zone !== 'tv' ? backdrop : image;
     if (!backgroundImage?.complete || !backgroundImage.naturalWidth) continue;
     const grade = { ...mood.grade, ...mood.zones?.[zone] };
     const influence = (grade.influence ?? (zone === 'tv' ? 30 : 100)) / 100;
+    if (influence === 0) continue;
+    const photo = free && zone !== 'tv' ? { x: bx, y: by, width: bw, height: bh } : { x, y, width: w, height: h };
+    // Color the full texture before cutting its silhouette. Multiply fills on
+    // antialiased clip edges used to turn the TV contour and zone seams white.
+    textureCtx.clearRect(0, 0, texture.width, texture.height);
+    textureCtx.filter = gradeFilter(mood, zone);
+    textureCtx.drawImage(backgroundImage, photo.x, photo.y, photo.width, photo.height); textureCtx.filter = 'none';
+    textureCtx.globalCompositeOperation = 'multiply';
+    const cool = ['blue-night', 'classic-night', 'moonlight', 'soft-night'].includes(mood.preset);
+    const temperature = (grade.temperature ?? (mood.preset === 'warm' ? 28 : cool ? -18 * power : 0)) / 100;
+    if (temperature !== 0) {
+      textureCtx.fillStyle = temperature >= 0 ? `rgb(255,${255 - Math.round(temperature * 65)},${255 - Math.round(temperature * 120)})` :
+        `rgb(${255 + Math.round(temperature * 110)},${255 + Math.round(temperature * 45)},255)`;
+      textureCtx.fillRect(0, 0, texture.width, texture.height);
+    }
+    const depth = (grade.shadows ?? (cool ? 12 * power : 0)) / 100;
+    if (depth > 0) {
+      const gradient = textureCtx.createLinearGradient(0, 0, 0, texture.height);
+      gradient.addColorStop(0, `rgba(0,0,0,${depth})`); gradient.addColorStop(.6, 'rgba(0,0,0,0)'); gradient.addColorStop(1, `rgba(0,0,0,${depth * .6})`);
+      textureCtx.fillStyle = gradient; textureCtx.fillRect(0, 0, texture.width, texture.height);
+    }
+    // Restore the source alpha, including transparent custom backgrounds.
+    textureCtx.globalCompositeOperation = 'destination-in';
+    textureCtx.drawImage(backgroundImage, photo.x, photo.y, photo.width, photo.height);
+    textureCtx.globalCompositeOperation = 'source-over';
     ctx.save(); ctx.beginPath();
     if (zone === 'tv') ctx.roundRect(tv.x, tv.y, tv.width, tv.height, Math.min(tv.width, tv.height) * .012);
     else if (zone === 'cabinet') ctx.rect(0, cabinet, ctx.canvas.width, Math.max(0, floor - cabinet));
     else if (zone === 'floor') ctx.rect(0, floor, ctx.canvas.width, Math.max(0, ctx.canvas.height - floor));
     else ctx.rect(0, 0, ctx.canvas.width, Math.max(0, cabinet));
     ctx.clip();
-    // Multiply fills create opaque white pixels on transparent canvas. Keep
-    // grading inside the actual photograph so its uncovered margins stay dark.
     ctx.beginPath();
-    if (free && zone !== 'tv') ctx.rect(bx, by, bw, bh);
-    else ctx.rect(x, y, w, h);
+    ctx.rect(photo.x, photo.y, photo.width, photo.height);
     ctx.clip();
     if (zone !== 'tv') { ctx.beginPath(); ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.roundRect(tv.x, tv.y, tv.width, tv.height, Math.min(tv.width, tv.height) * .012); ctx.clip('evenodd'); }
     ctx.globalAlpha = influence;
-    ctx.filter = gradeFilter(mood, zone); if (free && zone !== 'tv') ctx.drawImage(backgroundImage, bx, by, bw, bh); else ctx.drawImage(backgroundImage, x, y, w, h); ctx.filter = 'none';
-    ctx.globalCompositeOperation = 'multiply';
-    const cool = ['blue-night', 'classic-night', 'moonlight', 'soft-night'].includes(mood.preset);
-    const temperature = (grade.temperature ?? (mood.preset === 'warm' ? 28 : cool ? -18 * power : 0)) / 100;
-    const rgb = temperature >= 0 ? `255,${255 - Math.round(temperature * 65)},${255 - Math.round(temperature * 120)}` :
-      `${255 + Math.round(temperature * 110)},${255 + Math.round(temperature * 45)},255`;
-    ctx.fillStyle = `rgb(${rgb})`; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    const depth = (grade.shadows ?? (cool ? 12 * power : 0)) / 100;
-    const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-    gradient.addColorStop(0, `rgba(0,0,0,${depth})`); gradient.addColorStop(.6, 'rgba(0,0,0,0)'); gradient.addColorStop(1, `rgba(0,0,0,${depth * .6})`);
-    ctx.fillStyle = gradient; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.restore();
+    ctx.drawImage(texture, 0, 0); ctx.restore();
   }
   const aperture = { x: x + w * value('glass-x'), y: y + h * value('glass-y'), width: w * value('glass-w'), height: h * value('glass-h') };
   paintTv(ctx, image, { x, y, width: w, height: h }, tv, aperture, getPresentation()?.tvPaint);
