@@ -146,9 +146,14 @@ export function initRoomLighting() {
     const rimGain = tvGain * (mood.rim ?? 100) / 100 * finish;
     if (reflectionCtx && mirrorReady && stage.classList.contains('home-mode')) {
       const background = document.querySelector<HTMLElement>('#roomBackdrop')!.getBoundingClientRect();
+      const furniture = stage.classList.contains('modular-room') ? document.querySelector<HTMLElement>('.decoration-box[data-prop="cabinet"]:not(.decor-depth-outline)')?.getBoundingClientRect() : undefined;
+      const surfaces = stage.classList.contains('modular-room') ? {
+        table: furniture ? { x: (furniture.x - bounds.x) * scale, y: (furniture.y - bounds.y + furniture.height * .18) * scale, width: furniture.width * scale, height: furniture.height * .12 * scale } : { x: 0, y: 0, width: 0, height: 0 },
+        floor: { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y + background.height * .65) * scale, width: background.width * scale, height: background.height * .35 * scale },
+      } : undefined;
       paintReflections(reflectionCtx, reflectionFrame, { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale },
         { x: gx, y: gy, width: gw, height: gh }, innerHeight > innerWidth, screenColor.strength * tvGain, getPresentation()?.reflection,
-        tvBounds);
+        tvBounds, surfaces);
     }
     const reach = (mood.reach ?? 100) / 100;
     glow(gx + gw / 2, gy + gh / 2, gw * .88 * reach, gh * 1.05 * reach, screenColor, .7 * tvGain);

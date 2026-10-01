@@ -10,9 +10,9 @@ export function reflectionPlanes(room: Rect, portrait: boolean) {
 // Each horizontal strip widens toward the viewer, with a blurred vertical flip.
 const buffers = new Map<string, HTMLCanvasElement>();
 export function paintReflections(ctx: CanvasRenderingContext2D, frame: HTMLCanvasElement, room: Rect, glass: Rect,
-  portrait: boolean, strength: number, settings?: Reflection, tv?: Rect) {
+  portrait: boolean, strength: number, settings?: Reflection, tv?: Rect, surfaces?: ReturnType<typeof reflectionPlanes>) {
   if (settings?.enabled === false || strength <= .001 || (settings?.intensity ?? 90) <= 0) return;
-  const planes = reflectionPlanes(room, portrait);
+  const planes = surfaces ?? reflectionPlanes(room, portrait);
   for (const name of ['table', 'floor'] as const) {
     const plane = planes[name], gain = (settings?.[name] ?? (name === 'table' ? 100 : 90)) / 100;
     if (gain === 0 || plane.y > ctx.canvas.height || plane.y + plane.height < 0) continue;

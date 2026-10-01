@@ -7,6 +7,7 @@ import { sceneControls } from './scene-controls';
 import { straightCorners, validCorners } from './perspective';
 import { maskBehindTv } from './occlusion';
 import { EditorHistory } from './editor-history';
+import { builtinUrl, visibleInRoom } from '../room-catalog.mjs';
 
 type Scene = 'home' | 'arcade';
 type View = 'landscape' | 'portrait' | 'window';
@@ -30,7 +31,8 @@ export type Placement = {
   light?: Omit<DecorationLight, 'id'>;
 };
 export type Decoration = {
-  id: string; asset: string; name: string; kind?: 'viewer-slot' | 'light' | 'shape';
+  id: string; asset: string; name: string; kind?: 'viewer-slot' | 'light' | 'shape' | 'builtin';
+  roomKit?: string;
   shape?: string; category?: string; favorite?: boolean; group?: string;
   placements: Partial<Record<PlacementKey, Placement>>;
 };
@@ -240,6 +242,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
   setRoomAmbient(manifest.ambient ?? 62);
   setRoomMood(manifest.mood);
   for (const item of manifest.items) {
+    if (!visibleInRoom(item, manifest.presentations?.[key(sceneName, view, currentAspect())])) continue;
     const placement = placementFor(item, sceneName, view, currentAspect());
     if (!placement || placement.hidden) continue;
     const slotIndex = item.kind === 'viewer-slot' ? slotColors.findIndex((color) => item.id === `viewer-slot-${color.id}`) : -1;
@@ -248,6 +251,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     const box = document.createElement('div');
     box.className = 'decoration-box';
     box.dataset.id = item.id;
+    if (item.kind === 'builtin') box.dataset.prop = item.asset;
     box.classList.toggle('is-locked', placement.locked === true);
     position(box, placement, sceneName, view);
     if (editable && item.id === selected) box.classList.add('is-selected');
@@ -277,10 +281,10 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     } else {
       const image = document.createElement('img');
       image.className = 'decoration';
-      image.src = item.kind === 'shape' ? shapeAsset(item.shape) : authorizedUrl(`/api/decorations/assets/${encodeURIComponent(item.asset)}`);
+      image.src = item.kind === 'shape' ? shapeAsset(item.shape) : item.kind === 'builtin' ? builtinUrl(item.asset) : authorizedUrl(`/api/decorations/assets/${encodeURIComponent(item.asset)}`);
       image.alt = '';
       image.draggable = false;
-      image.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, 'figures')}`;
+      image.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, item.kind === 'builtin' ? item.asset === 'rug' ? 'floor' : item.category === 'furniture' ? 'cabinet' : 'figures' : 'figures')}`;
       image.addEventListener('load', () => position(box, placement, sceneName, view), { once: true });
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
@@ -420,7 +424,7 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
         const vertical = localDy * signY * box.offsetWidth / Math.max(box.offsetHeight, 1);
         const horizontal = localDx * signX;
         const delta = Math.abs(horizontal) >= Math.abs(vertical) ? horizontal : vertical;
-        placement.width = Math.round(clamp(origin.width + delta / bounds.width * 100 * fine, 1, 80) * 10) / 10;
+        placement.width = Math.round(clamp(origin.width + delta / bounds.width * 100 * fine, 1, 130) * 10) / 10;
       } else {
         const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
         const delta = (angle - startAngle) * 180 / Math.PI;
@@ -434,7 +438,7 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
       for (const peer of peers) {
         peer.p.x = clamp(peer.origin.x + (placement.x - origin.left) * bounds.width / peer.bounds.width, -30, 130);
         peer.p.y = clamp(peer.origin.y + (placement.y - origin.top) * bounds.height / peer.bounds.height, -35, 145);
-        peer.p.width = clamp(peer.origin.width * placement.width / origin.width, 1, 80);
+        peer.p.width = clamp(peer.origin.width * placement.width / origin.width, 1, 130);
         peer.p.rotation = clamp(peer.origin.rotation + placement.rotation - origin.rotation, -180, 180);
         for (const element of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (element.dataset.id === peer.id) position(element, peer.p, sceneName, view);
       }
@@ -468,7 +472,7 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
     event.preventDefault(); event.stopPropagation();
     if (!wheelEnd) parent.postMessage({ type: 'decor-gesture-start' }, location.origin);
     if (event.altKey) placement.rotation = clamp(placement.rotation + Math.sign(event.deltaY) * (event.shiftKey ? 1 : 5), -180, 180);
-    else placement.width = Math.round(clamp(placement.width * Math.exp(-event.deltaY * (event.shiftKey ? .0005 : .002)), 1, 80) * 10) / 10;
+    else placement.width = Math.round(clamp(placement.width * Math.exp(-event.deltaY * (event.shiftKey ? .0005 : .002)), 1, 130) * 10) / 10;
     position(box, placement, sceneName, view);
     if (linkedBox) { position(linkedBox, placement, sceneName, view); box.style.height = `${linkedBox.offsetHeight}px`; }
     parent.postMessage({ type: 'decor-change', id: box.dataset.id, x: placement.x, y: placement.y,
@@ -607,7 +611,8 @@ function editorCommand(command: string) {
   if (!item || !p) return;
   if (command === 'duplicate') {
     if (item.kind === 'viewer-slot') return status('Los espacios de espectadores son únicos.');
-    if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= 60) return status('Máximo 60 decoraciones.');
+    if (item.kind === 'builtin' && draft.items.filter(i => i.kind === 'builtin').length >= 72) return status('Máximo 72 piezas de habitación.');
+    if (item.kind !== 'builtin' && draft.items.filter(i => i.kind !== 'viewer-slot' && i.kind !== 'builtin').length >= 60) return status('Máximo 60 decoraciones.');
     const copy = structuredClone(item); copy.id = crypto.randomUUID(); copy.name = `${item.name.slice(0, 62)} · copia`;
     const placement = copy.placements[activeKey()]!; placement.x = clamp(placement.x + 2, -30, 130); placement.y = clamp(placement.y + 2, -35, 145); placement.locked = false;
     delete copy.group;
@@ -659,7 +664,7 @@ function shiftPeers(source: Placement, id: string, dx: number, dy: number, scale
     const b = bounds(p);
     p.x = clamp(p.x + dx * (a?.width ?? 1) / (b?.width ?? 1), -30, 130);
     p.y = clamp(p.y + dy * (a?.height ?? 1) / (b?.height ?? 1), -35, 145);
-    p.width = clamp(p.width * scale, 1, 80); p.rotation = clamp(p.rotation + turn, -180, 180);
+    p.width = clamp(p.width * scale, 1, 130); p.rotation = clamp(p.rotation + turn, -180, 180);
   }
 }
 
@@ -681,7 +686,7 @@ function convertAnchor(placement: Placement, next: 'frame' | 'scene') {
   const width = before.width * placement.width / after.width;
   placement.x = Math.round(clamp(x, -30, 130) * 10) / 10;
   placement.y = Math.round(clamp(y, -35, 145) * 10) / 10;
-  placement.width = Math.round(clamp(width, 1, 80) * 10) / 10;
+  placement.width = Math.round(clamp(width, 1, 130) * 10) / 10;
   placement.anchor = next;
   return true;
 }
@@ -689,6 +694,7 @@ function convertAnchor(placement: Placement, next: 'frame' | 'scene') {
 function migrateLegacyInView() {
   let count = 0;
   for (const item of draft.items) {
+    if (!visibleInRoom(item, draft.presentations?.[activeKey()])) continue;
     if (!item.placements[activeKey()]) {
       const legacy = item.placements[legacyKey(editorScene.value as Scene, editorView.value as View)];
       if (legacy) {
@@ -783,6 +789,7 @@ function connectPreviewVideo() {
 function refreshItemList() {
   editorItem.replaceChildren();
   for (const item of draft.items) {
+    if (!visibleInRoom(item, draft.presentations?.[activeKey()])) continue;
     const option = document.createElement('option');
     option.value = item.id;
     option.textContent = `${item.name}${placementFor(item, editorScene.value as Scene, editorView.value as View, editorAspect.value as Aspect) ? '' : ' · sin colocar'}`;
@@ -795,6 +802,7 @@ function refreshItemList() {
 
 function refreshFields() {
   const item = selectedItem();
+  inputs[2].max = '130';
   const placement = item?.placements[activeKey()];
   editorProperties.hidden = !placement;
   editorNudge.hidden = !placement;
@@ -899,8 +907,8 @@ export function initDecorations() {
     },
     change: group => { refreshItemList(); refreshMoodFields(); sendPreview(group); },
     convert: p => convertAnchor(p, 'scene'), command: editorCommand, status,
-    create: (item) => { if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= 60) return status('Máximo 60 decoraciones.');
-      item.placements[activeKey()] = defaultPlacement(); draft.items.push(item); selectItem(item.id); },
+    create: (item) => { if (item.kind === 'builtin' && draft.items.filter(i => i.kind === 'builtin').length >= 72) return status('Máximo 72 piezas de habitación.'); if (item.kind !== 'builtin' && draft.items.filter(i => i.kind !== 'viewer-slot' && i.kind !== 'builtin').length >= 60) return status('Máximo 60 decoraciones.');
+      item.placements[activeKey()] ??= defaultPlacement(); draft.items.push(item); selectItem(item.id); },
     compare: value => { compareSaved = value; sendPreview(undefined, false); },
     test: value => { previewTest = value; sendPreview(undefined, false); },
     asset: authorizedUrl, resize: sizePreview,
@@ -1051,7 +1059,7 @@ export function initDecorations() {
     const file = editorUpload.files?.[0];
     editorUpload.value = '';
     if (!file) return;
-    if (draft.items.filter((item) => item.kind !== 'viewer-slot').length >= 60)
+    if (draft.items.filter((item) => item.kind !== 'viewer-slot' && item.kind !== 'builtin').length >= 60)
       return status('Máximo 60 decoraciones. Quita alguna antes de añadir otra.');
     if (file.size > 2 * 1024 * 1024) return status('La imagen debe pesar menos de 2 MB.');
     try {
@@ -1080,7 +1088,7 @@ export function initDecorations() {
   });
   editorAmbient.addEventListener('change', () => history.endGroup());
   editorAddLight.addEventListener('click', () => {
-    if (draft.items.filter((item) => item.kind !== 'viewer-slot').length >= 60)
+    if (draft.items.filter((item) => item.kind !== 'viewer-slot' && item.kind !== 'builtin').length >= 60)
       return status('Máximo 60 decoraciones. Quita alguna antes de añadir otra.');
     const item: Decoration = { id: crypto.randomUUID(), asset: '', kind: 'light', name: 'Luz nueva',
       placements: { [activeKey()]: { ...defaultPlacement(), anchor: 'scene', x: 20, y: 25, width: 4,
@@ -1102,7 +1110,7 @@ export function initDecorations() {
     const before = { x: placement.x, y: placement.y, width: placement.width, rotation: placement.rotation };
     placement.x = clamp(values[0], -30, 130);
     placement.y = clamp(values[1], -35, 145);
-    placement.width = clamp(values[2], 1, 80);
+    placement.width = clamp(values[2], 1, 130);
     placement.rotation = clamp(values[3], -180, 180);
     shiftPeers(placement, selected!, placement.x - before.x, placement.y - before.y, placement.width / before.width, placement.rotation - before.rotation);
     placement.opacity = clamp(values[4] / 100, 0, 1);
@@ -1267,7 +1275,7 @@ export function initDecorations() {
       const scale = values[2] / placement.width, turn = values[3] - placement.rotation;
       shiftPeers(placement, item!.id, dx, dy, scale, turn);
       placement.x = clamp(values[0], -30, 130); placement.y = clamp(values[1], -35, 145);
-      placement.width = clamp(values[2], 1, 80); placement.rotation = clamp(values[3], -180, 180);
+      placement.width = clamp(values[2], 1, 130); placement.rotation = clamp(values[3], -180, 180);
       selected = item!.id;
       editorItem.value = selected;
       refreshFields();

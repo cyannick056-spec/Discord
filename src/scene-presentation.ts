@@ -10,10 +10,12 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   const art = document.querySelector<HTMLElement>(home ? '#tvScene' : '#arcadeScene')!;
   const backdrop = document.querySelector<HTMLElement>('#roomBackdrop')!;
   const tiny = innerWidth <= 520 && innerHeight <= 360;
+  configureTvModel(face, p, tiny);
+  stage.classList.toggle('modular-room', home && Boolean(p?.environment));
   // All built-in choices use the original photographed room. Legacy CSS-room
   // manifests retain their saved geometry but never recreate synthetic furniture.
   stage.classList.toggle('free-room', home && !tiny || p?.style === 'custom');
-  stage.classList.toggle('classic-room', home && !tiny);
+  stage.classList.toggle('classic-room', home && !tiny && (!p?.tvModel || p.tvModel === 'original'));
   art.style.removeProperty('transform');
   const base = getComputedStyle(art).transform, b = room.getBoundingClientRect(), a = art.getBoundingClientRect();
   const camera = p?.camera, tv = p?.tv, zoom = camera?.zoom ?? 1;
@@ -21,20 +23,22 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   const dy = b.height * ((camera?.y ?? 0) + (tv?.y ?? 0) * zoom) / 100;
   if (p) art.style.transform = `translate(${dx}px,${dy}px) ${base === 'none' ? '' : base} scale(${zoom * (tv?.zoom ?? 1)})`;
   const custom = p?.style === 'custom' && Boolean(p.background), image = backdrop.querySelector<HTMLImageElement>('img')!;
-  Object.assign(backdrop.style, { left: `${home && !custom ? a.left - b.left : 0}px`, top: `${home && !custom ? a.top - b.top : 0}px`,
-    width: `${home && !custom ? a.width : b.width}px`, height: `${home && !custom ? a.height : b.height}px`,
+  const original = home && !custom && !p?.environment;
+  Object.assign(backdrop.style, { left: `${original ? a.left - b.left : 0}px`, top: `${original ? a.top - b.top : 0}px`,
+    width: `${original ? a.width : b.width}px`, height: `${original ? a.height : b.height}px`,
     transform: `translate(${b.width * (camera?.x ?? 0) / 100}px,${b.height * (camera?.y ?? 0) / 100}px) scale(${zoom})` });
   image.hidden = !home && !custom; image.style.filter = '';
   const orientation = innerHeight > innerWidth && innerHeight >= 430 ? 'portrait' : 'wide';
   const daytime = mood?.daytime ?? 'night';
   let src = daytime === 'night' ? `/crt-room-plate-${orientation}.webp` : `/crt-room-${daytime}-${orientation}.webp`;
+  if (p?.environment) src = `/rooms/${p.environment}-${orientation}.webp`;
   if (custom) {
     const ticket = new URLSearchParams(location.search).get('ticket');
     const url = new URL(`/api/decorations/assets/${encodeURIComponent(p!.background!)}`, location.origin);
     if (ticket) url.searchParams.set('ticket', ticket); src = url.pathname + url.search;
   }
   if (!image.hidden && image.getAttribute('src') !== src) image.src = src;
-  image.style.objectFit = custom ? 'cover' : 'fill';
+  image.style.objectFit = custom || p?.environment ? 'cover' : 'fill';
   applyScreenFraming();
   if (home && !tiny) {
     const s = getComputedStyle(face), n = (key: string) => parseFloat(s.getPropertyValue('--' + key)) * 10;
@@ -47,6 +51,23 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   }
   applyVideoFraming();
   window.dispatchEvent(new Event('shis-presentation-change'));
+}
+function configureTvModel(face: HTMLElement, p: Presentation | undefined, tiny: boolean) {
+  for (const key of ['room-art', 'glass-x', 'glass-y', 'glass-w', 'glass-h', 'model-left', 'model-top']) face.style.removeProperty('--' + key);
+  const model = tiny ? 'original' : p?.tvModel ?? 'original';
+  face.dataset.tvModel = model;
+  if (model === 'original') return;
+  const style = getComputedStyle(face), n = (key: string) => parseFloat(style.getPropertyValue('--tv-body-' + key));
+  const four = document.querySelector('#tvScene')!.classList.contains('aspect-4x3');
+  const file = model === 'silver' ? four ? 'tv-slate-4x3.webp' : 'tv-slate-room.webp' : four ? 'tv-charcoal-4x3.webp' : 'tv-charcoal-wide.webp';
+  const glass = four ? { x: 11.3, y: 7, w: 78, h: 76 } : { x: 8.5, y: 6, w: 83, h: 78 };
+  face.style.setProperty('--room-art', `url('/${file}')`);
+  face.style.setProperty('--model-left', `${face.offsetWidth * n('x') / 100}px`);
+  face.style.setProperty('--model-top', `${face.offsetHeight * n('y') / 100}px`);
+  face.style.setProperty('--glass-x', `${n('x') + n('w') * glass.x / 100}%`);
+  face.style.setProperty('--glass-y', `${n('y') + n('h') * glass.y / 100}%`);
+  face.style.setProperty('--glass-w', `${n('w') * glass.w / 100}%`);
+  face.style.setProperty('--glass-h', `${n('h') * glass.h / 100}%`);
 }
 function applyScreenFraming() {
   const stage = document.querySelector('#stage')!, screen = document.querySelector<HTMLElement>(stage.classList.contains('home-mode') ? '#homeScreenMount' : '#arcadeScreen')!;

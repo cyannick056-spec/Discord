@@ -5,6 +5,8 @@ export function restoreOriginalRoom(room) {
   for (const [key, presentation] of Object.entries(room.presentations ?? {})) {
     if (!key.startsWith('home-')) continue;
     presentation.style = 'classic';
+    delete presentation.environment;
+    delete presentation.tvModel;
     delete presentation.background;
     delete presentation.tvPaint;
   }
