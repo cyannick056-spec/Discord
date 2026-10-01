@@ -3,6 +3,7 @@ export const rooms = [
   { id: 'bedroom', name: 'Dormitorio', description: 'Madera, azul suave y juegos', furniture: 'bed' },
   { id: 'retro', name: 'Sala retro', description: 'Una tarde de juegos de los 90', furniture: 'sofa' },
   { id: 'rain', name: 'Habitación con lluvia', description: 'Ventana lateral con lluvia animada', furniture: 'sofa' },
+  { id: 'rain-close', name: 'Lluvia · vista cercana', description: 'Ventana amplia junto a la TV; encuadre preparado para zoom', furniture: 'beanbag' },
   { id: 'japanese', name: 'Cuarto japonés', description: 'Shoji, tatami y muebles bajos', furniture: 'shelf' },
   { id: 'cabin', name: 'Cabaña', description: 'Madera y una ventana al bosque', furniture: 'shelf' },
   { id: 'city', name: 'Apartamento', description: 'Una ventana hacia la ciudad', furniture: 'sofa' },
@@ -27,6 +28,18 @@ export const props = [
   { id: 'controller', name: 'Mando retro', category: 'game' },
   { id: 'games', name: 'Cajas de videojuegos', category: 'game' },
   { id: 'poster', name: 'Póster de aventura', category: 'poster' },
+  { id: 'handheld-purple', name: 'Portátil morada', category: 'game' },
+  { id: 'console-cube', name: 'Consola cúbica', category: 'game' },
+  { id: 'arcade-stick', name: 'Mando arcade', category: 'game' },
+  { id: 'headphones', name: 'Audífonos con base', category: 'game' },
+  { id: 'keyboard-retro', name: 'Teclado retro', category: 'game' },
+  { id: 'plant-small', name: 'Planta en maceta', category: 'figurine' },
+  { id: 'succulent', name: 'Suculenta', category: 'figurine' },
+  { id: 'figure-knight', name: 'Figura caballero', category: 'figurine' },
+  { id: 'figure-dragon', name: 'Figura dragoncito', category: 'figurine' },
+  { id: 'wall-clock', name: 'Reloj de pared', category: 'frame' },
+  { id: 'beanbag', name: 'Puff de tela', category: 'furniture' },
+  { id: 'side-table', name: 'Mesa auxiliar', category: 'furniture', support: { corners: [[11.5,17],[88.5,17],[98.3,43.8],[1.7,43.8]], material: 'wood' } },
 ];
 export const roomIds = new Set(rooms.map(r => r.id));
 export const propIds = new Set(props.map(p => p.id));

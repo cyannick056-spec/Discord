@@ -1,3 +1,5 @@
+import { MAX_SCENE_ITEMS, MAX_LIBRARY_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
+import { applyFurnitureMaterial } from './furniture-material';
 import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type DecorationLight, type RoomMood } from './lighting';
 import { objectTransform, gradeFilter, type Transform, type ContactShadow } from './studio-model';
 import { initStudio, refreshStudio, shapeAsset, rememberAssets } from './studio';
@@ -32,6 +34,7 @@ export type Placement = {
   transform?: Transform; contactShadow?: ContactShadow; crop?: number[];
   light?: Omit<DecorationLight, 'id'>;
   lava?: { motion?: boolean; speed?: number };
+  material?: FurnitureMaterial;
 };
 export type Decoration = {
   id: string; asset: string; name: string; kind?: 'viewer-slot' | 'light' | 'shape' | 'builtin';
@@ -293,6 +296,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       image.addEventListener('load', () => { position(box, placement, sceneName, view); syncSupport(); }, { once: true });
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
+      if (item.category === 'furniture') { if (placement.material) { box.dataset.material = placement.material.preset; box.dataset.roughness = String(placement.material.roughness ?? 65); } void applyFurnitureMaterial(box, image, item.asset, placement.material); }
       if (item.kind === 'builtin' && item.category === 'lamp') addLampAnimation(box, image, placement, item.asset === 'lava-lamp');
     }
     if (placement.contactShadow?.opacity) {
@@ -621,8 +625,7 @@ function editorCommand(command: string) {
   if (!item || !p) return;
   if (command === 'duplicate') {
     if (item.kind === 'viewer-slot') return status('Los espacios de espectadores son únicos.');
-    if (item.kind === 'builtin' && draft.items.filter(i => i.kind === 'builtin').length >= 72) return status('Máximo 72 piezas de habitación.');
-    if (item.kind !== 'builtin' && draft.items.filter(i => i.kind !== 'viewer-slot' && i.kind !== 'builtin').length >= 60) return status('Máximo 60 decoraciones.');
+    if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= MAX_SCENE_ITEMS) return status(`Máximo ${MAX_SCENE_ITEMS} piezas; combina muebles e imágenes libremente.`);
     const copy = structuredClone(item); copy.id = crypto.randomUUID(); copy.name = `${item.name.slice(0, 62)} · copia`;
     const placement = copy.placements[activeKey()]!; placement.x = clamp(placement.x + 2, -30, 130); placement.y = clamp(placement.y + 2, -35, 145); placement.locked = false;
     delete copy.group;
@@ -924,7 +927,7 @@ export function initDecorations() {
     },
     change: group => { refreshItemList(); refreshMoodFields(); sendPreview(group); },
     convert: p => convertAnchor(p, 'scene'), command: editorCommand, status,
-    create: (item) => { if (item.kind === 'builtin' && draft.items.filter(i => i.kind === 'builtin').length >= 72) return status('Máximo 72 piezas de habitación.'); if (item.kind !== 'builtin' && draft.items.filter(i => i.kind !== 'viewer-slot' && i.kind !== 'builtin').length >= 60) return status('Máximo 60 decoraciones.');
+    create: (item) => { if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= MAX_SCENE_ITEMS) return status(`Máximo ${MAX_SCENE_ITEMS} piezas; combina muebles e imágenes libremente.`);
       item.placements[activeKey()] ??= defaultPlacement(); draft.items.push(item); selectItem(item.id); },
     compare: value => { compareSaved = value; sendPreview(undefined, false); },
     test: value => { previewTest = value; sendPreview(undefined, false); },
@@ -932,7 +935,7 @@ export function initDecorations() {
     tool: setEditorTool,
     restore: room => { const copy = structuredClone(room); draft.items = copy.items; draft.ambient = copy.ambient; draft.mood = copy.mood; draft.presentations = copy.presentations; selected = null; selection.clear(); refreshItemList(); refreshMoodFields(); sendPreview(); },
     background: async file => {
-      if ((draft.library?.length ?? 0) >= 120) throw new Error('La biblioteca está llena (120 imágenes).');
+      if ((draft.library?.length ?? 0) >= MAX_LIBRARY_ITEMS) throw new Error(`La biblioteca está llena (${MAX_LIBRARY_ITEMS} imágenes).`);
       if (file.size > 2 * 1024 * 1024) throw new Error('La imagen debe pesar menos de 2 MB.');
       const response = await editorRequest('/api/decorations/assets', { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
       const { asset } = await response.json();
@@ -1076,8 +1079,8 @@ export function initDecorations() {
     const file = editorUpload.files?.[0];
     editorUpload.value = '';
     if (!file) return;
-    if (draft.items.filter((item) => item.kind !== 'viewer-slot' && item.kind !== 'builtin').length >= 60)
-      return status('Máximo 60 decoraciones. Quita alguna antes de añadir otra.');
+    if (draft.items.filter((item) => item.kind !== 'viewer-slot').length >= MAX_SCENE_ITEMS)
+      return status(`Máximo ${MAX_SCENE_ITEMS} piezas. Quita alguna antes de añadir otra.`);
     if (file.size > 2 * 1024 * 1024) return status('La imagen debe pesar menos de 2 MB.');
     try {
       status('Subiendo imagen…');
@@ -1105,8 +1108,8 @@ export function initDecorations() {
   });
   editorAmbient.addEventListener('change', () => history.endGroup());
   editorAddLight.addEventListener('click', () => {
-    if (draft.items.filter((item) => item.kind !== 'viewer-slot' && item.kind !== 'builtin').length >= 60)
-      return status('Máximo 60 decoraciones. Quita alguna antes de añadir otra.');
+    if (draft.items.filter((item) => item.kind !== 'viewer-slot').length >= MAX_SCENE_ITEMS)
+      return status(`Máximo ${MAX_SCENE_ITEMS} piezas. Quita alguna antes de añadir otra.`);
     const item: Decoration = { id: crypto.randomUUID(), asset: '', kind: 'light', name: 'Luz nueva',
       placements: { [activeKey()]: { ...defaultPlacement(), anchor: 'scene', x: 20, y: 25, width: 4,
         light: { color: '#ffc68a', intensity: 80, radius: 6 } } } };

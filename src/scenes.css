@@ -1289,3 +1289,10 @@
 
 .stage.square-screen .screen-wrap, .stage.square-screen .arcade-screen, .stage.square-screen .player, .stage.square-screen .crt-overlay, .stage.square-screen .screen-glare { border-radius:0 !important; }
 #roomFloorReflection { z-index:8; mix-blend-mode:screen; }
+
+/* The requested flat panel has clean digital glass instead of CRT curvature. */
+.stage.flat-panel .video-mount video { filter:none !important; }
+.stage.flat-panel .crt-overlay, .stage.flat-panel .screen-glare { opacity:0 !important; }
+.stage.flat-panel:not(.square-screen) .screen-wrap, .stage.flat-panel:not(.square-screen) .screen-wrap .player { border-radius:0.6% !important; }
+.stage.flat-panel .screen-wrap .player { box-shadow:none !important; }
+.stage.flat-panel .signal-sweep { display:none !important; }

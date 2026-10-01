@@ -1,3 +1,4 @@
+import { MAX_SCENE_ITEMS } from './material-catalog.mjs';
 import crypto from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -30,7 +31,7 @@ function inRange(value, low, high) {
 }
 
 function validManifest(input) {
-  if (!input || !Array.isArray(input.items) || input.items.length > 137) return false;
+  if (!input || !Array.isArray(input.items) || input.items.length > MAX_SCENE_ITEMS + 5) return false;
   if (input.ambient !== undefined && !inRange(input.ambient, 25, 100)) return false;
   if (input.mood !== undefined && !validMood(input.mood)) return false;
   if (!validCollections(input, validManifest)) return false;
@@ -46,7 +47,7 @@ function validManifest(input) {
     if (builtin) builtins++; else if (!slot) decorations++;
     if (!item || typeof item.id !== 'string' ||
         (slot ? !viewerSlotIds.has(item.id) : !/^[a-f0-9-]{36}$/.test(item.id)) ||
-        decorations > 60 || builtins > 72 || ids.has(item.id) ||
+        decorations + builtins > MAX_SCENE_ITEMS || ids.has(item.id) ||
         (item.kind !== undefined && !slot && !light && !shape && !builtin) ||
         (!slot && !light && !shape && !builtin && (typeof item.asset !== 'string' || !assetPattern.test(item.asset))) ||
         !validMetadata(item) ||

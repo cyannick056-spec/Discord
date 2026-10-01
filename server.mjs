@@ -15,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, 'dist');
 
 app.disable('x-powered-by');
-app.use('/api/decorations', express.json({ limit: '4mb' }));
+app.use('/api/decorations', express.json({ limit: '16mb' }));
 app.use(express.json({ limit: '256kb' }));
 installCloudflare(app, requireActivityTicket);
 app.use('/api/decorations', requireActivityTicket);
