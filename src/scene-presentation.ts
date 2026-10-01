@@ -1,6 +1,7 @@
 import { configureWindowRain } from './window-rain';
 import { tvModels } from '../tv-catalog.mjs';
 import { screenRect, type Presentation } from './presentation-model';
+import { supportPlane, supportContact } from './support-surfaces';
 import type { Mood } from './studio-model';
 let current: Presentation | undefined;
 let screenBase = { x: 0, y: 0, width: 1, height: 1 };
@@ -51,7 +52,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
     const glass = document.querySelector<HTMLElement>('#homeScreenMount')!;
     const body = `<rect x="${n('tv-body-x')}" y="${n('tv-body-y')}" width="${n('tv-body-w')}" height="${n('tv-body-h')}" rx="8" fill="white"/>`;
     const feet = `<rect x="${n('tv-feet-x')}" y="${n('tv-feet-y')}" width="${n('tv-feet-w')}" height="${n('tv-feet-h')}" fill="white"/>`;
-    const aperture = `<rect x="${glass.offsetLeft / face.offsetWidth * 1000}" y="${glass.offsetTop / face.offsetHeight * 1000}" width="${glass.offsetWidth / face.offsetWidth * 1000}" height="${glass.offsetHeight / face.offsetHeight * 1000}" rx="12" fill="black"/>`;
+    const aperture = `<rect x="${glass.offsetLeft / face.offsetWidth * 1000}" y="${glass.offsetTop / face.offsetHeight * 1000}" width="${glass.offsetWidth / face.offsetWidth * 1000}" height="${glass.offsetHeight / face.offsetHeight * 1000}" rx="${p?.screen?.rounded === false ? 0 : 12}" fill="black"/>`;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" preserveAspectRatio="none"><defs><mask id="shape">${body}${feet}${aperture}</mask></defs><rect width="1000" height="1000" fill="white" mask="url(#shape)"/></svg>`;
     face.style.setProperty('--detached-mask', `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
   }
@@ -60,6 +61,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
 }
 function configureTvModel(face: HTMLElement, p: Presentation | undefined, tiny: boolean) {
   for (const key of ['room-art', 'glass-x', 'glass-y', 'glass-w', 'glass-h', 'model-left', 'model-top', 'model-art-w', 'model-art-h', ...['x','y','w','h'].flatMap(k => ['tv-body-' + k, 'tv-feet-' + k, 'photo-' + k])]) face.style.removeProperty('--' + key);
+  face.style.setProperty('--tv-feet-h', '0%');
   const model = tiny ? 'original' : p?.tvModel ?? 'original';
   face.dataset.tvModel = model;
   if (model === 'original') return;
@@ -98,6 +100,7 @@ function applyScreenFraming() {
   for (const key of ['left', 'top', 'width', 'height', 'transform']) screen.style.removeProperty(key);
   const s = getComputedStyle(screen), transform = new DOMMatrix(s.transform === 'none' ? undefined : s.transform);
   screenBase = { x: parseFloat(s.left) + transform.e, y: parseFloat(s.top) + transform.f, width: parseFloat(s.width), height: parseFloat(s.height) };
+  stage.classList.toggle('square-screen', current?.screen?.rounded === false);
   if (!current?.screen) return;
   const r = screenRect(screenBase, current.screen);
   Object.assign(screen.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.width}px`, height: `${r.height}px`, transform: 'none' });
@@ -106,6 +109,9 @@ export function applyVideoFraming() {
   const container = document.querySelector<HTMLElement>('#videoMount')!;
   const glass = container.closest<HTMLElement>('.screen-wrap, .arcade-screen')!;
   const video = container.querySelector<HTMLVideoElement>('video'); if (!video) return;
+  const fit = current?.video?.fit;
+  if (fit) video.style.objectFit = fit; else video.style.removeProperty('object-fit');
+  if (fit === 'contain') { video.style.transform = 'none'; video.style.objectPosition = '50% 50%'; return; }
   if (!current?.video) { video.style.removeProperty('transform'); video.style.removeProperty('object-position'); return; }
   const z = current.video.zoom ?? 1.035;
   const style = getComputedStyle(glass), sw = parseFloat(style.width), sh = parseFloat(style.height);
@@ -130,14 +136,12 @@ export function applyTvSupport() {
   art.style.removeProperty('translate');
   const bounds = face.getBoundingClientRect(), s = getComputedStyle(face);
   const n = (k: string) => parseFloat(s.getPropertyValue('--tv-body-' + k)) / 100;
-  const feet = parseFloat(s.getPropertyValue('--tv-feet-y')) / 100 + parseFloat(s.getPropertyValue('--tv-feet-h')) / 100;
-  const bottom = bounds.top + bounds.height * Math.max(n('y') + n('h'), feet);
+  const bottom = bounds.top + bounds.height * (n('y') + n('h'));
   const center = bounds.left + bounds.width * (n('x') + n('w') / 2);
-  const cabinet = document.querySelector<HTMLElement>('.decoration-box[data-prop="cabinet"]');
   const background = document.querySelector<HTMLElement>('#roomBackdrop')!.getBoundingClientRect();
-  if (p.tvSupport === 'cabinet' && (!cabinet || cabinet.offsetHeight < 1)) return;
-  const c = cabinet?.getBoundingClientRect();
-  const target = p.tvSupport === 'floor' ? { x: background.left + background.width / 2, y: background.top + background.height * .87 } : { x: c!.left + c!.width / 2, y: c!.top + c!.height * .18 };
+  const plane = supportPlane(p);
+  if (p.tvSupport === 'cabinet' && !plane) return;
+  const target = p.tvSupport === 'floor' ? { x: background.left + background.width / 2, y: background.top + background.height * .87 } : supportContact(plane!);
   art.style.translate = `${target.x - center}px ${target.y - bottom}px`;
   window.dispatchEvent(new Event('shis-presentation-change'));
 }

@@ -17,6 +17,8 @@ export function validPresentations(settings, views) {
     (p.environment === undefined || roomIds.has(p.environment)) &&
     (p.rain === undefined || (object(p.rain) && (p.rain.enabled === undefined || typeof p.rain.enabled === 'boolean') && (p.rain.forceMotion === undefined || typeof p.rain.forceMotion === 'boolean') && optionalNumbers(p.rain, { intensity: [0,100], speed: [.2,3] }))) &&
     (p.tvSupport === undefined || ['free', 'cabinet', 'floor'].includes(p.tvSupport)) &&
+    (p.supportId === undefined || uuid(p.supportId)) &&
+    (p.video?.fit === undefined || ['cover', 'contain'].includes(p.video.fit)) &&
     (p.tvModel === undefined || tvIds.has(p.tvModel)) &&
     (p.style === undefined || ['original', 'classic', 'minimal', 'wood', 'brick', 'custom'].includes(p.style)) &&
     ['wall', 'cabinet', 'floor'].every(key => p[key] === undefined || (typeof p[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p[key]))) &&
@@ -24,7 +26,7 @@ export function validPresentations(settings, views) {
     (p.hideCabinet === undefined || typeof p.hideCabinet === 'boolean') && optionalNumbers(p, { cabinetY: [15, 90], cabinetHeight: [5, 45] }) &&
     (p.tvPaint === undefined || (object(p.tvPaint) && (p.tvPaint.enabled === undefined || typeof p.tvPaint.enabled === 'boolean') && ['body','bezel','panel'].every(key => p.tvPaint[key] === undefined || (typeof p.tvPaint[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p.tvPaint[key]))) && (p.tvPaint.finish === undefined || ['matte','satin','gloss'].includes(p.tvPaint.finish)) && optionalNumbers(p.tvPaint, { strength: [0,100], hue: [-180,180], saturation: [0,200], exposure: [-60,60], contrast: [50,150] }))) &&
     (p.reflection === undefined || (object(p.reflection) && (p.reflection.enabled === undefined || typeof p.reflection.enabled === 'boolean') && optionalNumbers(p.reflection, { intensity: [0,150], table: [0,200], floor: [0,200], blur: [0,30], reach: [30,180], spread: [50,180], offset: [-20,30], texture: [0,100] }))) &&
-    (p.screen === undefined || (object(p.screen) && optionalNumbers(p.screen, { x: [-50, 50], y: [-50, 50], width: [50, 150], height: [50, 150] }))) &&
+    (p.screen === undefined || (object(p.screen) && (p.screen.rounded === undefined || typeof p.screen.rounded === 'boolean') && optionalNumbers(p.screen, { x: [-50, 50], y: [-50, 50], width: [50, 150], height: [50, 150] }))) &&
     ['camera', 'tv', 'video'].every(key => p[key] === undefined || (object(p[key]) && optionalNumbers(p[key], { x: [key === 'tv' ? -80 : -50, key === 'tv' ? 80 : 50], y: [key === 'tv' ? -80 : -50, key === 'tv' ? 80 : 50], zoom: [key === 'tv' ? .3 : key === 'camera' ? .5 : 1, key === 'video' ? 3 : 2.5] }))));
 }
 export function validMetadata(item) {

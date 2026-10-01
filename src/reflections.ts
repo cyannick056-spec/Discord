@@ -1,4 +1,5 @@
 import type { Reflection } from './presentation-model';
+import type { SurfacePlane } from './support-surfaces';
 type Rect = { x: number; y: number; width: number; height: number };
 export function reflectionPlanes(room: Rect, portrait: boolean) {
   return {
@@ -10,11 +11,11 @@ export function reflectionPlanes(room: Rect, portrait: boolean) {
 // Each horizontal strip widens toward the viewer, with a blurred vertical flip.
 const buffers = new Map<string, HTMLCanvasElement>();
 export function paintReflections(ctx: CanvasRenderingContext2D, frame: HTMLCanvasElement, room: Rect, glass: Rect,
-  portrait: boolean, strength: number, settings?: Reflection, tv?: Rect, surfaces?: ReturnType<typeof reflectionPlanes>) {
-  if (settings?.enabled === false || strength <= .001 || (settings?.intensity ?? 90) <= 0) return;
+  portrait: boolean, strength: number, settings?: Reflection, tv?: Rect, surfaces?: { table: SurfacePlane; floor: SurfacePlane }) {
+  if (settings?.enabled === false || strength <= .001 || (settings?.intensity ?? 65) <= 0) return;
   const planes = surfaces ?? reflectionPlanes(room, portrait);
   for (const name of ['table', 'floor'] as const) {
-    const plane = planes[name], gain = (settings?.[name] ?? (name === 'table' ? 100 : 90)) / 100;
+    const plane: SurfacePlane = planes[name], gain = (settings?.[name] ?? (name === 'table' ? 60 : 45)) / 100;
     if (gain === 0 || plane.y > ctx.canvas.height || plane.y + plane.height < 0) continue;
     let buffer = buffers.get(name); if (!buffer) { buffer = document.createElement('canvas'); buffers.set(name, buffer); }
     const width = Math.min(600, Math.max(32, Math.round(glass.width * (settings?.spread ?? 110) / 100)));
@@ -40,10 +41,14 @@ export function paintReflections(ctx: CanvasRenderingContext2D, frame: HTMLCanva
     const targetWidth = glass.width * (settings?.spread ?? 110) / 100;
     const targetHeight = plane.height * (settings?.reach ?? 100) / 100;
     const cx = glass.x + glass.width / 2, top = plane.y + plane.height * (settings?.offset ?? 0) / 100;
-    ctx.save(); ctx.beginPath(); ctx.moveTo(plane.x + plane.width * .06, plane.y); ctx.lineTo(plane.x + plane.width * .94, plane.y);
-    ctx.lineTo(plane.x + plane.width, plane.y + plane.height); ctx.lineTo(plane.x, plane.y + plane.height); ctx.closePath(); ctx.clip();
+    ctx.save(); ctx.beginPath();
+    if (plane.quad) plane.quad.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    else { ctx.moveTo(plane.x + plane.width * .06, plane.y); ctx.lineTo(plane.x + plane.width * .94, plane.y); ctx.lineTo(plane.x + plane.width, plane.y + plane.height); ctx.lineTo(plane.x, plane.y + plane.height); }
+    ctx.closePath(); ctx.clip();
     ctx.beginPath(); ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height); if (tv) ctx.roundRect(tv.x, tv.y, tv.width, tv.height, Math.min(tv.width, tv.height) * .012); ctx.clip('evenodd');
-    ctx.globalAlpha = Math.min(.85, strength * (settings?.intensity ?? 90) / 100 * gain * (name === 'table' ? .55 : .42));
-    ctx.filter = `blur(${settings?.blur ?? 8}px)`; ctx.drawImage(buffer, cx - targetWidth / 2, top, targetWidth, targetHeight); ctx.restore();
+    const materialGain = plane.material === 'glass' ? 1.4 : plane.material === 'matte' ? .45 : 1;
+    // Wood scatters light; a white frame must not turn the whole floor white.
+    ctx.globalAlpha = Math.min(.4, strength * (settings?.intensity ?? 65) / 100 * gain * materialGain * (name === 'table' ? .32 : .16));
+    ctx.filter = `blur(${settings?.blur ?? 12}px)`; ctx.drawImage(buffer, cx - targetWidth / 2, top, targetWidth, targetHeight); ctx.restore();
   }
 }

@@ -1,9 +1,10 @@
-import { paintReflections } from './reflections';
+import { paintReflections, reflectionPlanes } from './reflections';
 import { paintRoomGrade } from './room-grade';
 import { type Mood } from './studio-model';
 import { getPresentation } from './scene-presentation';
 import { videoCrop } from './presentation-model';
 import { frameColor, blendColor, type LightColor } from './light-color';
+import { supportPlane } from './support-surfaces';
 
 export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number };
 let sources: DecorationLight[] = [];
@@ -26,6 +27,8 @@ export function initRoomLighting() {
   const grade = document.querySelector<HTMLCanvasElement>('#roomGrade')!;
   const gradeCtx = grade.getContext('2d');
   const reflection = document.querySelector<HTMLCanvasElement>('#roomReflection')!, reflectionCtx = reflection.getContext('2d');
+  const floorReflection = document.createElement('canvas'); floorReflection.id = 'roomFloorReflection';
+  reflection.parentElement!.append(floorReflection); const floorReflectionCtx = floorReflection.getContext('2d');
   const sample = document.createElement('canvas');
   sample.width = 64; sample.height = 36;
   const testSample = document.createElement('canvas'); testSample.width = 64; testSample.height = 36;
@@ -86,9 +89,10 @@ export function initRoomLighting() {
     const scale = Math.min(1, 960 / Math.max(bounds.width, bounds.height));
     const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
     if (shade.width !== width || shade.height !== height) {
-      shade.width = tint.width = grade.width = reflection.width = width; shade.height = tint.height = grade.height = reflection.height = height;
+      shade.width = tint.width = grade.width = reflection.width = floorReflection.width = width; shade.height = tint.height = grade.height = reflection.height = floorReflection.height = height;
     }
     reflectionCtx?.clearRect(0, 0, width, height);
+    floorReflectionCtx?.clearRect(0, 0, width, height);
     shadowCtx.clearRect(0, 0, width, height);
     tintCtx.clearRect(0, 0, width, height);
     gradeCtx?.clearRect(0, 0, width, height);
@@ -115,7 +119,12 @@ export function initRoomLighting() {
       if (video !== blockedVideo && (video !== sampledVideo || video.currentTime !== lastTime || framing !== lastFraming)) {
         try {
           const crop = videoCrop(video.videoWidth, video.videoHeight, glass.width, glass.height, getPresentation()?.video, getComputedStyle(video).objectFit);
-          sampleCtx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, 64, 36);
+          sampleCtx.fillStyle = '#000'; sampleCtx.fillRect(0, 0, 64, 36);
+          if (getPresentation()?.video?.fit === 'contain') {
+            const fit = Math.min(glass.width / video.videoWidth, glass.height / video.videoHeight);
+            const dw = video.videoWidth * fit / glass.width * 64, dh = video.videoHeight * fit / glass.height * 36;
+            sampleCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, (64 - dw) / 2, (36 - dh) / 2, dw, dh);
+          } else sampleCtx.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, 64, 36);
           const pixels = sampleCtx.getImageData(0, 0, 64, 36).data;
           lastScreenSample = target = frameColor(pixels, 64, 36);
           lastFloorSample = floorTarget = frameColor(pixels, 64, 36, 24, 36);
@@ -146,14 +155,18 @@ export function initRoomLighting() {
     const rimGain = tvGain * (mood.rim ?? 100) / 100 * finish;
     if (reflectionCtx && mirrorReady && stage.classList.contains('home-mode')) {
       const background = document.querySelector<HTMLElement>('#roomBackdrop')!.getBoundingClientRect();
-      const furniture = stage.classList.contains('modular-room') ? document.querySelector<HTMLElement>('.decoration-box[data-prop="cabinet"]:not(.decor-depth-outline)')?.getBoundingClientRect() : undefined;
-      const surfaces = stage.classList.contains('modular-room') ? {
-        table: furniture ? { x: (furniture.x - bounds.x) * scale, y: (furniture.y - bounds.y + furniture.height * .18) * scale, width: furniture.width * scale, height: furniture.height * .12 * scale } : { x: 0, y: 0, width: 0, height: 0 },
-        floor: { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y + background.height * .65) * scale, width: background.width * scale, height: background.height * .35 * scale },
+      const surface = supportPlane(getPresentation());
+      const table = surface ? { ...surface, x: (surface.x - bounds.x) * scale, y: (surface.y - bounds.y) * scale, width: surface.width * scale, height: surface.height * scale,
+        quad: surface.quad?.map(([x, y]) => [(x - bounds.x) * scale, (y - bounds.y) * scale] as [number, number]) } : undefined;
+      const surfaces = stage.classList.contains('modular-room') || table ? {
+        table: table ?? { x: 0, y: 0, width: 0, height: 0 },
+        floor: stage.classList.contains('modular-room') ? { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y + background.height * .65) * scale, width: background.width * scale, height: background.height * .35 * scale } : reflectionPlanes({ x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale }, innerHeight > innerWidth).floor,
       } : undefined;
       paintReflections(reflectionCtx, reflectionFrame, { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale },
-        { x: gx, y: gy, width: gw, height: gh }, innerHeight > innerWidth, screenColor.strength * tvGain, getPresentation()?.reflection,
+        { x: gx, y: gy, width: gw, height: gh }, innerHeight > innerWidth, screenColor.strength * tvGain, { ...getPresentation()?.reflection, floor: 0 },
         tvBounds, surfaces);
+      if (floorReflectionCtx) paintReflections(floorReflectionCtx, reflectionFrame, { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale },
+        { x: gx, y: gy, width: gw, height: gh }, innerHeight > innerWidth, screenColor.strength * tvGain, { ...getPresentation()?.reflection, table: 0 }, tvBounds, surfaces);
     }
     const reach = (mood.reach ?? 100) / 100;
     glow(gx + gw / 2, gy + gh / 2, gw * .88 * reach, gh * 1.05 * reach, screenColor, .7 * tvGain);
@@ -193,9 +206,9 @@ export function initRoomLighting() {
       glow(x, y, radius, radius * (light.shape === 'strip' ? .16 : light.shape === 'spot' ? .4 : 1), color, 1, light.angle ?? 0, light.softness ?? 60);
     }
     // Preserve the live picture and its native CRT treatment exactly.
-    for (const ctx of [shadowCtx, tintCtx, reflectionCtx].filter((c): c is CanvasRenderingContext2D => Boolean(c))) {
+    for (const ctx of [shadowCtx, tintCtx, reflectionCtx, floorReflectionCtx].filter((c): c is CanvasRenderingContext2D => Boolean(c))) {
       ctx.save(); ctx.globalCompositeOperation = 'destination-out';
-      const radius = stage.classList.contains('arcade-mode') ? Math.min(gw, gh) * .01 : Math.min(gw * .025, gh * .04);
+      const radius = getPresentation()?.screen?.rounded === false ? 0 : stage.classList.contains('arcade-mode') ? Math.min(gw, gh) * .01 : Math.min(gw * .025, gh * .04);
       ctx.beginPath(); ctx.roundRect(gx, gy, gw, gh, radius);
       ctx.fillStyle = '#000'; ctx.fill(); ctx.restore();
     }
