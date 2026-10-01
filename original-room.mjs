@@ -7,6 +7,7 @@ export function restoreOriginalRoom(room) {
     presentation.style = 'classic';
     delete presentation.environment;
     delete presentation.tvModel;
+    delete presentation.tvSupport;
     delete presentation.background;
     delete presentation.tvPaint;
   }

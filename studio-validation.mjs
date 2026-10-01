@@ -1,3 +1,4 @@
+import { tvIds } from './tv-catalog.mjs';
 import { roomIds, propIds } from './room-catalog.mjs';
 const finite = (value, low, high) => typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high;
 const optionalNumbers = (object, fields) => Object.entries(fields).every(([key, [lo, hi]]) => object[key] === undefined || finite(object[key], lo, hi));
@@ -14,7 +15,8 @@ export function validPresentations(settings, views) {
   if (!object(settings)) return false;
   return Object.entries(settings).every(([view, p]) => views.has(view) && object(p) &&
     (p.environment === undefined || roomIds.has(p.environment)) &&
-    (p.tvModel === undefined || ['original', 'silver', 'charcoal'].includes(p.tvModel)) &&
+    (p.tvSupport === undefined || ['free', 'cabinet', 'floor'].includes(p.tvSupport)) &&
+    (p.tvModel === undefined || tvIds.has(p.tvModel)) &&
     (p.style === undefined || ['original', 'classic', 'minimal', 'wood', 'brick', 'custom'].includes(p.style)) &&
     ['wall', 'cabinet', 'floor'].every(key => p[key] === undefined || (typeof p[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p[key]))) &&
     (p.background === undefined || (typeof p.background === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(p.background))) &&
@@ -45,7 +47,8 @@ export function validMood(m) {
 }
 export function validStudioPlacement(p) {
   const t = p.transform;
-  return (t === undefined || (object(t) &&
+  return (p.lava === undefined || (object(p.lava) && (p.lava.motion === undefined || typeof p.lava.motion === 'boolean') && optionalNumbers(p.lava, { speed: [.2, 3] }))) &&
+    (t === undefined || (object(t) &&
     (t.surface === undefined || ['free', 'wall', 'cabinet', 'floor', 'ceiling', 'left-wall', 'right-wall', 'shelf'].includes(t.surface)) &&
     ['auto', 'flipX', 'flipY'].every(key => t[key] === undefined || typeof t[key] === 'boolean') &&
     optionalNumbers(t, { tiltX: [-85, 85], tiltY: [-85, 85], skewX: [-45, 45], skewY: [-45, 45], scaleX: [.25, 2.5], scaleY: [.25, 2.5], depth: [150, 2000] }) && (t.corners === undefined || validCorners(t.corners)))) &&

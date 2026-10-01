@@ -14,7 +14,7 @@ export function sceneControls(layer: HTMLElement, presentation: Presentation, mo
     Object.assign(element.style, { left: `${art.left - room.left + (home ? art.width * value('x', 0) : 0)}px`, top: `${art.top - room.top + (home ? art.height * value('y', 0) : 0)}px`,
       width: `${art.width * (home ? value('w', 1) : 1)}px`, height: `${art.height * (home ? value('h', 1) : 1)}px` });
   };
-  const emit = () => parent.postMessage({ type: 'presentation-change', kind, framing: presentation[kind] }, location.origin);
+  const emit = () => parent.postMessage({ type: 'presentation-change', kind, framing: presentation[kind], support: presentation.tvSupport }, location.origin);
   element.addEventListener('pointerdown', event => {
     if (event.button !== 0 || !event.isPrimary || suspended()) return; event.preventDefault(); event.stopPropagation(); element.setPointerCapture(event.pointerId);
     parent.postMessage({ type: 'decor-gesture-start' }, location.origin);
@@ -24,6 +24,7 @@ export function sceneControls(layer: HTMLElement, presentation: Presentation, mo
     const originScreen = { ...presentation.screen }, baseWidth = screen.width / ((originScreen.width ?? 100) / 100), baseHeight = screen.height / ((originScreen.height ?? 100) / 100);
     const move = (e: PointerEvent) => {
       if (suspended()) return;
+      if (kind === 'tv') presentation.tvSupport = 'free';
       if (kind === 'screen') { const p = presentation.screen ??= {}; if (resize) { p.width = Math.min(150, Math.max(50, (originScreen.width ?? 100) + (e.clientX - start.x) / baseWidth * 100)); p.height = Math.min(150, Math.max(50, (originScreen.height ?? 100) + (e.clientY - start.y) / baseHeight * 100)); } else { p.x = Math.min(50, Math.max(-50, (originScreen.x ?? 0) + (e.clientX - start.x) / baseWidth * 100)); p.y = Math.min(50, Math.max(-50, (originScreen.y ?? 0) + (e.clientY - start.y) / baseHeight * 100)); } }
       else { const p = presentation[kind] ??= {};
       if (resize) p.zoom = Math.min(2.5, Math.max(kind === 'tv' ? .3 : .5, (origin.zoom ?? 1) * Math.exp((e.clientX - start.x + e.clientY - start.y) / 300)));

@@ -1,3 +1,4 @@
+import { tvModels } from '../tv-catalog.mjs';
 import { screenRect, type Presentation } from './presentation-model';
 import type { Mood } from './studio-model';
 let current: Presentation | undefined;
@@ -16,6 +17,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   // manifests retain their saved geometry but never recreate synthetic furniture.
   stage.classList.toggle('free-room', home && !tiny || p?.style === 'custom');
   stage.classList.toggle('classic-room', home && !tiny && (!p?.tvModel || p.tvModel === 'original'));
+  art.style.removeProperty('translate');
   art.style.removeProperty('transform');
   const base = getComputedStyle(art).transform, b = room.getBoundingClientRect(), a = art.getBoundingClientRect();
   const camera = p?.camera, tv = p?.tv, zoom = camera?.zoom ?? 1;
@@ -53,15 +55,33 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   window.dispatchEvent(new Event('shis-presentation-change'));
 }
 function configureTvModel(face: HTMLElement, p: Presentation | undefined, tiny: boolean) {
-  for (const key of ['room-art', 'glass-x', 'glass-y', 'glass-w', 'glass-h', 'model-left', 'model-top']) face.style.removeProperty('--' + key);
+  for (const key of ['room-art', 'glass-x', 'glass-y', 'glass-w', 'glass-h', 'model-left', 'model-top', 'model-art-w', 'model-art-h', ...['x','y','w','h'].flatMap(k => ['tv-body-' + k, 'tv-feet-' + k, 'photo-' + k])]) face.style.removeProperty('--' + key);
   const model = tiny ? 'original' : p?.tvModel ?? 'original';
   face.dataset.tvModel = model;
   if (model === 'original') return;
   const style = getComputedStyle(face), n = (key: string) => parseFloat(style.getPropertyValue('--tv-body-' + key));
+  const customModel = tvModels.find(t => t.id === model && t.asset);
+  if (customModel?.bounds && customModel.glass && customModel.ratio) {
+    const [bx, by, bw, bh] = customModel.bounds;
+    const fw = n('w') / bw * 100, fh = fw * face.offsetWidth / face.offsetHeight / customModel.ratio;
+    const fx = n('x') + n('w') / 2 - fw * (bx + bw / 2) / 100;
+    const fy = n('y') + n('h') - fh * (by + bh) / 100;
+    const [gx, gy, gw, gh] = customModel.glass;
+    const values = { 'photo-x': fx, 'photo-y': fy, 'photo-w': fw, 'photo-h': fh,
+      'tv-body-x': fx + fw * bx / 100, 'tv-body-y': fy + fh * by / 100, 'tv-body-w': fw * bw / 100, 'tv-body-h': fh * bh / 100,
+      'tv-feet-x': fx + fw * bx / 100, 'tv-feet-y': fy + fh * (by + bh) / 100, 'tv-feet-w': fw * bw / 100, 'tv-feet-h': 0,
+      'glass-x': fx + fw * gx / 100, 'glass-y': fy + fh * gy / 100, 'glass-w': fw * gw / 100, 'glass-h': fh * gh / 100 };
+    for (const [key, value] of Object.entries(values)) face.style.setProperty('--' + key, `${value}%`);
+    face.style.setProperty('--room-art', `url('${customModel.asset}')`);
+    face.style.setProperty('--model-left', `${face.offsetWidth * fx / 100}px`); face.style.setProperty('--model-top', `${face.offsetHeight * fy / 100}px`);
+    face.style.setProperty('--model-art-w', `${fw}%`); face.style.setProperty('--model-art-h', `${fh}%`);
+    return;
+  }
   const four = document.querySelector('#tvScene')!.classList.contains('aspect-4x3');
   const file = model === 'silver' ? four ? 'tv-slate-4x3.webp' : 'tv-slate-room.webp' : four ? 'tv-charcoal-4x3.webp' : 'tv-charcoal-wide.webp';
   const glass = four ? { x: 11.3, y: 7, w: 78, h: 76 } : { x: 8.5, y: 6, w: 83, h: 78 };
   face.style.setProperty('--room-art', `url('/${file}')`);
+  for (const key of ['x', 'y', 'w', 'h']) face.style.setProperty('--photo-' + key, `${n(key)}%`);
   face.style.setProperty('--model-left', `${face.offsetWidth * n('x') / 100}px`);
   face.style.setProperty('--model-top', `${face.offsetHeight * n('y') / 100}px`);
   face.style.setProperty('--glass-x', `${n('x') + n('w') * glass.x / 100}%`);
@@ -95,4 +115,25 @@ export function initVideoFraming() {
   const mount = document.querySelector('#videoMount')!;
   new MutationObserver(applyVideoFraming).observe(mount, { childList: true });
   mount.addEventListener('loadedmetadata', applyVideoFraming, true);
+}
+
+// Runtime support follows the actual movable cabinet; it never rewrites saved
+// object coordinates. Free TV controls explicitly detach this relationship.
+export function applyTvSupport() {
+  const p = current;
+  if (!p?.tvSupport || p.tvSupport === 'free' || !document.querySelector('#stage')?.classList.contains('home-mode')) return;
+  const art = document.querySelector<HTMLElement>('#tvScene')!, face = document.querySelector<HTMLElement>('.tv-face')!;
+  art.style.removeProperty('translate');
+  const bounds = face.getBoundingClientRect(), s = getComputedStyle(face);
+  const n = (k: string) => parseFloat(s.getPropertyValue('--tv-body-' + k)) / 100;
+  const feet = parseFloat(s.getPropertyValue('--tv-feet-y')) / 100 + parseFloat(s.getPropertyValue('--tv-feet-h')) / 100;
+  const bottom = bounds.top + bounds.height * Math.max(n('y') + n('h'), feet);
+  const center = bounds.left + bounds.width * (n('x') + n('w') / 2);
+  const cabinet = document.querySelector<HTMLElement>('.decoration-box[data-prop="cabinet"]');
+  const background = document.querySelector<HTMLElement>('#roomBackdrop')!.getBoundingClientRect();
+  if (p.tvSupport === 'cabinet' && (!cabinet || cabinet.offsetHeight < 1)) return;
+  const c = cabinet?.getBoundingClientRect();
+  const target = p.tvSupport === 'floor' ? { x: background.left + background.width / 2, y: background.top + background.height * .87 } : { x: c!.left + c!.width / 2, y: c!.top + c!.height * .18 };
+  art.style.translate = `${target.x - center}px ${target.y - bottom}px`;
+  window.dispatchEvent(new Event('shis-presentation-change'));
 }

@@ -1,6 +1,8 @@
 import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type DecorationLight, type RoomMood } from './lighting';
 import { objectTransform, gradeFilter, type Transform, type ContactShadow } from './studio-model';
 import { initStudio, refreshStudio, shapeAsset, rememberAssets } from './studio';
+import { clearLampAnimation, addLampAnimation } from './lamp-animation';
+import { applyTvSupport } from './scene-presentation';
 import { applyPresentation, initVideoFraming } from './scene-presentation';
 import { cameraRect, type Presentation } from './presentation-model';
 import { sceneControls } from './scene-controls';
@@ -29,6 +31,7 @@ export type Placement = {
   brightness?: number; saturation?: number; hue?: number; shadow?: number;
   transform?: Transform; contactShadow?: ContactShadow; crop?: number[];
   light?: Omit<DecorationLight, 'id'>;
+  lava?: { motion?: boolean; speed?: number };
 };
 export type Decoration = {
   id: string; asset: string; name: string; kind?: 'viewer-slot' | 'light' | 'shape' | 'builtin';
@@ -233,6 +236,7 @@ function ambientFilter(placement: Placement): string {
 function render(manifest: Manifest, sceneName: Scene, view: View, editable: boolean) {
   lastRender = { manifest, sceneName, view, editable };
   applyPresentation(manifest.presentations?.[key(sceneName, view, currentAspect())], manifest.mood);
+  clearLampAnimation();
   layer.replaceChildren();
   const behind = document.createElement('div');
   behind.className = 'decorations-behind-tv';
@@ -285,9 +289,10 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       image.alt = '';
       image.draggable = false;
       image.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, item.kind === 'builtin' ? item.asset === 'rug' ? 'floor' : item.category === 'furniture' ? 'cabinet' : 'figures' : 'figures')}`;
-      image.addEventListener('load', () => position(box, placement, sceneName, view), { once: true });
+      image.addEventListener('load', () => { position(box, placement, sceneName, view); syncSupport(); }, { once: true });
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
+      if (item.kind === 'builtin' && item.category === 'lamp') addLampAnimation(box, image, placement, item.asset === 'lava-lamp');
     }
     if (placement.contactShadow?.opacity) {
       const shadow = document.createElement('span'); shadow.className = 'decor-contact-shadow';
@@ -344,13 +349,17 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     Object.assign(grid.style, { left: `${bounds.left - room.left}px`, top: `${bounds.top - room.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` });
     layer.append(grid);
   }
+  const syncSupport = () => { if (sceneName === 'home') { applyTvSupport();
+      for (const item of manifest.items) { const p = placementFor(item, sceneName, view, currentAspect()); if (!p || p.anchor !== 'frame') continue; for (const el of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (el.dataset.id === item.id) position(el, p, sceneName, view); }
+      maskBehindTv(behind, layer, document.querySelector<HTMLElement>('.tv-face')!); } };
+  syncSupport();
   setDecorationLights(lights);
   if (editable && (previewTool === 'tv' || previewTool === 'camera' || previewTool === 'screen') && view !== 'window') {
     const p = (manifest.presentations ??= {})[key(sceneName, view, currentAspect())] ??= {};
     sceneControls(layer, p, manifest.mood, previewTool, () => {
       for (const item of manifest.items) { const placement = placementFor(item, sceneName, view, currentAspect()); if (!placement) continue;
         for (const el of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (el.dataset.id === item.id) position(el, placement, sceneName, view); }
-      if (sceneName === 'home') maskBehindTv(behind, layer, document.querySelector<HTMLElement>('.tv-face')!);
+      syncSupport();
     }, () => previewPinching);
   }
 }
@@ -1182,6 +1191,7 @@ export function initDecorations() {
       const f = event.data.framing; if (!f || !['x', 'y', 'zoom', 'width', 'height'].every(key => f[key] === undefined || Number.isFinite(f[key]))) return;
       const kind = event.data.kind as 'tv' | 'camera' | 'screen', limit = kind === 'tv' ? 80 : 50;
       const p = (draft.presentations ??= {})[activeKey()] ??= {};
+      if (kind === 'tv') p.tvSupport = ['cabinet', 'floor'].includes(event.data.support) ? event.data.support : 'free';
       if (kind === 'screen') p.screen = { x: clamp(f.x ?? 0, -50, 50), y: clamp(f.y ?? 0, -50, 50), width: clamp(f.width ?? 100, 50, 150), height: clamp(f.height ?? 100, 50, 150) };
       else p[kind] = { x: clamp(f.x ?? 0, -limit, limit), y: clamp(f.y ?? 0, -limit, limit), zoom: clamp(f.zoom ?? 1, kind === 'tv' ? .3 : .5, 2.5) };
       refreshStudio(); history.record(draft, 'scene-drag'); updateHistoryButtons(); return;
