@@ -4,7 +4,8 @@ export type Transform = { surface?: Surface; auto?: boolean; tiltX?: number; til
 export type ContactShadow = { opacity: number; blur: number; width: number; x: number; y: number };
 export type Grade = { exposure?: number; contrast?: number; saturation?: number; temperature?: number; shadows?: number; influence?: number };
 export type Zone = 'wall' | 'cabinet' | 'floor' | 'tv' | 'figures';
-export type Mood = { preset: 'neutral' | 'blue-night' | 'warm' | 'classic-night' | 'tv-only' | 'moonlight' | 'soft-night' | 'neon'; intensity: number; tvGlow: number;
+export type Daytime = 'morning' | 'day' | 'evening' | 'night';
+export type Mood = { daytime?: Daytime; preset: 'neutral' | 'blue-night' | 'warm' | 'classic-night' | 'tv-only' | 'moonlight' | 'soft-night' | 'neon'; intensity: number; tvGlow: number;
   grade?: Grade; zones?: Partial<Record<Zone, Grade>>; rim?: number; cabinet?: number; floor?: number; reach?: number; transition?: number; accent?: string; accent2?: string };
 export function perspectiveAngles(t: Transform = {}, x = 50) {
   if (!t.auto) return { x: t.tiltX ?? 0, y: t.tiltY ?? 0 };

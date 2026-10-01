@@ -1,3 +1,5 @@
+import { getPresentation } from './scene-presentation';
+import { paintTv } from './tv-paint';
 import { gradeFilter, type Mood, type Zone } from './studio-model';
 type Rect = { x: number; y: number; width: number; height: number };
 const textures = new Map<string, HTMLImageElement>();
@@ -23,7 +25,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const floor = detached ? by + bh * (innerHeight > innerWidth ? .62 : 1) : cabinet + (ctx.canvas.height - cabinet) * (innerHeight > innerWidth ? .48 : .75);
   const power = mood.intensity / 100;
   const free = document.querySelector('#stage')?.classList.contains('free-room');
-  const key = JSON.stringify([url, backdrop?.src, bx, by, bw, bh, backdrop?.complete, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
+  const key = JSON.stringify([url, getPresentation()?.tvPaint, backdrop?.src, bx, by, bw, bh, backdrop?.complete, x, y, w, h, tv, cabinet, floor, glass, mood, free, ctx.canvas.width, ctx.canvas.height]);
   if (cached?.key === key) { ctx.drawImage(cached.canvas, 0, 0); return; }
   const target = ctx, buffer = document.createElement('canvas'); buffer.width = ctx.canvas.width; buffer.height = ctx.canvas.height;
   const bufferContext = buffer.getContext('2d'); if (!bufferContext) return; ctx = bufferContext;
@@ -52,6 +54,8 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
     gradient.addColorStop(0, `rgba(0,0,0,${depth})`); gradient.addColorStop(.6, 'rgba(0,0,0,0)'); gradient.addColorStop(1, `rgba(0,0,0,${depth * .6})`);
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.restore();
   }
+  const aperture = { x: x + w * value('glass-x'), y: y + h * value('glass-y'), width: w * value('glass-w'), height: h * value('glass-h') };
+  paintTv(ctx, image, { x, y, width: w, height: h }, tv, aperture, getPresentation()?.tvPaint);
   ctx.save(); ctx.globalCompositeOperation = 'destination-out';
   ctx.beginPath(); ctx.roundRect(glass.x, glass.y, glass.width, glass.height, Math.min(glass.width * .025, glass.height * .04));
   ctx.fillStyle = '#000'; ctx.fill(); ctx.restore();
