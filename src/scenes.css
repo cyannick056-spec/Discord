@@ -1282,10 +1282,6 @@
 .studio-lamp-gallery button { display:flex; align-items:center; gap:6px; text-align:left; }
 .studio-lamp-gallery img { width:30px; height:46px; object-fit:contain; }
 
-.window-rain { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-.window-rain[hidden] { display:none; }
-.window-rain-layer { position:absolute; inset:0; z-index:8; pointer-events:none; transform-origin:50% 50%; }
-.window-rain-layer[hidden] { display:none; }
 
 .stage.square-screen .screen-wrap, .stage.square-screen .arcade-screen, .stage.square-screen .player, .stage.square-screen .crt-overlay, .stage.square-screen .screen-glare { border-radius:0 !important; }
 #roomFloorReflection { z-index:8; mix-blend-mode:screen; }

@@ -15,7 +15,7 @@ test('furniture materials survive saves; one shared decoration allowance admits 
   const url = `http://127.0.0.1:${server.address().port}/api/decorations`;
   const save = body => fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Decoration-Key': 'fixture' }, body: JSON.stringify(body) });
   const manifest = { items: [], ambient: 66 };
-  prepareRoom(manifest, 'morning');
+  prepareRoom(manifest, 'cozy-night');
   const cabinet = manifest.items.find(i => i.asset === 'cabinet');
   const key = 'home-portrait-4x3';
   try {
@@ -37,7 +37,7 @@ test('furniture materials survive saves; one shared decoration allowance admits 
     const overflow = structuredClone(manifest); overflow.items.push({ id: crypto.randomUUID(), kind: 'builtin', asset: 'wall-clock', name: 'Reloj', placements: {} });
     assert.equal((await save(overflow)).status, 400);
     assert.deepEqual(await (await fetch(url)).json(), manifest);
-    assert.equal(prepareRoom(manifest, 'night'), true);
+    assert.equal(prepareRoom(manifest, 'cozy-night'), true);
     assert.equal(manifest.items.length, MAX_SCENE_ITEMS);
   } finally { await new Promise(r => server.close(r)); await rm(directory, { recursive: true, force: true }); }
 });

@@ -22,7 +22,6 @@ app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
   directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),
   editKey: process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY,
-  restoreOriginal: true,
   rebuildRooms: true,
 });
 

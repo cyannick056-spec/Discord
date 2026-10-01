@@ -1,9 +1,9 @@
+import { duplicateInView } from './view-state';
 import { materials, MAX_SCENE_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
 import type { Decoration, Manifest, Placement, RoomSnapshot } from './decorations';
 import { perspectiveAngles, type Grade, type Mood, type Daytime, type Transform, type Zone } from './studio-model';
 import { type Presentation, type TvPaint, type Reflection } from './presentation-model';
 import { straightCorners, validCorners } from './perspective';
-import { restoreOriginalRoom } from '../original-room.mjs';
 import { defaultRealPresentation } from '../real-room.mjs';
 import { rooms, props, builtinUrl, visibleInRoom, type RoomId } from '../room-catalog.mjs';
 import { tvModels } from '../tv-catalog.mjs';
@@ -59,7 +59,7 @@ function supportItem(): Decoration | undefined {
   if (scene?.supportId) return items.find(i => i.id === scene.supportId);
   return items.find(i => i.asset === 'cabinet') ?? items.find(i => props.find(p => p.id === i.asset)?.support);
 }
-function mood(): Mood { return host!.draft().mood ??= { preset: 'neutral', intensity: 65, tvGlow: 100 }; }
+function mood(): Mood { return presentation().mood ??= structuredClone(host!.draft().mood ?? { preset: 'neutral', intensity: 0, tvGlow: 100 }); }
 function placements(): Placement[] {
   const ids = host!.selected(); return host!.draft().items.filter(i => ids.includes(i.id)).flatMap(i => {
     const p = i.placements[host!.key() as keyof typeof i.placements]; return p ? [p] : [];
@@ -83,9 +83,8 @@ export function initStudio(h: Host) {
   const objects = $('studioObjects'), lights = $('studioLights'), environment = $('studioMood');
   $('studioCollapse').insertAdjacentHTML('beforebegin', '<button id="studioSceneTab" role="tab" aria-selected="false" aria-controls="studioScene">Escena</button>');
   document.querySelector('.studio-scroll')!.insertAdjacentHTML('beforeend', '<section id="studioScene" role="tabpanel" aria-labelledby="studioSceneTab" hidden></section>');
-  $('studioScene').innerHTML = '<p class="studio-note">Cada vista y tamaño de TV conserva su composición. El zoom de la vista previa solo ayuda a editar; los controles de aquí cambian el escenario compartido.</p><div class="studio-template-grid"><button data-studio-template="morning">Mañana</button><button data-studio-template="night">Noche</button></div>' +
-    panel('studioBackground', 'Habitaciones fotográficas', '<div id="studioRoomGallery" class="studio-room-gallery">' + rooms.map(r => `<button type="button" data-studio-room="${r.id}" aria-pressed="false"><img src="/rooms/${r.id}-wide.webp" alt="" loading="lazy"/><span>${r.name}</span><small>${r.description}</small></button>`).join('') + '</div><p class="studio-note">La misma habitación tiene una fotografía de mañana y otra de noche. Las mesas y tus objetos conservan su posición al cambiar la hora. Puedes dejar superficies vacías y colocar figuras sueltas.</p><label>Escenario<select id="studioSceneStyle">' + rooms.map(r => `<option value="${r.id}">${r.name}</option>`).join('') + '<option value="custom">Mi imagen de fondo</option></select></label><label class="editor-upload">Subir fondo<input id="studioBackgroundUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif"/></label><label>Reutilizar imagen<select id="studioBackgroundAsset"></select></label><p class="studio-note">Cada hora usa su propia iluminación fotografiada. Los efectos y las lámparas que añadas se aplican después.</p>', true) +
-    panel('studioRain', 'Ventana · lluvia en tiempo real', '<p class="studio-note">Puedes activar lluvia sobre el cristal en cualquiera de los dos ambientes. Sigue a la ventana cuando cambias el encuadre.</p><label class="studio-check"><input id="studioRainEnabled" type="checkbox"/> Lluvia animada</label>' + range('studioRainIntensity', 'Intensidad', 0, 100) + range('studioRainSpeed', 'Velocidad', .2, 3, .1) + '<label class="studio-check"><input id="studioRainForceMotion" type="checkbox"/> Animar aunque el dispositivo reduzca el movimiento</label><button id="studioRainCloseFraming" type="button">Encuadre recomendado</button><p id="studioRainMotionStatus" class="studio-note" aria-live="polite"></p>', true) +
+  $('studioScene').innerHTML = '<p class="studio-note">Cada vista guarda sus objetos, luces y encuadre por separado. Guardar esta vista no cambia las demás. El zoom de la vista previa solo ayuda a editar.</p><div class="studio-template-grid"><button data-studio-template="cozy-night">Rincón nocturno</button></div>' +
+    panel('studioBackground', 'Habitaciones fotográficas', '<div id="studioRoomGallery" class="studio-room-gallery">' + rooms.map(r => `<button type="button" data-studio-room="${r.id}" aria-pressed="false"><img src="/rooms/${r.id}-wide.webp" alt="" loading="lazy"/><span>${r.name}</span><small>${r.description}</small></button>`).join('') + '</div><p class="studio-note">Pared azul petróleo, mueble de nogal y luces lavanda y ámbar. Las piezas se pueden mover o quitar en esta vista; deja espacio para tus figuritas.</p><label>Escenario<select id="studioSceneStyle">' + rooms.map(r => `<option value="${r.id}">${r.name}</option>`).join('') + '<option value="custom">Mi imagen de fondo</option></select></label><label class="editor-upload">Subir fondo<input id="studioBackgroundUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif"/></label><label>Reutilizar imagen<select id="studioBackgroundAsset"></select></label><p class="studio-note">El fondo tiene superficies mates. La luz lavanda, la lámpara y los reflejos de la TV se calculan en tiempo real.</p>', true) +
     panel('studioViewZoom', 'Zoom independiente por vista', '<p class="studio-note">Estos zooms se guardan para todos. Cambia Vista y Tamaño TV arriba para previsualizar cada uno.</p>' + zoomViews.map((key, i) => range('studioViewZoom' + i, zoomLabels[i], .5, 2.5, .05)).join(''), true) +
     panel('studioCamera', 'Encuadre del escenario', range('studioCameraX', 'Mover horizontalmente', -50, 50) + range('studioCameraY', 'Mover verticalmente', -50, 50) + range('studioCameraZoom', 'Zoom del escenario', .5, 2.5, .05) + '<div class="studio-buttons">' + buttons([['cameraTool', 'Encuadrar con el ratón'], ['resetCamera', 'Restablecer']]) + '</div>') +
     panel('studioTv', 'Modelo, posición y tamaño de la TV', '<label>Televisión<select id="studioTvModel">' + tvModels.map(t => `<option value="${t.id}">${t.name}</option>`).join('') + '</select></label><label>Apoyo de la TV<select id="studioTvSupport"><option value="free">Libre · mover manualmente</option><option value="cabinet">Apoyada sobre el mueble</option><option value="floor">Apoyada sobre el suelo</option></select></label>' + '<label>Mueble o base<select id="studioSupportObject"></select></label><label>Modelo del mueble de apoyo<select id="studioSupportStyle">' + props.filter(p => p.support).map(p => `<option value="${p.id}">${p.name}</option>`).join('') + '</select></label>' + range('studioTvX', 'Posición horizontal', -80, 80) + range('studioTvY', 'Posición vertical', -80, 80) + range('studioTvZoom', 'Tamaño de la TV', .3, 2.5, .05) + '<div class="studio-buttons">' + buttons([['tvTool', 'Mover TV en la escena'], ['resetTv', 'Restablecer']]) + '</div><p class="studio-note">Apoyada sigue al mueble cuando lo mueves. Al arrastrar la TV vuelve a Libre. Los modelos nuevos conservan sus proporciones; también puedes afinar la pantalla por separado.</p>') +
@@ -225,24 +224,20 @@ export function initStudio(h: Host) {
     (p[key] ??= {})[axis.toLowerCase() as 'x' | 'y' | 'zoom'] = Number($<HTMLInputElement>(`studio${group}${axis}`).value); h.change('presentation');
   });
   for (const axis of ['X', 'Y', 'Width', 'Height'] as const) $(`studioScreen${axis}`).addEventListener('input', () => { const p = presentation(); (p.screen ??= {})[axis.toLowerCase() as 'x' | 'y' | 'width' | 'height'] = Number($<HTMLInputElement>(`studioScreen${axis}`).value); h.change('screen'); });
-  const chooseRoom = (id: RoomId) => { if (prepareRoom(h.draft(), id) === false) return h.status(`La habitación necesita espacio para sus piezas. Elimina alguna pieza colocada (máximo ${MAX_SCENE_ITEMS}).`); h.command('deselect'); h.change(); h.status('Habitación preparada. Mueve sus piezas en Objetos y guarda para compartirla.'); };
+  const chooseRoom = (id: RoomId) => { if (prepareRoom(h.draft(), id, h.key() as import('./decorations').PlacementKey) === false) return h.status(`La habitación necesita espacio para sus piezas. Elimina alguna pieza colocada (máximo ${MAX_SCENE_ITEMS}).`); h.command('deselect'); h.change(); h.status('Habitación preparada. Mueve sus piezas en Objetos y guarda para compartirla.'); };
   $('studioSceneStyle').addEventListener('change', () => { const value = $<HTMLSelectElement>('studioSceneStyle').value;
     if (rooms.some(r => r.id === value)) return chooseRoom(value as RoomId);
     const p = presentation(); delete p.environment; p.style = value as Presentation['style']; h.change(); });
   $('studioRoomGallery').addEventListener('click', e => { const button = (e.target as HTMLElement).closest<HTMLElement>('[data-studio-room]'); if (button) chooseRoom(button.dataset.studioRoom as RoomId); });
   $('studioTvModel').addEventListener('change', () => { const p = presentation(); p.tvModel = $<HTMLSelectElement>('studioTvModel').value as Presentation['tvModel']; delete p.screen; p.tvSupport = tvModels.find(t => t.id === p.tvModel)?.floor ? 'floor' : p.environment ? 'cabinet' : 'free'; h.change(); });
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => refreshStudio());
-  $('studioRainCloseFraming').addEventListener('click', () => { const p = presentation(); if (!p.environment) return; p.camera = { zoom: 1 }; p.tv = defaultRealPresentation(h.key(), p.environment).tv; p.tvSupport = 'cabinet'; h.change(); });
-  $('studioRainForceMotion').addEventListener('change', () => { (presentation().rain ??= {}).forceMotion = $<HTMLInputElement>('studioRainForceMotion').checked; h.change(); });
-  $('studioRainEnabled').addEventListener('change', () => { (presentation().rain ??= {}).enabled = $<HTMLInputElement>('studioRainEnabled').checked; h.change(); });
-  for (const [id, key] of [['Intensity','intensity'],['Speed','speed']] as const) $('studioRain' + id).addEventListener('input', () => { (presentation().rain ??= {})[key] = Number($<HTMLInputElement>('studioRain' + id).value); h.change('rain'); });
   const materialPlacements = () => h.draft().items.filter(i => h.selected().includes(i.id) && i.category === 'furniture').flatMap(i => { const p = i.placements[h.key() as keyof typeof i.placements]; return p && !p.locked ? [p] : []; });
   $('studioMaterialPreset').addEventListener('change', () => { const preset = $<HTMLSelectElement>('studioMaterialPreset').value as FurnitureMaterial['preset']; const info = materials.find(m => m.id === preset)!; for (const p of materialPlacements()) { if (preset === 'original') delete p.material; else p.material = { ...p.material, preset, color: info.tint, scope: p.material?.scope ?? (props.find(prop => prop.id === h.item()?.asset)?.support ? 'top' : 'all'), roughness: info.finish === 'metal' ? 30 : info.finish === 'matte' ? 90 : 65 }; } h.change(); });
   $('studioMaterialScope').addEventListener('change', () => { for (const p of materialPlacements()) if (p.material) p.material.scope = $<HTMLSelectElement>('studioMaterialScope').value as 'top' | 'all'; h.change(); });
   $('studioMaterialColor').addEventListener('input', () => { for (const p of materialPlacements()) if (p.material) p.material.color = $<HTMLInputElement>('studioMaterialColor').value; h.change('material-color'); });
   for (const [id, key] of [['Strength','strength'],['Scale','scale'],['Roughness','roughness']] as const) $('studioMaterial' + id).addEventListener('input', () => { for (const p of materialPlacements()) if (p.material) p.material[key] = Number($<HTMLInputElement>('studioMaterial' + id).value); h.change('material-' + key); });
   $('studioFurnitureTypes').addEventListener('click', e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-studio-prop]')?.dataset.studioProp; if (!id) return; const item = builtinDecoration(id); item.placements[h.key() as keyof typeof item.placements] = roomPlacement(id, h.key().includes('portrait')); h.create(item); });
-  $('studioSupportStyle').addEventListener('change', () => { const asset = $<HTMLSelectElement>('studioSupportStyle').value, info = props.find(p => p.id === asset)!, found = supportItem(); if (found?.kind === 'builtin') { found.asset = asset; found.name = info.name; found.category = 'furniture'; const p = presentation(); p.tvSupport = 'cabinet'; p.supportId = found.id; h.change(); } else { const item = builtinDecoration(asset); item.placements[h.key() as keyof typeof item.placements] = roomPlacement(asset, h.key().includes('portrait')); const p = presentation(); p.tvSupport = 'cabinet'; p.supportId = item.id; h.create(item); } });
+  $('studioSupportStyle').addEventListener('change', () => { const asset = $<HTMLSelectElement>('studioSupportStyle').value, info = props.find(p => p.id === asset)!, found = supportItem(); if (found?.kind === 'builtin') { const replacement = duplicateInView(found, h.key() as import('./decorations').PlacementKey); replacement.asset = asset; replacement.name = info.name; replacement.category = 'furniture'; found.placements[h.key() as keyof typeof found.placements]!.hidden = true; const p = presentation(); p.tvSupport = 'cabinet'; p.supportId = replacement.id; h.create(replacement); } else { const item = builtinDecoration(asset); item.placements[h.key() as keyof typeof item.placements] = roomPlacement(asset, h.key().includes('portrait')); const p = presentation(); p.tvSupport = 'cabinet'; p.supportId = item.id; h.create(item); } });
   $('studioSupportObject').addEventListener('change', () => { const p = presentation(), value = $<HTMLSelectElement>('studioSupportObject').value; if (value) p.supportId = value; else delete p.supportId; p.tvSupport = 'cabinet'; h.change(); });
   $('studioScreenRounded').addEventListener('change', () => { (presentation().screen ??= {}).rounded = $<HTMLInputElement>('studioScreenRounded').checked; h.change(); });
   $('studioVideoFit').addEventListener('change', () => { (presentation().video ??= {}).fit = $<HTMLSelectElement>('studioVideoFit').value as 'cover' | 'contain'; h.change(); });
@@ -273,7 +268,7 @@ export function initStudio(h: Host) {
   $<HTMLSelectElement>('editorMood').addEventListener('change', () => {
     const preset = mood().preset;
     const ambient: Record<string, number> = { neutral: 62, 'classic-night': 48, 'tv-only': 30, moonlight: 57, warm: 58, 'soft-night': 70, 'blue-night': 55, neon: 45 };
-    h.draft().ambient = ambient[preset]; h.change();
+    presentation().ambient = ambient[preset]; h.change();
   });
   refreshStudio();
 }
@@ -286,10 +281,9 @@ function command(cmd: string) {
   else if (cmd === 'resetTv' && presentation().environment) { presentation().tv = defaultRealPresentation(host.key(), presentation().environment).tv; presentation().tvSupport = 'cabinet'; }
   else if (cmd === 'resetVideo' && presentation().environment) presentation().video = { fit: 'contain' };
   else if (['resetCamera', 'resetTv', 'resetVideo', 'resetScreen'].includes(cmd)) delete presentation()[cmd.slice(5).toLowerCase() as 'camera' | 'tv' | 'video' | 'screen'];
-  else if (cmd === 'restoreOriginalRoom') restoreOriginalRoom(d);
   else if (cmd === 'resetTvPaint') delete presentation().tvPaint;
   else if (cmd === 'resetReflections') delete presentation().reflection;
-  else if (cmd === 'resetPresentation') { (d.presentations ??= {})[host.key() as keyof typeof d.presentations] = defaultRealPresentation(host.key(), presentation().environment ?? 'morning'); }
+  else if (cmd === 'resetPresentation') { (d.presentations ??= {})[host.key() as keyof typeof d.presentations] = defaultRealPresentation(host.key(), presentation().environment ?? 'cozy-night'); }
   else if (cmd === 'copyPresentation') { const p = structuredClone(presentation()), keys = host.key().startsWith('home') ? ['home-landscape-16x9', 'home-landscape-4x3', 'home-portrait-16x9', 'home-portrait-4x3', 'home-window-16x9', 'home-window-4x3'] : ['arcade-landscape', 'arcade-portrait', 'arcade-window']; keys.forEach(key => (d.presentations ??= {})[key as keyof typeof d.presentations] = structuredClone(p)); host.status('Composición copiada. Revisa el encuadre de cada vista.'); }
   else if (cmd.startsWith('flip')) { ps.filter(p => !p.locked).forEach(p => { const t = p.transform ??= {}, key = cmd as 'flipX' | 'flipY'; t[key] = !t[key]; }); }
   else if (cmd === 'resetTransform') ps.filter(p => !p.locked).forEach(p => { delete p.transform; });
@@ -306,7 +300,7 @@ function command(cmd: string) {
     else { unlocked.sort((a, b) => a[axis] - b[axis]); const lo = unlocked[0][axis], hi = unlocked.at(-1)![axis]; unlocked.forEach((p, n) => p[axis] = lo + (hi - lo) * n / (unlocked.length - 1)); }
   } else if (cmd === 'lightToggle') ps.forEach(p => { if (p.light) p.light.intensity = p.light.intensity ? 0 : 80; });
   else if (cmd === 'resetGrade') { const zone = $<HTMLSelectElement>('studioZone').value; if (zone === 'all') delete mood().grade; else if (mood().zones) delete mood().zones![zone as Zone]; }
-  else if (cmd === 'resetMood') { delete d.mood; d.ambient = 62; }
+  else if (cmd === 'resetMood') { presentation().mood = structuredClone(defaultRealPresentation(host.key()).mood); presentation().ambient = 100; }
   else if (cmd === 'saveRoom') {
     const name = $<HTMLInputElement>('studioRoomName').value.trim() || 'Mi ambiente';
     const existing = d.profiles?.find(p => p.name === name); if (existing) existing.room = room();
@@ -324,11 +318,7 @@ export function refreshStudio() {
   if (!host) return;
   const d = host.draft(), item = host.item(), p = item?.placements[host.key() as keyof typeof item.placements], t = p?.transform ?? {};
   const scene = d.presentations?.[host.key() as keyof typeof d.presentations];
-  field('studioSceneStyle', scene?.environment ?? (scene?.style === 'custom' ? 'custom' : 'morning'));
-  field('studioRainForceMotion', scene?.rain?.forceMotion ?? false);
-  $('studioRainMotionStatus').textContent = matchMedia('(prefers-reduced-motion: reduce)').matches && !scene?.rain?.forceMotion ? 'Movimiento pausado por la preferencia del dispositivo. Puedes permitirlo con la casilla anterior.' : 'Gotas y surcos animados únicamente sobre el cristal; la fotografía no tiene gotas fijas.';
-  $('studioRainCloseFraming').hidden = !scene?.environment; field('studioRainEnabled', scene?.rain?.enabled ?? false); field('studioRainIntensity', scene?.rain?.intensity ?? 55); field('studioRainSpeed', scene?.rain?.speed ?? 1);
-  $('studioRain').querySelectorAll<HTMLInputElement>('input').forEach(el => el.disabled = !scene?.environment);
+  field('studioSceneStyle', scene?.environment ?? (scene?.style === 'custom' ? 'custom' : 'cozy-night'));
   const resting=$<HTMLSelectElement>('studioRestingSurface'), restingValue=resting.value;
   const supports=d.items.filter(i => i.id !== item?.id && visibleInRoom(i,scene) && props.find(p=>p.id===i.asset)?.support && i.placements[host!.key() as keyof typeof i.placements] && !i.placements[host!.key() as keyof typeof i.placements]!.hidden);
   resting.replaceChildren(...supports.map(i=>new Option(i.name,i.id)));
@@ -382,9 +372,9 @@ export function refreshStudio() {
   field('studioObjectCategory', item?.category ?? (item?.kind === 'light' ? 'lamp' : 'figurine'));
   field('studioLightShape', p?.light?.shape ?? 'point'); field('studioLightAngle', p?.light?.angle ?? 0); field('studioLightSoftness', p?.light?.softness ?? 60);
   field('studioKelvin', p?.light?.kelvin ?? 4000);
-  field('studioAccent', d.mood?.accent ?? '#b93cff'); field('studioAccent2', d.mood?.accent2 ?? '#1ec8e6');
+  field('studioAccent', scene?.mood?.accent ?? d.mood?.accent ?? '#b93cff'); field('studioAccent2', scene?.mood?.accent2 ?? d.mood?.accent2 ?? '#1ec8e6');
   $('studioSelectionCount').textContent = `${host.selected().length} objetos seleccionados`;
-  const m = d.mood, zone = $<HTMLSelectElement>('studioZone').value;
+  const m = scene?.mood ?? d.mood, zone = $<HTMLSelectElement>('studioZone').value;
   const g = zone === 'all' ? m?.grade : m?.zones?.[zone as Zone];
   for (const [key, value] of Object.entries({ Exposure: g?.exposure ?? 0, Contrast: g?.contrast ?? 100, Saturation: g?.saturation ?? 100, Temperature: g?.temperature ?? 0, Shadows: g?.shadows ?? 0, Influence: g?.influence ?? (zone === 'tv' ? 30 : 100) })) field('studio' + key, value);
   for (const [key, value] of Object.entries({ Rim: m?.rim ?? 100, Cabinet: m?.cabinet ?? 100, Floor: m?.floor ?? 100, Reach: m?.reach ?? 100, Transition: m?.transition ?? 380 })) field('studio' + key, value);

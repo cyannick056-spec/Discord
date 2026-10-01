@@ -1,3 +1,4 @@
+import { viewPresentation, viewMood, removeFromView, duplicateInView, saveView } from './view-state';
 import { MAX_SCENE_ITEMS, MAX_LIBRARY_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
 import { applyFurnitureMaterial } from './furniture-material';
 import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type DecorationLight, type RoomMood } from './lighting';
@@ -240,7 +241,9 @@ function ambientFilter(placement: Placement): string {
 
 function render(manifest: Manifest, sceneName: Scene, view: View, editable: boolean) {
   lastRender = { manifest, sceneName, view, editable };
-  applyPresentation(manifest.presentations?.[key(sceneName, view, currentAspect())], manifest.mood);
+  const presentation = manifest.presentations?.[key(sceneName, view, currentAspect())];
+  const roomMood = presentation?.mood ?? manifest.mood;
+  applyPresentation(presentation, roomMood);
   clearLampAnimation();
   layer.replaceChildren();
   const behind = document.createElement('div');
@@ -248,8 +251,8 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
   layer.append(behind);
   if (sceneName === 'home') maskBehindTv(behind, layer, document.querySelector<HTMLElement>('.tv-face')!);
   const lights: DecorationLight[] = [];
-  setRoomAmbient(manifest.ambient ?? 62);
-  setRoomMood(manifest.mood);
+  setRoomAmbient(presentation?.ambient ?? manifest.ambient ?? 62);
+  setRoomMood(roomMood);
   for (const item of manifest.items) {
     if (!visibleInRoom(item, manifest.presentations?.[key(sceneName, view, currentAspect())])) continue;
     const placement = placementFor(item, sceneName, view, currentAspect());
@@ -268,7 +271,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     if (slotIndex >= 0) {
       const figure = document.createElement('div');
       figure.className = 'viewer-figure';
-      figure.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, 'figures')}`;
+      figure.style.filter = `${ambientFilter(placement)} ${gradeFilter(roomMood, 'figures')}`;
       const disc = document.createElement('div');
       disc.className = 'viewer-disc';
       disc.title = viewer?.name ?? `Espacio ${slotIndex + 1} · ${slotColors[slotIndex].name}`;
@@ -294,7 +297,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       image.src = item.kind === 'shape' ? shapeAsset(item.shape) : item.kind === 'builtin' ? builtinUrl(item.asset) : authorizedUrl(`/api/decorations/assets/${encodeURIComponent(item.asset)}`);
       image.alt = '';
       image.draggable = false;
-      image.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, item.kind === 'builtin' ? item.asset === 'rug' ? 'floor' : item.category === 'furniture' ? 'cabinet' : 'figures' : 'figures')}`;
+      image.style.filter = `${ambientFilter(placement)} ${gradeFilter(roomMood, item.kind === 'builtin' ? item.asset === 'rug' ? 'floor' : item.category === 'furniture' ? 'cabinet' : 'figures' : 'figures')}`;
       image.addEventListener('load', () => { position(box, placement, sceneName, view); syncSupport(); if (sceneName === 'home') void applyPhotoLight(box,image); }, { once: true });
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
@@ -363,7 +366,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
   setDecorationLights(lights);
   if (editable && (previewTool === 'tv' || previewTool === 'camera' || previewTool === 'screen') && view !== 'window') {
     const p = (manifest.presentations ??= {})[key(sceneName, view, currentAspect())] ??= {};
-    sceneControls(layer, p, manifest.mood, previewTool, () => {
+    sceneControls(layer, p, roomMood, previewTool, () => {
       for (const item of manifest.items) { const placement = placementFor(item, sceneName, view, currentAspect()); if (!placement) continue;
         for (const el of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (el.dataset.id === item.id) position(el, placement, sceneName, view); }
       syncSupport();
@@ -597,12 +600,12 @@ function setEditorTool(tool: EditorTool) {
 }
 
 function refreshMoodFields() {
-  const mood = draft.mood ?? { preset: 'neutral', intensity: 65, tvGlow: 100 };
+  const mood = viewMood(draft, activeKey());
   editorMood.value = mood.preset; editorMoodIntensity.value = String(mood.intensity); editorTvGlow.value = String(mood.tvGlow);
   document.querySelector<HTMLOutputElement>('#editorMoodIntensityValue')!.value = `${mood.intensity}%`;
   document.querySelector<HTMLOutputElement>('#editorTvGlowValue')!.value = `${mood.tvGlow}%`;
   editorMoodIntensity.disabled = mood.preset === 'neutral';
-  editorAmbient.value = String(draft.ambient ?? 62); editorAmbientValue.value = `${editorAmbient.value}%`;
+  editorAmbient.value = String(viewPresentation(draft,activeKey()).ambient ?? draft.ambient ?? 62); editorAmbientValue.value = `${editorAmbient.value}%`;
 }
 
 function editorCommand(command: string) {
@@ -628,14 +631,14 @@ function editorCommand(command: string) {
   if (command === 'duplicate') {
     if (item.kind === 'viewer-slot') return status('Los espacios de espectadores son únicos.');
     if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= MAX_SCENE_ITEMS) return status(`Máximo ${MAX_SCENE_ITEMS} piezas; combina muebles e imágenes libremente.`);
-    const copy = structuredClone(item); copy.id = crypto.randomUUID(); copy.name = `${item.name.slice(0, 62)} · copia`;
+    const copy = duplicateInView(item,activeKey()); copy.name = `${item.name.slice(0, 62)} · copia`;
     const placement = copy.placements[activeKey()]!; placement.x = clamp(placement.x + 2, -30, 130); placement.y = clamp(placement.y + 2, -35, 145); placement.locked = false;
     delete copy.group;
     draft.items.push(copy); selected = copy.id; if (!batchCommand) selection = new Set([copy.id]); status('Copia creada. Guarda para compartirla.');
   } else if (command === 'remove') {
     if (item.kind === 'viewer-slot') return;
     rememberAssets();
-    draft.items = draft.items.filter(i => i.id !== selected); selection.delete(selected!); selected = null; status('Decoración quitada. Puedes deshacer.');
+    removeFromView(item,activeKey()); selection.delete(selected!); selected = null; status('Quitada solo de esta vista. Las demás la conservan; puedes deshacer.');
   } else if (command === 'lock') p.locked = !p.locked;
   else if (command === 'hide') p.hidden = !p.hidden;
   else if (command === 'depth' && editorScene.value === 'home') p.behindTv = !p.behindTv;
@@ -773,6 +776,7 @@ function zoomAt(next: number, x: number, y: number) {
 }
 
 function reloadPreview() {
+  refreshMoodFields();
   previewReady = false;
   gestureStart = null;
   changeZoom(1);
@@ -997,7 +1001,7 @@ export function initDecorations() {
   for (const field of [editorGrid, editorSnap]) field.addEventListener('change', () => sendPreview());
   for (const field of [editorMood, editorMoodIntensity, editorTvGlow]) {
     field.addEventListener('input', () => {
-      draft.mood = { ...draft.mood, preset: editorMood.value as RoomMood['preset'], intensity: Number(editorMoodIntensity.value), tvGlow: Number(editorTvGlow.value) };
+      viewPresentation(draft,activeKey()).mood = { ...viewMood(draft,activeKey()), preset: editorMood.value as RoomMood['preset'], intensity: Number(editorMoodIntensity.value), tvGlow: Number(editorTvGlow.value) };
       refreshMoodFields(); sendPreview(`input:${field.id}`);
     });
     field.addEventListener('change', () => history.endGroup());
@@ -1114,8 +1118,8 @@ export function initDecorations() {
   });
 
   editorAmbient.addEventListener('input', () => {
-    draft.ambient = Number(editorAmbient.value);
-    editorAmbientValue.value = `${draft.ambient}%`;
+    viewPresentation(draft,activeKey()).ambient = Number(editorAmbient.value);
+    editorAmbientValue.value = `${editorAmbient.value}%`;
     sendPreview('ambient');
   });
   editorAmbient.addEventListener('change', () => history.endGroup());
@@ -1192,10 +1196,10 @@ export function initDecorations() {
     if (JSON.stringify(draft.items) !== JSON.stringify(saved.items) || JSON.stringify(draft.mood) !== JSON.stringify(saved.mood) || draft.ambient !== saved.ambient || JSON.stringify(draft.presentations) !== JSON.stringify(saved.presentations)) {
       draft.versions = [{ id: crypto.randomUUID(), name: new Date().toLocaleString('es'), room: { items: structuredClone(saved.items), ambient: saved.ambient, mood: structuredClone(saved.mood), presentations: structuredClone(saved.presentations) } }, ...(draft.versions ?? [])].slice(0, 3);
     }
-    const submitted = copyManifest(draft);
+    const submitted = saveView(saved, draft, activeKey());
     editorSave.disabled = true;
     try {
-      status('Guardando…');
+      status('Guardando esta vista…');
       await editorRequest('/api/decorations', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(submitted),
       });
@@ -1203,7 +1207,7 @@ export function initDecorations() {
       refreshStudio();
       render(saved, scene(), currentView(), false);
       updateHistoryButtons();
-      status(JSON.stringify(draft) === JSON.stringify(saved) ? 'Guardado. Todos verán esta decoración.' : 'Guardado. Hay cambios nuevos pendientes.');
+      status(JSON.stringify(draft) === JSON.stringify(saved) ? 'Vista guardada. Las demás conservan su decoración.' : 'Vista guardada. Quedan cambios pendientes en el editor.');
     } catch (error) { status(error instanceof Error ? error.message : 'No se pudo guardar'); }
     finally { editorSave.disabled = false; }
   });

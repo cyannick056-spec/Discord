@@ -102,13 +102,13 @@ export function installDecorations(app, { directory, editKey, restoreOriginal = 
   })().then(() => null, error => error) : Promise.resolve(null);
   const ready = rebuildRooms ? originalReady.then(async error => {
     if (error) throw error;
-    const marker = path.join(directory, 'real-rooms-rebuilt-v1.json');
+    const marker = path.join(directory, 'cozy-night-rebuilt-v2.json');
     try { await readFile(marker); return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const data = await readFile(manifestPath, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     const manifest = data === null ? structuredClone(blank) : JSON.parse(data);
     if (!validManifest(manifest)) throw new Error('Cannot replace an invalid shared scene');
     await mkdir(directory, { recursive: true });
-    if (data !== null) await writeFile(path.join(directory, 'manifest-before-real-rooms-v1.json'), data, { flag: 'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+    if (data !== null) await writeFile(path.join(directory, 'manifest-before-cozy-night-v2.json'), data, { flag: 'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
     rebuildRealRooms(manifest);
     if (!validManifest(manifest)) throw new Error('Replacement scene failed validation');
     const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);

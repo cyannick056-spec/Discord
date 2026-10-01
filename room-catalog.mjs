@@ -1,7 +1,6 @@
 // Public, allowlisted photographic assets; never resolve user-supplied paths.
 export const rooms = [
-  { id: 'morning', name: 'Mañana', description: 'Luz natural por la ventana; espacio para decorar', furniture: 'side-table' },
-  { id: 'night', name: 'Noche', description: 'La misma habitación con iluminación nocturna propia', furniture: 'side-table' },
+  { id: 'cozy-night', name: 'Rincón nocturno', description: 'Azul petróleo, lavanda y una lámpara cálida', furniture: 'cabinet' },
 ];
 export const props = [
   { id: 'floor-lamp', name: 'Lámpara de pie', category: 'lamp' },
@@ -38,7 +37,7 @@ export const props = [
 ];
 export const roomIds = new Set(rooms.map(r => r.id));
 // Accepted only for loading/migrating older shared saves, never shown as rooms.
-export const legacyRoomIds = new Set(['bedroom', 'retro', 'rain', 'rain-close', 'japanese', 'cabin', 'city']);
+export const legacyRoomIds = new Set(['morning', 'night', 'bedroom', 'retro', 'rain', 'rain-close', 'japanese', 'cabin', 'city']);
 export const propIds = new Set(props.map(p => p.id));
 export function builtinUrl(id) { return propIds.has(id) ? `/rooms/props/${id}.webp` : ''; }
 export function visibleInRoom(item, presentation) {

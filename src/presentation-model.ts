@@ -1,11 +1,12 @@
 import type { RoomId } from '../room-catalog.mjs';
+import type { Mood } from './studio-model';
 export type Framing = { x?: number; y?: number; zoom?: number };
 export type VideoFraming = Framing & { fit?: 'cover' | 'contain' };
 export type ScreenAdjustment = { rounded?: boolean; x?: number; y?: number; width?: number; height?: number };
 export type TvPaint = { enabled?: boolean; body?: string; bezel?: string; panel?: string; strength?: number; hue?: number; saturation?: number; exposure?: number; contrast?: number; finish?: 'matte' | 'satin' | 'gloss' };
 export type Reflection = { enabled?: boolean; intensity?: number; table?: number; floor?: number; blur?: number; reach?: number; spread?: number; offset?: number; texture?: number };
 export type Presentation = {
-  rain?: { enabled?: boolean; forceMotion?: boolean; intensity?: number; speed?: number };
+  ambient?: number; mood?: Mood;
   tvSupport?: 'free' | 'cabinet' | 'floor'; supportId?: string;
   environment?: RoomId; tvModel?: import('../tv-catalog.mjs').TvModel;
   style?: 'original' | 'classic' | 'minimal' | 'wood' | 'brick' | 'custom'; background?: string;
@@ -26,7 +27,7 @@ export function cameraRect(r: { x: number; y: number; width: number; height: num
 // to the actual photo at wider zooms so no blank margins can enter the view.
 export function resolvedCamera(p?: Presentation) {
   const zoom = p?.camera?.zoom ?? 1;
-  const limit = p?.environment === 'morning' || p?.environment === 'night' ? Math.min(50, Math.max(0, (2 * zoom - 1) * 50)) : 50;
+  const limit = p?.environment ? Math.min(50, Math.max(0, (2 * zoom - 1) * 50)) : 50;
   return { zoom, x: Math.max(-limit, Math.min(limit, p?.camera?.x ?? 0)), y: Math.max(-limit, Math.min(limit, p?.camera?.y ?? 0)) };
 }
 // Source crop reflects object-fit:cover and the extra video framing. Sampling
