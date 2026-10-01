@@ -43,6 +43,7 @@ export function initRoomLighting() {
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const previewMode = new URLSearchParams(location.search).has('editorPreview');
   let previewColors: { screen: LightColor; floor: LightColor } | null = null;
+  let tvBounds: { x: number; y: number; width: number; height: number } | undefined;
   if (previewMode) window.addEventListener('message', event => {
     if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'room-video-light') return;
     const valid = (color: LightColor) => color && [color.r, color.g, color.b].every(value => Number.isFinite(value) && value >= 0 && value <= 255) &&
@@ -50,12 +51,19 @@ export function initRoomLighting() {
     if (valid(event.data.screen) && valid(event.data.floor)) previewColors = event.data;
   });
 
-  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60) {
+  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60, onTv = false) {
     if (!shadowCtx || !tintCtx || rx <= 0 || ry <= 0) return;
     const power = Math.min(2, color.strength * gain);
     if (power < .005) return;
     for (const [ctx, isTint] of [[shadowCtx, false], [tintCtx, true]] as const) {
       ctx.save();
+      // Room light must not wash over the photographed plastic. Only the
+      // separately controlled bezel light may illuminate the TV itself.
+      if (tvBounds && !onTv) {
+        ctx.beginPath(); ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.roundRect(tvBounds.x, tvBounds.y, tvBounds.width, tvBounds.height, Math.min(tvBounds.width, tvBounds.height) * .012);
+        ctx.clip('evenodd');
+      }
       ctx.translate(x, y); ctx.rotate(angle * Math.PI / 180); ctx.scale(rx, ry);
       ctx.globalCompositeOperation = isTint ? 'source-over' : 'destination-out';
       const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
@@ -90,6 +98,12 @@ export function initRoomLighting() {
     const glass = screen.getBoundingClientRect();
     const gx = (glass.left - bounds.left) * scale, gy = (glass.top - bounds.top) * scale;
     const gw = glass.width * scale, gh = glass.height * scale;
+    tvBounds = undefined;
+    if (stage.classList.contains('home-mode')) {
+      const face = document.querySelector<HTMLElement>('.tv-face')!, art = face.getBoundingClientRect(), s = getComputedStyle(face);
+      const n = (key: string) => parseFloat(s.getPropertyValue('--tv-body-' + key)) / 100;
+      tvBounds = { x: (art.x - bounds.x + art.width * n('x')) * scale, y: (art.y - bounds.y + art.height * n('y')) * scale, width: art.width * n('w') * scale, height: art.height * n('h') * scale };
+    }
     if (gradeCtx && stage.classList.contains('home-mode')) paintRoomGrade(gradeCtx, document.querySelector<HTMLElement>('.tv-face')!,
       { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, { x: gx, y: gy, width: gw, height: gh }, mood, scale);
     const video = document.querySelector<HTMLVideoElement>('#videoMount video');
@@ -132,20 +146,18 @@ export function initRoomLighting() {
     const rimGain = tvGain * (mood.rim ?? 100) / 100 * finish;
     if (reflectionCtx && mirrorReady && stage.classList.contains('home-mode')) {
       const background = document.querySelector<HTMLElement>('#roomBackdrop')!.getBoundingClientRect();
-      const face = document.querySelector<HTMLElement>('.tv-face')!, art = face.getBoundingClientRect(), s = getComputedStyle(face);
-      const n = (key: string) => parseFloat(s.getPropertyValue('--tv-body-' + key)) / 100;
       paintReflections(reflectionCtx, reflectionFrame, { x: (background.x - bounds.x) * scale, y: (background.y - bounds.y) * scale, width: background.width * scale, height: background.height * scale },
         { x: gx, y: gy, width: gw, height: gh }, innerHeight > innerWidth, screenColor.strength * tvGain, getPresentation()?.reflection,
-        { x: (art.x - bounds.x + art.width * n('x')) * scale, y: (art.y - bounds.y + art.height * n('y')) * scale, width: art.width * n('w') * scale, height: art.height * n('h') * scale });
+        tvBounds);
     }
     const reach = (mood.reach ?? 100) / 100;
     glow(gx + gw / 2, gy + gh / 2, gw * .88 * reach, gh * 1.05 * reach, screenColor, .7 * tvGain);
     // Narrow pools on the bezel make the screen's color visible on the TV
     // itself as well as the room. The live glass is cut out afterwards.
-    glow(gx + gw / 2, gy, gw * .62, Math.max(gh * .12, 8), screenColor, rimGain);
-    glow(gx, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain);
-    glow(gx + gw, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain);
-    glow(gx + gw / 2, gy + gh, gw * .64, Math.max(gh * .17, 8), floorColor, rimGain);
+    glow(gx + gw / 2, gy, gw * .62, Math.max(gh * .12, 8), screenColor, rimGain, 0, 60, true);
+    glow(gx, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain, 0, 60, true);
+    glow(gx + gw, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain, 0, 60, true);
+    glow(gx + gw / 2, gy + gh, gw * .64, Math.max(gh * .17, 8), floorColor, rimGain, 0, 60, true);
     // Project a wider pool below the glass: cabinet first, floor further away.
     glow(gx + gw / 2, gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain * (mood.cabinet ?? 100) / 100);
     glow(gx + gw / 2, gy + gh + height * .29, gw * .95, height * .25, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100);
