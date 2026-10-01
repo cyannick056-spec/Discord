@@ -41,13 +41,13 @@ test('six furnished rooms fit without consuming the custom decoration allowance'
   manifest.items.push({ id: crypto.randomUUID(), kind:'builtin', asset:'lava-lamp', name:'Lava', category:'lamp', placements:{'home-portrait-4x3':roomPlacement('lava-lamp',true)} });
   manifest.items.at(-1).placements['home-portrait-4x3'].lava = { motion:false, speed:2.4 };
   manifest.items.at(-1).placements['home-portrait-4x3'].light.color = '#ad7aff';
-  manifest.presentations['home-landscape-16x9'].rain = {enabled:true,intensity:80,speed:1.7};
+  manifest.presentations['home-landscape-16x9'].rain = {enabled:true,forceMotion:true,intensity:80,speed:1.7};
   const viewKeys = Object.keys(manifest.presentations); viewKeys.forEach((k,i) => manifest.presentations[k].camera = {zoom:1+i*.1});
   const save = body => fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Decoration-Key': 'fixture' }, body: JSON.stringify(body) });
   try {
     assert.equal((await save(manifest)).status, 200);
     assert.deepEqual(await (await fetch(url)).json(), manifest);
-    for (const mutation of [v => v.presentations['home-landscape-16x9'].rain.speed = 99, v => v.presentations['home-landscape-16x9'].rain.enabled = 'true', v => v.presentations['home-landscape-16x9'].rain.intensity = -1, v => v.items.at(-1).placements['home-portrait-4x3'].lava.speed = 99, v => v.items.at(-1).placements['home-portrait-4x3'].lava.motion = 'yes', v => v.presentations['home-portrait-4x3'].tvSupport = 'wall', v => v.items[0].asset = '../private', v => v.items[0].roomKit = 'unknown', v => v.presentations['home-portrait-4x3'].tvModel = 'untrusted', v => v.presentations['home-portrait-4x3'].environment = '../private']) {
+    for (const mutation of [v => v.presentations['home-landscape-16x9'].rain.forceMotion = 'yes', v => v.presentations['home-landscape-16x9'].rain.speed = 99, v => v.presentations['home-landscape-16x9'].rain.enabled = 'true', v => v.presentations['home-landscape-16x9'].rain.intensity = -1, v => v.items.at(-1).placements['home-portrait-4x3'].lava.speed = 99, v => v.items.at(-1).placements['home-portrait-4x3'].lava.motion = 'yes', v => v.presentations['home-portrait-4x3'].tvSupport = 'wall', v => v.items[0].asset = '../private', v => v.items[0].roomKit = 'unknown', v => v.presentations['home-portrait-4x3'].tvModel = 'untrusted', v => v.presentations['home-portrait-4x3'].environment = '../private']) {
       const invalid = structuredClone(manifest); mutation(invalid); assert.equal((await save(invalid)).status, 400);
       assert.deepEqual(await (await fetch(url)).json(), manifest);
     }

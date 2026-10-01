@@ -42,7 +42,9 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   }
   if (!image.hidden && image.getAttribute('src') !== src) image.src = src;
   image.style.objectFit = custom || p?.environment ? 'cover' : 'fill';
-  configureWindowRain(backdrop, image, home && !tiny ? p : undefined, orientation === 'portrait');
+  // Keep the side window inside narrow mobile crops instead of centering it away.
+  image.style.objectPosition = p?.environment === 'rain' && !custom ? 'left center' : 'center';
+  configureWindowRain(backdrop, image, home && !tiny ? p : undefined, orientation === 'portrait', mood);
   applyScreenFraming();
   if (home && !tiny) {
     const s = getComputedStyle(face), n = (key: string) => parseFloat(s.getPropertyValue('--' + key)) * 10;

@@ -4,7 +4,7 @@ export type ScreenAdjustment = { x?: number; y?: number; width?: number; height?
 export type TvPaint = { enabled?: boolean; body?: string; bezel?: string; panel?: string; strength?: number; hue?: number; saturation?: number; exposure?: number; contrast?: number; finish?: 'matte' | 'satin' | 'gloss' };
 export type Reflection = { enabled?: boolean; intensity?: number; table?: number; floor?: number; blur?: number; reach?: number; spread?: number; offset?: number; texture?: number };
 export type Presentation = {
-  rain?: { enabled?: boolean; intensity?: number; speed?: number };
+  rain?: { enabled?: boolean; forceMotion?: boolean; intensity?: number; speed?: number };
   tvSupport?: 'free' | 'cabinet' | 'floor';
   environment?: RoomId; tvModel?: import('../tv-catalog.mjs').TvModel;
   style?: 'original' | 'classic' | 'minimal' | 'wood' | 'brick' | 'custom'; background?: string;
