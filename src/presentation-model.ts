@@ -1,10 +1,15 @@
 export type Framing = { x?: number; y?: number; zoom?: number };
+export type ScreenAdjustment = { x?: number; y?: number; width?: number; height?: number };
 export type Presentation = {
   style?: 'original' | 'classic' | 'minimal' | 'wood' | 'brick' | 'custom'; background?: string;
   wall?: string; cabinet?: string; floor?: string; cabinetY?: number; cabinetHeight?: number; hideCabinet?: boolean;
   camera?: Framing; tv?: Framing; video?: Framing;
+  screen?: ScreenAdjustment;
 };
-export const freeRoom = (p?: Presentation) => Boolean(p?.style && !['original', 'classic'].includes(p.style));
+export function screenRect(r: { x: number; y: number; width: number; height: number }, p?: ScreenAdjustment) {
+  return { x: r.x + r.width * (p?.x ?? 0) / 100, y: r.y + r.height * (p?.y ?? 0) / 100,
+    width: r.width * (p?.width ?? 100) / 100, height: r.height * (p?.height ?? 100) / 100 };
+}
 export function cameraRect(r: { x: number; y: number; width: number; height: number }, p?: Presentation) {
   const z = p?.camera?.zoom ?? 1;
   return { x: r.x + r.width * ((1 - z) / 2 + (p?.camera?.x ?? 0) / 100),

@@ -1,6 +1,6 @@
 import type { Decoration, Manifest, Placement, RoomSnapshot } from './decorations';
 import { perspectiveAngles, type Grade, type Mood, type Transform, type Zone } from './studio-model';
-import { freeRoom, type Presentation } from './presentation-model';
+import { type Presentation } from './presentation-model';
 import { straightCorners, validCorners } from './perspective';
 
 type Host = {
@@ -10,7 +10,7 @@ type Host = {
   compare(value: boolean): void; test(value: string): void; asset(path: string): string; resize(): void;
   restore(room: RoomSnapshot): void;
   background(file: File): Promise<string>;
-  tool(tool: 'select' | 'pan' | 'tv' | 'camera' | 'warp'): void;
+  tool(tool: 'select' | 'pan' | 'tv' | 'camera' | 'screen' | 'warp'): void;
 };
 let host: Host | undefined;
 let listSignature = '';
@@ -67,9 +67,10 @@ export function initStudio(h: Host) {
   $('studioCollapse').insertAdjacentHTML('beforebegin', '<button id="studioSceneTab" role="tab" aria-selected="false" aria-controls="studioScene">Escena</button>');
   document.querySelector('.studio-scroll')!.insertAdjacentHTML('beforeend', '<section id="studioScene" role="tabpanel" aria-labelledby="studioSceneTab" hidden></section>');
   $('studioScene').innerHTML = '<p class="studio-note">Cada vista y tamaño de TV conserva su composición. El zoom de la vista previa solo ayuda a editar; los controles de aquí cambian el escenario compartido.</p><div class="studio-template-grid"><button data-studio-template="classic" style="--swatch:#273348">Como antes · 3 a. m.</button><button data-studio-template="cinema" style="--swatch:#17171c">Sala de cine</button><button data-studio-template="warm" style="--swatch:#684d3d">Sala acogedora</button><button data-studio-template="blue" style="--swatch:#30465e">Estudio azul</button></div>' +
-    panel('studioBackground', 'Fondo y mobiliario', '<label>Escenario<select id="studioSceneStyle"><option value="original">Habitación actual</option><option value="classic">Habitación anterior</option><option value="minimal">Sala libre · pared lisa</option><option value="wood">Sala libre · paneles</option><option value="brick">Sala libre · ladrillos</option><option value="custom">Mi imagen de fondo</option></select></label><label class="editor-upload">Subir fondo<input id="studioBackgroundUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif"/></label><label>Reutilizar imagen<select id="studioBackgroundAsset"></select></label><label>Pared<input id="studioWallColor" type="color"/></label><label>Mueble<input id="studioCabinetColor" type="color"/></label><label>Suelo<input id="studioFloorColor" type="color"/></label>' + range('studioCabinetY', 'Altura del mueble', 15, 90) + range('studioCabinetHeight', 'Tamaño del mueble', 5, 45) + '<label class="studio-check"><input id="studioHideCabinet" type="checkbox"/> Quitar mueble</label><p class="studio-note">Las salas libres separan la TV del fondo. El modo anterior recupera su decoración integrada.</p>', true) +
+    panel('studioBackground', 'Fondo de la habitación', '<label>Escenario<select id="studioSceneStyle"><option value="classic">Habitación · 3 a. m.</option><option value="custom">Mi imagen de fondo</option></select></label><label class="editor-upload">Subir fondo<input id="studioBackgroundUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif"/></label><label>Reutilizar imagen<select id="studioBackgroundAsset"></select></label><p class="studio-note">Los ambientes usan la misma habitación con imagen y distintos ajustes de luz. Mover la TV conserva el fondo.</p>', true) +
     panel('studioCamera', 'Encuadre del escenario', range('studioCameraX', 'Mover horizontalmente', -50, 50) + range('studioCameraY', 'Mover verticalmente', -50, 50) + range('studioCameraZoom', 'Zoom del escenario', .5, 2.5, .05) + '<div class="studio-buttons">' + buttons([['cameraTool', 'Encuadrar con el ratón'], ['resetCamera', 'Restablecer']]) + '</div>') +
-    panel('studioTv', 'Posición y tamaño de la TV / arcade', range('studioTvX', 'Posición horizontal', -80, 80) + range('studioTvY', 'Posición vertical', -80, 80) + range('studioTvZoom', 'Tamaño de la TV', .3, 2.5, .05) + '<div class="studio-buttons">' + buttons([['tvTool', 'Mover TV en la escena'], ['resetTv', 'Restablecer']]) + '</div><p class="studio-note">En Casa, mover la TV activa una sala libre para que el fondo se quede en su sitio.</p>') +
+    panel('studioTv', 'Posición y tamaño de la TV / arcade', range('studioTvX', 'Posición horizontal', -80, 80) + range('studioTvY', 'Posición vertical', -80, 80) + range('studioTvZoom', 'Tamaño de la TV', .3, 2.5, .05) + '<div class="studio-buttons">' + buttons([['tvTool', 'Mover TV en la escena'], ['resetTv', 'Restablecer']]) + '</div><p class="studio-note">Mueve la TV y su marco; la habitación conserva su posición.</p>') +
+    panel('studioScreen', 'Pantalla · independiente de la TV', range('studioScreenX', 'Posición horizontal de pantalla', -50, 50, .5) + range('studioScreenY', 'Posición vertical de pantalla', -50, 50, .5) + range('studioScreenWidth', 'Ancho de pantalla', 50, 150, .5) + range('studioScreenHeight', 'Alto de pantalla', 50, 150, .5) + '<div class="studio-buttons">' + buttons([['screenTool', 'Ajustar pantalla con el ratón'], ['resetScreen', 'Restablecer pantalla']]) + '</div><p class="studio-note">Ajusta el área de reproducción dentro del marco. El zoom del vídeo se controla por separado abajo.</p>') +
     panel('studioVideo', 'Encuadre del vídeo', range('studioVideoZoom', 'Zoom dentro de la pantalla', 1, 3, .05) + range('studioVideoX', 'Encuadre horizontal', -50, 50) + range('studioVideoY', 'Encuadre vertical', -50, 50) + '<div class="studio-buttons">' + buttons([['resetVideo', 'Restablecer vídeo']]) + '</div><p class="studio-note">El vídeo queda recortado por el marco. Su luz sigue el área visible.</p>') +
     '<div class="studio-buttons">' + buttons([['copyPresentation', 'Copiar a otras vistas'], ['resetPresentation', 'Restablecer esta escena']]) + '</div>';
   objects.insertAdjacentHTML('beforeend', '<div class="studio-search"><input id="studioSearch" type="search" placeholder="Buscar decoración…" aria-label="Buscar decoración"/><select id="studioCategory" aria-label="Categoría"><option value="all">Todo</option><option value="favorite">Favoritos</option><option value="figurine">Figuras</option><option value="sticker">Estampas</option><option value="poster">Pósters</option><option value="frame">Marcos</option><option value="lamp">Lámparas</option></select></div><div id="studioObjectList" class="studio-list"></div>');
@@ -111,8 +112,8 @@ export function initStudio(h: Host) {
     panel('studioRooms', 'Mis ambientes y versiones', '<label>Nombre<input id="studioRoomName" maxlength="70" placeholder="Mi noche favorita"/></label><div class="studio-buttons">' + buttons([['saveRoom', 'Guardar ambiente'], ['loadRoom', 'Aplicar'], ['deleteRoom', 'Eliminar']]) + '</div><select id="studioProfile" aria-label="Ambientes guardados"></select><label>Versiones anteriores<select id="studioVersion"></select></label><div class="studio-buttons">' + buttons([['loadVersion', 'Restaurar versión']]) + '</div><p class="studio-note">Guarda para todos para conservar tus ambientes y las tres versiones anteriores.</p>'));
   // Remove obsolete section headings after relocating their controls.
   props.querySelectorAll('strong').forEach(node => node.remove());
-  document.querySelector('.editor-tools')!.insertAdjacentHTML('beforeend', '<button id="studioTvTool" type="button" aria-pressed="false">Mover TV</button><button id="studioCameraTool" type="button" aria-pressed="false">Encuadrar</button><button id="studioWarpTool" type="button" aria-pressed="false">Perspectiva</button><button id="studioCompare" type="button" aria-pressed="false">Antes / después</button><button id="studioImmersive" type="button" aria-pressed="false">Solo escena</button>');
-  for (const [id, cmd] of [['studioTvTool', 'tvTool'], ['studioCameraTool', 'cameraTool'], ['studioWarpTool', 'warpTool']]) $(id).addEventListener('click', () => command(cmd));
+  document.querySelector('.editor-tools')!.insertAdjacentHTML('beforeend', '<button id="studioTvTool" type="button" aria-pressed="false">Mover TV</button><button id="studioScreenTool" type="button" aria-pressed="false">Ajustar pantalla</button><button id="studioCameraTool" type="button" aria-pressed="false">Encuadrar</button><button id="studioWarpTool" type="button" aria-pressed="false">Perspectiva</button><button id="studioCompare" type="button" aria-pressed="false">Antes / después</button><button id="studioImmersive" type="button" aria-pressed="false">Solo escena</button>');
+  for (const [id, cmd] of [['studioTvTool', 'tvTool'], ['studioCameraTool', 'cameraTool'], ['studioScreenTool', 'screenTool'], ['studioWarpTool', 'warpTool']]) $(id).addEventListener('click', () => command(cmd));
   for (const id of ['Objects', 'Lights', 'Mood', 'Scene']) {
     const tab = $(`studio${id}Tab`);
     tab.addEventListener('click', () => {
@@ -181,15 +182,10 @@ export function initStudio(h: Host) {
   field('studioKelvin', 4000);
   for (const group of ['Camera', 'Tv', 'Video'] as const) for (const axis of ['X', 'Y', 'Zoom'] as const) $(`studio${group}${axis}`).addEventListener('input', () => {
     const p = presentation(), key = group.toLowerCase() as 'camera' | 'tv' | 'video';
-    if (key === 'tv' && h.key().startsWith('home') && !freeRoom(p)) p.style = 'minimal';
     (p[key] ??= {})[axis.toLowerCase() as 'x' | 'y' | 'zoom'] = Number($<HTMLInputElement>(`studio${group}${axis}`).value); h.change('presentation');
   });
-  $('studioSceneStyle').addEventListener('change', () => { const p = presentation(); p.style = $<HTMLSelectElement>('studioSceneStyle').value as Presentation['style']; if (!freeRoom(p)) delete p.tv; h.change(); });
-  for (const [id, key] of [['studioWallColor', 'wall'], ['studioCabinetColor', 'cabinet'], ['studioFloorColor', 'floor']] as const) $(id).addEventListener('input', () => {
-    const p = presentation(); if (!freeRoom(p)) p.style = 'minimal'; p[key] = $<HTMLInputElement>(id).value; h.change('presentation');
-  });
-  for (const [id, key] of [['studioCabinetY', 'cabinetY'], ['studioCabinetHeight', 'cabinetHeight']] as const) $(id).addEventListener('input', () => { const p = presentation(); if (!freeRoom(p)) p.style = 'minimal'; p[key] = Number($<HTMLInputElement>(id).value); h.change('presentation'); });
-  $('studioHideCabinet').addEventListener('input', () => { const p = presentation(); if (!freeRoom(p)) p.style = 'minimal'; p.hideCabinet = $<HTMLInputElement>('studioHideCabinet').checked; h.change(); });
+  for (const axis of ['X', 'Y', 'Width', 'Height'] as const) $(`studioScreen${axis}`).addEventListener('input', () => { const p = presentation(); (p.screen ??= {})[axis.toLowerCase() as 'x' | 'y' | 'width' | 'height'] = Number($<HTMLInputElement>(`studioScreen${axis}`).value); h.change('screen'); });
+  $('studioSceneStyle').addEventListener('change', () => { presentation().style = $<HTMLSelectElement>('studioSceneStyle').value as Presentation['style']; h.change(); });
   $('studioBackgroundAsset').addEventListener('change', () => { const p = presentation(); p.background = $<HTMLSelectElement>('studioBackgroundAsset').value || undefined; p.style = 'custom'; h.change(); });
   $('studioBackgroundUpload').addEventListener('change', async () => {
     const input = $<HTMLInputElement>('studioBackgroundUpload'), file = input.files?.[0]; input.value = ''; if (!file) return;
@@ -199,8 +195,8 @@ export function initStudio(h: Host) {
   sidebar.addEventListener('click', event => {
     const button = (event.target as HTMLElement).closest<HTMLElement>('[data-studio-template]'); if (!button) return;
     const kind = button.dataset.studioTemplate!, p = presentation();
-    const styles: Record<string, Partial<Presentation>> = { classic: { style: 'classic' }, cinema: { style: 'minimal', wall: '#191c24', cabinet: '#27252b', floor: '#17191e' }, warm: { style: 'wood', wall: '#675443', cabinet: '#6f4630', floor: '#40352f' }, blue: { style: 'minimal', wall: '#334967', cabinet: '#344358', floor: '#263344' } };
-    Object.keys(p).forEach(key => delete p[key as keyof Presentation]); Object.assign(p, styles[kind]);
+    const styles: Record<string, Partial<Presentation>> = { classic: { style: 'classic' }, cinema: { style: 'classic' }, warm: { style: 'classic' }, blue: { style: 'classic' } };
+    delete p.background; Object.assign(p, styles[kind]);
     h.draft().mood = { preset: kind === 'classic' ? 'classic-night' : kind === 'warm' ? 'warm' : kind === 'cinema' ? 'tv-only' : 'soft-night', intensity: 65, tvGlow: 100 };
     h.draft().ambient = kind === 'classic' ? 42 : kind === 'cinema' ? 35 : 66; h.change();
   });
@@ -218,8 +214,8 @@ function command(cmd: string) {
   const d = host.draft(), ps = placements(), ids = host.selected();
   if (cmd === 'warpTool') { host.tool('warp'); return; }
   else if (cmd === 'resetCorners') ps.filter(p => !p.locked).forEach(p => { if (p.transform) delete p.transform.corners; });
-  else if (cmd === 'cameraTool' || cmd === 'tvTool') { if (cmd === 'tvTool' && host.key().startsWith('home') && !freeRoom(presentation())) { presentation().style = 'minimal'; host.change(); } host.tool(cmd === 'tvTool' ? 'tv' : 'camera'); return; }
-  else if (['resetCamera', 'resetTv', 'resetVideo'].includes(cmd)) delete presentation()[cmd.slice(5).toLowerCase() as 'camera' | 'tv' | 'video'];
+  else if (cmd === 'cameraTool' || cmd === 'tvTool' || cmd === 'screenTool') { host.tool(cmd === 'tvTool' ? 'tv' : cmd === 'screenTool' ? 'screen' : 'camera'); return; }
+  else if (['resetCamera', 'resetTv', 'resetVideo', 'resetScreen'].includes(cmd)) delete presentation()[cmd.slice(5).toLowerCase() as 'camera' | 'tv' | 'video' | 'screen'];
   else if (cmd === 'resetPresentation') { if (d.presentations) delete d.presentations[host.key() as keyof typeof d.presentations]; }
   else if (cmd === 'copyPresentation') { const p = structuredClone(presentation()), keys = host.key().startsWith('home') ? ['home-landscape-16x9', 'home-landscape-4x3', 'home-portrait-16x9', 'home-portrait-4x3', 'home-window-16x9', 'home-window-4x3'] : ['arcade-landscape', 'arcade-portrait', 'arcade-window']; keys.forEach(key => (d.presentations ??= {})[key as keyof typeof d.presentations] = structuredClone(p)); host.status('Composición copiada. Revisa el encuadre de cada vista.'); }
   else if (cmd.startsWith('flip')) { ps.filter(p => !p.locked).forEach(p => { const t = p.transform ??= {}, key = cmd as 'flipX' | 'flipY'; t[key] = !t[key]; }); }
@@ -255,13 +251,12 @@ export function refreshStudio() {
   if (!host) return;
   const d = host.draft(), item = host.item(), p = item?.placements[host.key() as keyof typeof item.placements], t = p?.transform ?? {};
   const scene = d.presentations?.[host.key() as keyof typeof d.presentations];
-  field('studioSceneStyle', scene?.style ?? 'original');
+  field('studioSceneStyle', scene?.style === 'custom' ? 'custom' : 'classic');
   for (const group of ['Camera', 'Tv', 'Video'] as const) for (const axis of ['X', 'Y', 'Zoom'] as const) {
     const value = scene?.[group.toLowerCase() as 'camera' | 'tv' | 'video']?.[axis.toLowerCase() as 'x' | 'y' | 'zoom'];
     field(`studio${group}${axis}`, value ?? (axis === 'Zoom' ? group === 'Video' ? 1.035 : 1 : 0));
   }
-  field('studioWallColor', scene?.wall ?? '#33404e'); field('studioCabinetColor', scene?.cabinet ?? '#4b352a'); field('studioFloorColor', scene?.floor ?? '#262c35');
-  field('studioCabinetY', scene?.cabinetY ?? (host.key().includes('portrait') ? 44 : 86)); field('studioCabinetHeight', scene?.cabinetHeight ?? 22); field('studioHideCabinet', scene?.hideCabinet ?? false);
+  for (const axis of ['X', 'Y', 'Width', 'Height'] as const) field(`studioScreen${axis}`, scene?.screen?.[axis.toLowerCase() as 'x' | 'y' | 'width' | 'height'] ?? (axis === 'X' || axis === 'Y' ? 0 : 100));
   const backgrounds = [...(d.library ?? []), ...d.items].filter(i => i.asset); const bgSelect = $<HTMLSelectElement>('studioBackgroundAsset');
   const bgSignature = JSON.stringify(backgrounds.map(i => [i.asset, i.name]));
   if (bgSelect.dataset.signature !== bgSignature) { bgSelect.dataset.signature = bgSignature; const seen = new Set<string>(); bgSelect.replaceChildren(new Option('Seleccionar imagen…', ''), ...backgrounds.flatMap(i => seen.has(i.asset) ? [] : (seen.add(i.asset), [new Option(i.name, i.asset)]))); }

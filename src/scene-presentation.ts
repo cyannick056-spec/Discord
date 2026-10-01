@@ -1,52 +1,59 @@
-import { freeRoom, type Presentation } from './presentation-model';
-import { gradeFilter, type Mood } from './studio-model';
+import { screenRect, type Presentation } from './presentation-model';
+import type { Mood } from './studio-model';
 let current: Presentation | undefined;
+let screenBase = { x: 0, y: 0, width: 1, height: 1 };
 export function getPresentation() { return current; }
-export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
+export function applyPresentation(p: Presentation | undefined, _mood?: Mood) {
   current = p;
   const stage = document.querySelector<HTMLElement>('#stage')!, room = document.querySelector<HTMLElement>('.room-scene')!;
   const home = stage.classList.contains('home-mode'), face = document.querySelector<HTMLElement>('.tv-face')!;
   const art = document.querySelector<HTMLElement>(home ? '#tvScene' : '#arcadeScene')!;
   const backdrop = document.querySelector<HTMLElement>('#roomBackdrop')!;
   const tiny = innerWidth <= 520 && innerHeight <= 360;
-  stage.classList.toggle('free-room', freeRoom(p));
-  stage.classList.toggle('classic-room', p?.style === 'classic' && !tiny);
-  // Reset to the responsive CSS baseline before measuring its transform.
+  // All built-in choices use the original photographed room. Legacy CSS-room
+  // manifests retain their saved geometry but never recreate synthetic furniture.
+  stage.classList.toggle('free-room', home && !tiny || p?.style === 'custom');
+  stage.classList.toggle('classic-room', home && !tiny);
   art.style.removeProperty('transform');
-  if (p) {
-    const base = getComputedStyle(art).transform;
-    const b = room.getBoundingClientRect(), camera = p.camera, tv = p.tv, zoom = camera?.zoom ?? 1;
-    const dx = b.width * ((camera?.x ?? 0) + (tv?.x ?? 0) * zoom) / 100;
-    const dy = b.height * ((camera?.y ?? 0) + (tv?.y ?? 0) * zoom) / 100;
-    art.style.transform = `translate(${dx}px,${dy}px) ${base === 'none' ? '' : base} scale(${zoom * (tv?.zoom ?? 1)})`;
-    backdrop.style.transform = `translate(${b.width * (camera?.x ?? 0) / 100}px,${b.height * (camera?.y ?? 0) / 100}px) scale(${zoom})`;
-  } else backdrop.style.transform = '';
-  if (home && freeRoom(p) && !tiny) {
+  const base = getComputedStyle(art).transform, b = room.getBoundingClientRect(), a = art.getBoundingClientRect();
+  const camera = p?.camera, tv = p?.tv, zoom = camera?.zoom ?? 1;
+  const dx = b.width * ((camera?.x ?? 0) + (tv?.x ?? 0) * zoom) / 100;
+  const dy = b.height * ((camera?.y ?? 0) + (tv?.y ?? 0) * zoom) / 100;
+  if (p) art.style.transform = `translate(${dx}px,${dy}px) ${base === 'none' ? '' : base} scale(${zoom * (tv?.zoom ?? 1)})`;
+  const custom = p?.style === 'custom' && Boolean(p.background), image = backdrop.querySelector<HTMLImageElement>('img')!;
+  Object.assign(backdrop.style, { left: `${home && !custom ? a.left - b.left : 0}px`, top: `${home && !custom ? a.top - b.top : 0}px`,
+    width: `${home && !custom ? a.width : b.width}px`, height: `${home && !custom ? a.height : b.height}px`,
+    transform: `translate(${b.width * (camera?.x ?? 0) / 100}px,${b.height * (camera?.y ?? 0) / 100}px) scale(${zoom})` });
+  image.hidden = !home && !custom; image.style.filter = '';
+  let src = innerHeight > innerWidth && innerHeight >= 430 ? '/crt-room-plate-portrait.webp' : '/crt-room-plate-wide.webp';
+  if (custom) {
+    const ticket = new URLSearchParams(location.search).get('ticket');
+    const url = new URL(`/api/decorations/assets/${encodeURIComponent(p!.background!)}`, location.origin);
+    if (ticket) url.searchParams.set('ticket', ticket); src = url.pathname + url.search;
+  }
+  if (!image.hidden && image.getAttribute('src') !== src) image.src = src;
+  image.style.objectFit = custom ? 'cover' : 'fill';
+  applyScreenFraming();
+  if (home && !tiny) {
     const s = getComputedStyle(face), n = (key: string) => parseFloat(s.getPropertyValue('--' + key)) * 10;
+    const glass = document.querySelector<HTMLElement>('#homeScreenMount')!;
     const body = `<rect x="${n('tv-body-x')}" y="${n('tv-body-y')}" width="${n('tv-body-w')}" height="${n('tv-body-h')}" rx="8" fill="white"/>`;
     const feet = `<rect x="${n('tv-feet-x')}" y="${n('tv-feet-y')}" width="${n('tv-feet-w')}" height="${n('tv-feet-h')}" fill="white"/>`;
-    const glass = `<rect x="${n('glass-x')}" y="${n('glass-y')}" width="${n('glass-w')}" height="${n('glass-h')}" rx="12" fill="black"/>`;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" preserveAspectRatio="none"><defs><mask id="shape">${body}${feet}${glass}</mask></defs><rect width="1000" height="1000" fill="white" mask="url(#shape)"/></svg>`;
+    const aperture = `<rect x="${glass.offsetLeft / face.offsetWidth * 1000}" y="${glass.offsetTop / face.offsetHeight * 1000}" width="${glass.offsetWidth / face.offsetWidth * 1000}" height="${glass.offsetHeight / face.offsetHeight * 1000}" rx="12" fill="black"/>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" preserveAspectRatio="none"><defs><mask id="shape">${body}${feet}${aperture}</mask></defs><rect width="1000" height="1000" fill="white" mask="url(#shape)"/></svg>`;
     face.style.setProperty('--detached-mask', `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
-  }
-  const wall = backdrop.querySelector<HTMLElement>('.studio-wall')!, cabinet = backdrop.querySelector<HTMLElement>('.studio-cabinet')!, floor = backdrop.querySelector<HTMLElement>('.studio-floor')!;
-  backdrop.dataset.texture = p?.style ?? 'original';
-  const cabinetY = p?.cabinetY ?? (innerHeight > innerWidth ? 44 : 86), height = p?.cabinetHeight ?? 22;
-  backdrop.style.setProperty('--cabinet-y', `${cabinetY}%`); backdrop.style.setProperty('--floor-y', `${Math.min(98, cabinetY + height)}%`);
-  backdrop.style.setProperty('--wall-color', p?.wall ?? '#33404e'); backdrop.style.setProperty('--cabinet-color', p?.cabinet ?? '#4b352a'); backdrop.style.setProperty('--floor-color', p?.floor ?? '#262c35');
-  cabinet.hidden = Boolean(p?.hideCabinet) || p?.style === 'custom'; floor.hidden = p?.style === 'custom';
-  wall.style.filter = gradeFilter(mood, 'wall'); cabinet.style.filter = gradeFilter(mood, 'cabinet'); floor.style.filter = gradeFilter(mood, 'floor');
-  const image = backdrop.querySelector<HTMLImageElement>('img')!;
-  image.hidden = p?.style !== 'custom' || !p.background;
-  if (p?.background && !image.hidden) {
-    const ticket = new URLSearchParams(location.search).get('ticket');
-    const url = new URL(`/api/decorations/assets/${encodeURIComponent(p.background)}`, location.origin);
-    if (ticket) url.searchParams.set('ticket', ticket);
-    if (image.getAttribute('src') !== url.pathname + url.search) image.src = url.pathname + url.search;
-    image.style.filter = gradeFilter(mood, 'wall');
   }
   applyVideoFraming();
   window.dispatchEvent(new Event('shis-presentation-change'));
+}
+function applyScreenFraming() {
+  const stage = document.querySelector('#stage')!, screen = document.querySelector<HTMLElement>(stage.classList.contains('home-mode') ? '#homeScreenMount' : '#arcadeScreen')!;
+  for (const key of ['left', 'top', 'width', 'height', 'transform']) screen.style.removeProperty(key);
+  const s = getComputedStyle(screen), transform = new DOMMatrix(s.transform === 'none' ? undefined : s.transform);
+  screenBase = { x: parseFloat(s.left) + transform.e, y: parseFloat(s.top) + transform.f, width: parseFloat(s.width), height: parseFloat(s.height) };
+  if (!current?.screen) return;
+  const r = screenRect(screenBase, current.screen);
+  Object.assign(screen.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.width}px`, height: `${r.height}px`, transform: 'none' });
 }
 export function applyVideoFraming() {
   const container = document.querySelector<HTMLElement>('#videoMount')!;

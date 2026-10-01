@@ -2,7 +2,7 @@ import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type De
 import { objectTransform, gradeFilter, type Transform, type ContactShadow } from './studio-model';
 import { initStudio, refreshStudio, shapeAsset, rememberAssets } from './studio';
 import { applyPresentation, initVideoFraming } from './scene-presentation';
-import { cameraRect, freeRoom, type Presentation } from './presentation-model';
+import { cameraRect, type Presentation } from './presentation-model';
 import { sceneControls } from './scene-controls';
 import { straightCorners, validCorners } from './perspective';
 import { maskBehindTv } from './occlusion';
@@ -109,7 +109,7 @@ const editorSelectTool = document.querySelector<HTMLButtonElement>('#editorSelec
 const editorPanTool = document.querySelector<HTMLButtonElement>('#editorPanTool')!;
 const editorEnvironment = document.querySelector<HTMLDetailsElement>('#editorEnvironment')!;
 const history = new EditorHistory<Manifest>();
-type EditorTool = 'select' | 'pan' | 'tv' | 'camera' | 'warp';
+type EditorTool = 'select' | 'pan' | 'tv' | 'camera' | 'screen' | 'warp';
 let editorTool: EditorTool = 'select';
 let previewTool: EditorTool = 'select';
 let previewSnap = false;
@@ -341,7 +341,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     layer.append(grid);
   }
   setDecorationLights(lights);
-  if (editable && (previewTool === 'tv' || previewTool === 'camera') && view !== 'window') {
+  if (editable && (previewTool === 'tv' || previewTool === 'camera' || previewTool === 'screen') && view !== 'window') {
     const p = (manifest.presentations ??= {})[key(sceneName, view, currentAspect())] ??= {};
     sceneControls(layer, p, manifest.mood, previewTool, () => {
       for (const item of manifest.items) { const placement = placementFor(item, sceneName, view, currentAspect()); if (!placement) continue;
@@ -572,7 +572,7 @@ function sendPreview(group?: string, record = true) {
 
 function setEditorTool(tool: EditorTool) {
   editorTool = tool;
-  for (const [id, value] of [['editorSelectTool', 'select'], ['editorPanTool', 'pan'], ['studioTvTool', 'tv'], ['studioCameraTool', 'camera'], ['studioWarpTool', 'warp']]) document.getElementById(id)?.setAttribute('aria-pressed', String(tool === value));
+  for (const [id, value] of [['editorSelectTool', 'select'], ['editorPanTool', 'pan'], ['studioTvTool', 'tv'], ['studioCameraTool', 'camera'], ['studioScreenTool', 'screen'], ['studioWarpTool', 'warp']]) document.getElementById(id)?.setAttribute('aria-pressed', String(tool === value));
   sendPreview(undefined, false);
 }
 
@@ -871,7 +871,7 @@ export function initDecorations() {
       selected = typeof event.data.selected === 'string' ? event.data.selected : null;
       selection = new Set(Array.isArray(event.data.selectedIds) ? event.data.selectedIds : selected ? [selected] : []);
       setTestLight(event.data.testLight ?? 'live');
-      previewTool = ['select', 'pan', 'tv', 'camera', 'warp'].includes(event.data.tool) ? event.data.tool : 'select';
+      previewTool = ['select', 'pan', 'tv', 'camera', 'screen', 'warp'].includes(event.data.tool) ? event.data.tool : 'select';
       previewSnap = event.data.snap === true; previewGrid = event.data.grid === true;
       stage.classList.toggle('pan-tool', previewTool === 'pan' || spaceHeld);
       const manifest = event.data.manifest as Manifest;
@@ -1170,11 +1170,12 @@ export function initDecorations() {
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
     if (event.data?.type === 'presentation-change') {
-      if (compareSaved || !['tv', 'camera'].includes(event.data.kind)) return;
-      const f = event.data.framing; if (!f || !['x', 'y', 'zoom'].every(key => f[key] === undefined || Number.isFinite(f[key]))) return;
-      const kind = event.data.kind as 'tv' | 'camera', limit = kind === 'tv' ? 80 : 50;
+      if (compareSaved || !['tv', 'camera', 'screen'].includes(event.data.kind)) return;
+      const f = event.data.framing; if (!f || !['x', 'y', 'zoom', 'width', 'height'].every(key => f[key] === undefined || Number.isFinite(f[key]))) return;
+      const kind = event.data.kind as 'tv' | 'camera' | 'screen', limit = kind === 'tv' ? 80 : 50;
       const p = (draft.presentations ??= {})[activeKey()] ??= {};
-      p[kind] = { x: clamp(f.x ?? 0, -limit, limit), y: clamp(f.y ?? 0, -limit, limit), zoom: clamp(f.zoom ?? 1, kind === 'tv' ? .3 : .5, 2.5) };
+      if (kind === 'screen') p.screen = { x: clamp(f.x ?? 0, -50, 50), y: clamp(f.y ?? 0, -50, 50), width: clamp(f.width ?? 100, 50, 150), height: clamp(f.height ?? 100, 50, 150) };
+      else p[kind] = { x: clamp(f.x ?? 0, -limit, limit), y: clamp(f.y ?? 0, -limit, limit), zoom: clamp(f.zoom ?? 1, kind === 'tv' ? .3 : .5, 2.5) };
       refreshStudio(); history.record(draft, 'scene-drag'); updateHistoryButtons(); return;
     }
     if (event.data?.type === 'decor-key-end') { history.endGroup(); return; }
