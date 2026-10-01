@@ -1,6 +1,6 @@
 import { configureWindowRain } from './window-rain';
 import { tvModels } from '../tv-catalog.mjs';
-import { screenRect, resolvedCamera, type Presentation } from './presentation-model';
+import { screenRect, cameraRect, resolvedCamera, type Presentation } from './presentation-model';
 import { supportPlane, supportContact } from './support-surfaces';
 import type { Mood } from './studio-model';
 let current: Presentation | undefined;
@@ -26,7 +26,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   const camera = resolvedCamera(p), tv = p?.tv, zoom = camera.zoom;
   const dx = b.width * ((camera?.x ?? 0) + (tv?.x ?? 0) * zoom) / 100;
   const dy = b.height * ((camera?.y ?? 0) + (tv?.y ?? 0) * zoom) / 100;
-  if (p) art.style.transform = `translate(${dx}px,${dy}px) ${base === 'none' ? '' : base} scale(${zoom * (tv?.zoom ?? 1)})`;
+  if (p && !tiny) art.style.transform = `translate(${dx}px,${dy}px) ${base === 'none' ? '' : base} scale(${zoom * (tv?.zoom ?? 1)})`;
   const custom = p?.style === 'custom' && Boolean(p.background), image = backdrop.querySelector<HTMLImageElement>('img')!;
   const original = home && !custom && !p?.environment;
   const overscan = Boolean(p?.environment);
@@ -133,6 +133,7 @@ export function initVideoFraming() {
 // object coordinates. Free TV controls explicitly detach this relationship.
 export function applyTvSupport() {
   const p = current;
+  if (innerWidth <= 520 && innerHeight <= 360) return;
   if (!p?.tvSupport || p.tvSupport === 'free' || !document.querySelector('#stage')?.classList.contains('home-mode')) return;
   const art = document.querySelector<HTMLElement>('#tvScene')!, face = document.querySelector<HTMLElement>('.tv-face')!;
   art.style.removeProperty('translate');
@@ -143,7 +144,8 @@ export function applyTvSupport() {
   const background = document.querySelector<HTMLElement>('#roomBackdrop')!.getBoundingClientRect();
   const plane = supportPlane(p);
   if (p.tvSupport === 'cabinet' && !plane) return;
-  const target = p.tvSupport === 'floor' ? { x: background.left + background.width / 2, y: background.top + background.height * .87 } : supportContact(plane!);
+  const world = cameraRect(document.querySelector<HTMLElement>('.room-scene')!.getBoundingClientRect(), p);
+  const target = p.tvSupport === 'floor' ? p.environment ? { x: world.x + world.width * .57, y: world.y + world.height * .89 } : { x: background.left + background.width / 2, y: background.top + background.height * .87 } : supportContact(plane!);
   art.style.translate = `${target.x - center}px ${target.y - bottom}px`;
   window.dispatchEvent(new Event('shis-presentation-change'));
 }
