@@ -1,9 +1,13 @@
+import { paintRoomGrade } from './room-grade';
+import { type Mood } from './studio-model';
 import { frameColor, blendColor, type LightColor } from './light-color';
 
-export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number };
+export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number };
 let sources: DecorationLight[] = [];
 let ambient = 62;
-export type RoomMood = { preset: 'neutral' | 'blue-night' | 'warm'; intensity: number; tvGlow: number };
+export type RoomMood = Mood;
+let testLight = 'live';
+export function setTestLight(value: string) { testLight = value; }
 let mood: RoomMood = { preset: 'neutral', intensity: 65, tvGlow: 100 };
 export function setDecorationLights(lights: DecorationLight[]) { sources = lights; }
 export function setRoomAmbient(value: number) { ambient = Math.min(100, Math.max(25, value)); }
@@ -16,6 +20,8 @@ export function initRoomLighting() {
   const tint = document.querySelector<HTMLCanvasElement>('#roomTint')!;
   const shadowCtx = shade.getContext('2d');
   const tintCtx = tint.getContext('2d');
+  const grade = document.querySelector<HTMLCanvasElement>('#roomGrade')!;
+  const gradeCtx = grade.getContext('2d');
   const sample = document.createElement('canvas');
   sample.width = 32; sample.height = 18;
   const sampleCtx = sample.getContext('2d', { willReadFrequently: true });
@@ -36,19 +42,19 @@ export function initRoomLighting() {
     if (valid(event.data.screen) && valid(event.data.floor)) previewColors = event.data;
   });
 
-  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1) {
+  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60) {
     if (!shadowCtx || !tintCtx || rx <= 0 || ry <= 0) return;
     const power = Math.min(2, color.strength * gain);
     if (power < .005) return;
     for (const [ctx, isTint] of [[shadowCtx, false], [tintCtx, true]] as const) {
       ctx.save();
-      ctx.translate(x, y); ctx.scale(rx, ry);
+      ctx.translate(x, y); ctx.rotate(angle * Math.PI / 180); ctx.scale(rx, ry);
       ctx.globalCompositeOperation = isTint ? 'source-over' : 'destination-out';
       const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
       const rgb = `${Math.round(color.r)},${Math.round(color.g)},${Math.round(color.b)}`;
       const alpha = Math.min(.95, power * (isTint ? .23 : .9));
       gradient.addColorStop(0, `rgba(${isTint ? rgb : '0,0,0'},${alpha})`);
-      gradient.addColorStop(.35, `rgba(${isTint ? rgb : '0,0,0'},${alpha * .6})`);
+      gradient.addColorStop(.15 + softness / 100 * .4, `rgba(${isTint ? rgb : '0,0,0'},${alpha * .6})`);
       gradient.addColorStop(1, `rgba(${isTint ? rgb : '0,0,0'},0)`);
       ctx.fillStyle = gradient; ctx.fillRect(-1, -1, 2, 2);
       ctx.restore();
@@ -64,23 +70,19 @@ export function initRoomLighting() {
     const scale = Math.min(1, 960 / Math.max(bounds.width, bounds.height));
     const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
     if (shade.width !== width || shade.height !== height) {
-      shade.width = tint.width = width; shade.height = tint.height = height;
+      shade.width = tint.width = grade.width = width; shade.height = tint.height = grade.height = height;
     }
     shadowCtx.clearRect(0, 0, width, height);
     tintCtx.clearRect(0, 0, width, height);
-    const blueNight = mood.preset === 'blue-night';
-    const colored = mood.preset !== 'neutral';
-    const filterPower = colored ? mood.intensity / 100 : 0;
-    shadowCtx.fillStyle = `rgba(${blueNight ? '2,7,20' : '0,0,0'},${Math.min(.9, 1 - ambient / 100 + (blueNight ? filterPower * .12 : 0))})`;
+    gradeCtx?.clearRect(0, 0, width, height);
+    shadowCtx.fillStyle = `rgba(0,0,0,${1 - ambient / 100})`;
     shadowCtx.fillRect(0, 0, width, height);
-    if (colored) {
-      tintCtx.fillStyle = `rgba(${blueNight ? '32,73,175' : '164,89,35'},${filterPower * .32})`;
-      tintCtx.fillRect(0, 0, width, height);
-    }
     const screen = document.querySelector<HTMLElement>(stage.classList.contains('arcade-mode') ? '#arcadeScreen' : '#homeScreenMount')!;
     const glass = screen.getBoundingClientRect();
     const gx = (glass.left - bounds.left) * scale, gy = (glass.top - bounds.top) * scale;
     const gw = glass.width * scale, gh = glass.height * scale;
+    if (gradeCtx && stage.classList.contains('home-mode')) paintRoomGrade(gradeCtx, document.querySelector<HTMLElement>('.tv-face')!,
+      { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, { x: gx, y: gy, width: gw, height: gh }, mood, scale);
     const video = document.querySelector<HTMLVideoElement>('#videoMount video');
     let target = { ...dark }, floorTarget = { ...dark };
     if (video && video.readyState >= 2 && video.videoWidth && stage.classList.contains('has-signal')) {
@@ -101,37 +103,54 @@ export function initRoomLighting() {
       target = floorTarget = { r: 210, g: 220, b: 230, strength: .06 };
     }
     if (previewColors) { target = previewColors.screen; floorTarget = previewColors.floor; }
-    const easing = reducedMotion.matches ? .08 : .28;
+    if (previewMode && testLight !== 'live') {
+      const colors: Record<string, LightColor> = { red: { r: 255, g: 0, b: 0, strength: 1 }, blue: { r: 0, g: 80, b: 255, strength: 1 },
+        white: { r: 255, g: 255, b: 255, strength: 1 }, dark: { ...dark } };
+      if (colors[testLight]) target = floorTarget = colors[testLight];
+    }
+    const easing = reducedMotion.matches ? .08 : 1 - Math.exp(-125 / (mood.transition ?? 380));
     screenColor = blendColor(screenColor, target, easing);
     floorColor = blendColor(floorColor, floorTarget, easing);
     if (!previewMode) document.querySelector<HTMLIFrameElement>('#editorPreview')?.contentWindow?.postMessage(
       { type: 'room-video-light', screen: screenColor, floor: floorColor }, location.origin);
     const tvGain = mood.tvGlow / 100;
-    glow(gx + gw / 2, gy + gh / 2, gw * .88, gh * 1.05, screenColor, .7 * tvGain);
+    const rimGain = tvGain * (mood.rim ?? 100) / 100;
+    const reach = (mood.reach ?? 100) / 100;
+    glow(gx + gw / 2, gy + gh / 2, gw * .88 * reach, gh * 1.05 * reach, screenColor, .7 * tvGain);
     // Narrow pools on the bezel make the screen's color visible on the TV
     // itself as well as the room. The live glass is cut out afterwards.
-    glow(gx + gw / 2, gy, gw * .62, Math.max(gh * .12, 8), screenColor, tvGain);
-    glow(gx, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, tvGain);
-    glow(gx + gw, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, tvGain);
-    glow(gx + gw / 2, gy + gh, gw * .64, Math.max(gh * .17, 8), floorColor, tvGain);
+    glow(gx + gw / 2, gy, gw * .62, Math.max(gh * .12, 8), screenColor, rimGain);
+    glow(gx, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain);
+    glow(gx + gw, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain);
+    glow(gx + gw / 2, gy + gh, gw * .64, Math.max(gh * .17, 8), floorColor, rimGain);
     // Project a wider pool below the glass: cabinet first, floor further away.
-    glow(gx + gw / 2, gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain);
-    glow(gx + gw / 2, gy + gh + height * .29, gw * .95, height * .25, floorColor, .65 * tvGain);
+    glow(gx + gw / 2, gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain * (mood.cabinet ?? 100) / 100);
+    glow(gx + gw / 2, gy + gh + height * .29, gw * .95, height * .25, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100);
+    const power = mood.intensity / 100;
+    if (['blue-night', 'classic-night', 'moonlight'].includes(mood.preset)) glow(width * .12, height * .25, width * .6, height * .7,
+      { r: 100, g: 140, b: 210, strength: power * .09 });
+    if (['warm', 'classic-night'].includes(mood.preset)) glow(width * .84, height * .5, width * .36, height * .45,
+      { r: 255, g: 182, b: 95, strength: power * .1 });
+    if (mood.preset === 'neon') {
+      const accent = (hex: string) => ({ r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16), strength: power * .2 });
+      glow(width * .06, height * .35, width * .35, height * .5, accent(mood.accent ?? '#b93cff'));
+      glow(width * .95, height * .5, width * .35, height * .45, accent(mood.accent2 ?? '#1ec8e6'));
+    }
     const boxes = new Map([...document.querySelectorAll<HTMLElement>('.decoration-box:not(.decor-depth-outline)')].map(el => [el.dataset.id, el]));
     for (const light of sources) {
       const box = boxes.get(light.id);
       if (!box) continue;
-      const rect = box.getBoundingClientRect();
-      // Transform the emission point with the image, including its rotation.
-      const angle = Number(/rotate\(([-\d.]+)deg\)/.exec(box.style.transform)?.[1] ?? 0) * Math.PI / 180;
-      const dx = ((light.x ?? 50) / 100 - .5) * box.offsetWidth;
-      const dy = ((light.y ?? 50) / 100 - .5) * box.offsetHeight;
-      const x = (rect.left + rect.width / 2 + dx * Math.cos(angle) - dy * Math.sin(angle) - bounds.left) * scale;
-      const y = (rect.top + rect.height / 2 + dx * Math.sin(angle) + dy * Math.cos(angle) - bounds.top) * scale;
+      // The projected origin follows flips, skew and perspective as well as rotation.
+      const matrix = new DOMMatrix(getComputedStyle(box).transform);
+      const point = new DOMPoint(((light.x ?? 50) / 100 - .5) * box.offsetWidth,
+        ((light.y ?? 50) / 100 - .5) * box.offsetHeight).matrixTransform(matrix);
+      const layer = document.querySelector<HTMLElement>('#decorationLayer')!.getBoundingClientRect();
+      const x = (layer.left + parseFloat(box.style.left) + box.offsetWidth / 2 + point.x / point.w - bounds.left) * scale;
+      const y = (layer.top + parseFloat(box.style.top) + box.offsetHeight / 2 + point.y / point.w - bounds.top) * scale;
       const color = { r: parseInt(light.color.slice(1, 3), 16), g: parseInt(light.color.slice(3, 5), 16),
         b: parseInt(light.color.slice(5, 7), 16), strength: light.intensity / 100 };
       const radius = Math.min(Math.max(width, height), box.offsetWidth * scale * light.radius);
-      glow(x, y, radius, radius, color);
+      glow(x, y, radius, radius * (light.shape === 'strip' ? .16 : light.shape === 'spot' ? .4 : 1), color, 1, light.angle ?? 0, light.softness ?? 60);
     }
     // Preserve the live picture and its native CRT treatment exactly.
     for (const ctx of [shadowCtx, tintCtx]) {

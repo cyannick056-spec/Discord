@@ -1,4 +1,6 @@
-import { setDecorationLights, setRoomAmbient, setRoomMood, type DecorationLight, type RoomMood } from './lighting';
+import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type DecorationLight, type RoomMood } from './lighting';
+import { objectTransform, gradeFilter, type Transform, type ContactShadow } from './studio-model';
+import { initStudio, refreshStudio, shapeAsset, rememberAssets } from './studio';
 import { maskBehindTv } from './occlusion';
 import { EditorHistory } from './editor-history';
 
@@ -15,18 +17,23 @@ const slotColors: { id: SlotColor; name: string }[] = [
   { id: 'yellow', name: 'Amarillo' },
   { id: 'black', name: 'Negro' },
 ];
-type Placement = {
+export type Placement = {
   x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
   foreground?: boolean; anchor?: 'scene' | 'frame';
   behindTv?: boolean; locked?: boolean;
   brightness?: number; saturation?: number; hue?: number; shadow?: number;
-  light?: { color: string; intensity: number; radius: number; x?: number; y?: number };
+  transform?: Transform; contactShadow?: ContactShadow; crop?: number[];
+  light?: Omit<DecorationLight, 'id'>;
 };
-type Decoration = {
-  id: string; asset: string; name: string; kind?: 'viewer-slot' | 'light';
+export type Decoration = {
+  id: string; asset: string; name: string; kind?: 'viewer-slot' | 'light' | 'shape';
+  shape?: string; category?: string; favorite?: boolean; group?: string;
   placements: Partial<Record<PlacementKey, Placement>>;
 };
-type Manifest = { items: Decoration[]; ambient?: number; mood?: RoomMood };
+export type RoomSnapshot = { items: Decoration[]; ambient?: number; mood?: RoomMood };
+export type Manifest = RoomSnapshot & { library?: Omit<Decoration, 'placements'>[];
+  profiles?: { id: string; name: string; room: RoomSnapshot }[];
+  versions?: { id: string; name: string; room: RoomSnapshot }[] };
 
 const previewMode = new URLSearchParams(location.search).has('editorPreview');
 const activityTicket = new URLSearchParams(location.search).get('ticket') || '';
@@ -97,7 +104,6 @@ const editorSnap = document.querySelector<HTMLInputElement>('#editorSnap')!;
 const editorSelectTool = document.querySelector<HTMLButtonElement>('#editorSelectTool')!;
 const editorPanTool = document.querySelector<HTMLButtonElement>('#editorPanTool')!;
 const editorEnvironment = document.querySelector<HTMLDetailsElement>('#editorEnvironment')!;
-let compactEditor = innerWidth <= 670;
 const history = new EditorHistory<Manifest>();
 let editorTool: 'select' | 'pan' = 'select';
 let previewTool: 'select' | 'pan' = 'select';
@@ -111,6 +117,10 @@ let panStart: { x: number; y: number } | null = null;
 let saved: Manifest = { items: [] };
 let draft: Manifest = { items: [] };
 let selected: string | null = null;
+let selection = new Set<string>();
+let compareSaved = false;
+let previewTest = 'live';
+let batchCommand = false;
 let editKey = '';
 let previewReady = false;
 let lastRender: { manifest: Manifest; sceneName: Scene; view: View; editable: boolean } | null = null;
@@ -196,7 +206,7 @@ function position(box: HTMLDivElement, placement: Placement, sceneName: Scene, v
   box.style.width = `${bounds.width * placement.width / 100}px`;
   box.style.opacity = String(placement.opacity);
   box.style.zIndex = String(placement.z + (placement.foreground ? 100 : 0));
-  box.style.transform = `translate(-50%, -50%) rotate(${placement.rotation}deg)`;
+  box.style.transform = objectTransform(placement.rotation, placement.transform, placement.x);
 }
 
 function ambientFilter(placement: Placement): string {
@@ -231,7 +241,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     if (slotIndex >= 0) {
       const figure = document.createElement('div');
       figure.className = 'viewer-figure';
-      figure.style.filter = ambientFilter(placement);
+      figure.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, 'figures')}`;
       const disc = document.createElement('div');
       disc.className = 'viewer-disc';
       disc.title = viewer?.name ?? `Espacio ${slotIndex + 1} · ${slotColors[slotIndex].name}`;
@@ -254,12 +264,20 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     } else {
       const image = document.createElement('img');
       image.className = 'decoration';
-      image.src = authorizedUrl(`/api/decorations/assets/${encodeURIComponent(item.asset)}`);
+      image.src = item.kind === 'shape' ? shapeAsset(item.shape) : authorizedUrl(`/api/decorations/assets/${encodeURIComponent(item.asset)}`);
       image.alt = '';
       image.draggable = false;
-      image.style.filter = ambientFilter(placement);
+      image.style.filter = `${ambientFilter(placement)} ${gradeFilter(manifest.mood, 'figures')}`;
+      if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
     }
+    if (placement.contactShadow?.opacity) {
+      const shadow = document.createElement('span'); shadow.className = 'decor-contact-shadow';
+      const s = placement.contactShadow;
+      Object.assign(shadow.style, { opacity: String(s.opacity / 100), width: `${s.width}%`, left: `${50 + s.x}%`,
+        top: `${100 + s.y}%`, filter: `blur(${s.blur}px)` }); box.prepend(shadow);
+    }
+    if (editable && selection.has(item.id)) box.classList.add('is-selected');
     if (editable) {
       for (const [className, label] of [['decor-resize decor-resize-se', 'Cambiar tamaño'], ['decor-resize decor-resize-nw', 'Cambiar tamaño'], ['decor-resize decor-resize-ne', 'Cambiar tamaño'], ['decor-resize decor-resize-sw', 'Cambiar tamaño'], ['decor-rotate', 'Girar']] as const) {
         const handle = document.createElement('span');
@@ -326,9 +344,17 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
     const startAngle = Math.atan2(event.clientY - cy, event.clientX - cx);
     const origin = { x: event.clientX, y: event.clientY, left: placement.x,
       top: placement.y, width: placement.width, rotation: placement.rotation };
+    const clickedItem = lastRender?.manifest.items.find(i => i.id === box.dataset.id);
+    const peerIds = new Set(selection.has(box.dataset.id!) || event.shiftKey || event.ctrlKey || event.metaKey ? selection : []);
+    if (clickedItem?.group && !event.altKey) lastRender?.manifest.items.filter(i => i.group === clickedItem.group).forEach(i => peerIds.add(i.id));
+    const peers = (lastRender?.manifest.items ?? []).filter(i => i.id !== box.dataset.id && peerIds.has(i.id)).flatMap(i => {
+      const p = placementFor(i, sceneName, view, currentAspect());
+      if (!p || p.locked) return [];
+      return [{ id: i.id, p, origin: structuredClone(p), bounds: basis(p, sceneName, view) }];
+    });
     layer.querySelectorAll('.is-selected').forEach((element) => element.classList.remove('is-selected'));
     box.classList.add('is-selected');
-    parent.postMessage({ type: 'decor-select', id: box.dataset.id }, location.origin);
+    parent.postMessage({ type: 'decor-select', id: box.dataset.id, additive: event.shiftKey || event.ctrlKey || event.metaKey, individual: event.altKey }, location.origin);
     if (placement.locked) return;
     box.setPointerCapture(event.pointerId);
     parent.postMessage({ type: 'decor-gesture-start' }, location.origin);
@@ -361,6 +387,13 @@ function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene,
       if (linkedBox) {
         position(linkedBox, placement, sceneName, view);
         box.style.height = `${linkedBox.offsetHeight}px`;
+      }
+      for (const peer of peers) {
+        peer.p.x = clamp(peer.origin.x + (placement.x - origin.left) * bounds.width / peer.bounds.width, -30, 130);
+        peer.p.y = clamp(peer.origin.y + (placement.y - origin.top) * bounds.height / peer.bounds.height, -35, 145);
+        peer.p.width = clamp(peer.origin.width * placement.width / origin.width, 1, 80);
+        peer.p.rotation = clamp(peer.origin.rotation + placement.rotation - origin.rotation, -180, 180);
+        for (const element of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (element.dataset.id === peer.id) position(element, peer.p, sceneName, view);
       }
       parent.postMessage({ type: 'decor-change', id: box.dataset.id,
         x: placement.x, y: placement.y, width: placement.width, rotation: placement.rotation }, location.origin);
@@ -412,7 +445,7 @@ function initPreviewGestures() {
     pointerOnDecoration = Boolean((event.target as HTMLElement).closest('.decoration-box'));
     pointerMoved = false; pointerOrigin = { x: event.clientX, y: event.clientY };
     stage.focus({ preventScroll: true });
-    if (event.pointerType === 'touch' || !(event.button === 1 || (event.button === 0 && (spaceHeld || previewTool === 'pan')))) return;
+    if (previewPinching || !(event.button === 1 || (event.button === 0 && (spaceHeld || previewTool === 'pan')))) return;
     event.preventDefault(); event.stopPropagation();
     previewPanning = true; panOrigin = { x: event.screenX, y: event.screenY };
     stage.classList.add('is-panning'); stage.setPointerCapture(event.pointerId);
@@ -486,10 +519,12 @@ function updateHistoryButtons() {
   editorDirty.textContent = JSON.stringify(draft) === JSON.stringify(saved) ? 'Sin cambios' : 'Cambios sin guardar';
 }
 function sendPreview(group?: string, record = true) {
-  if (record) history.record(draft, group);
+  if (record && !batchCommand) history.record(draft, group);
   updateHistoryButtons();
-  if (previewReady) preview.contentWindow?.postMessage({ type: 'decor-preview', manifest: draft, selected,
-    tool: editorTool, grid: editorGrid.checked, snap: editorSnap.checked }, location.origin);
+  refreshStudio();
+  if (previewReady) preview.contentWindow?.postMessage({ type: 'decor-preview', manifest: compareSaved ? saved : draft, selected: compareSaved ? null : selected,
+    selectedIds: compareSaved ? [] : [...selection], testLight: previewTest,
+    tool: compareSaved ? 'pan' : editorTool, grid: editorGrid.checked, snap: editorSnap.checked }, location.origin);
 }
 
 function refreshMoodFields() {
@@ -502,16 +537,23 @@ function refreshMoodFields() {
 }
 
 function editorCommand(command: string) {
-  editorMenu.hidden = true; history.endGroup();
+  editorMenu.hidden = true; if (!batchCommand) history.endGroup();
+  if (!batchCommand && selection.size > 1 && ['duplicate', 'remove', 'lock', 'hide', 'depth', 'forward', 'backward'].includes(command)) {
+    const ids = [...selection], copies: string[] = []; batchCommand = true;
+    for (const id of ids) { selected = id; editorCommand(command); if (command === 'duplicate' && selected !== id && selected) copies.push(selected); }
+    batchCommand = false; selection = new Set(command === 'duplicate' ? copies : ids.filter(id => draft.items.some(i => i.id === id)));
+    selected = [...selection].at(-1) ?? null; refreshItemList(); sendPreview(); return;
+  }
   if (command === 'save') { editorSave.click(); return; }
   if (command === 'undo' || command === 'redo') {
     const restored = command === 'undo' ? history.undo() : history.redo();
     if (!restored) return;
     draft = restored; if (!selectedItem()) selected = null;
+    selection = new Set([...selection].filter(id => draft.items.some(i => i.id === id)));
     refreshMoodFields(); refreshItemList(); sendPreview(undefined, false);
     status(command === 'undo' ? 'Cambio deshecho.' : 'Cambio rehecho.'); return;
   }
-  if (command === 'deselect') { selected = null; refreshItemList(); sendPreview(); return; }
+  if (command === 'deselect') { selected = null; selection.clear(); refreshItemList(); sendPreview(); return; }
   const item = selectedItem(), p = item?.placements[activeKey()];
   if (!item || !p) return;
   if (command === 'duplicate') {
@@ -519,16 +561,19 @@ function editorCommand(command: string) {
     if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= 60) return status('Máximo 60 decoraciones.');
     const copy = structuredClone(item); copy.id = crypto.randomUUID(); copy.name = `${item.name.slice(0, 62)} · copia`;
     const placement = copy.placements[activeKey()]!; placement.x = clamp(placement.x + 2, -30, 130); placement.y = clamp(placement.y + 2, -35, 145); placement.locked = false;
-    draft.items.push(copy); selected = copy.id; status('Copia creada. Guarda para compartirla.');
+    delete copy.group;
+    draft.items.push(copy); selected = copy.id; if (!batchCommand) selection = new Set([copy.id]); status('Copia creada. Guarda para compartirla.');
   } else if (command === 'remove') {
     if (item.kind === 'viewer-slot') return;
-    draft.items = draft.items.filter(i => i.id !== selected); selected = null; status('Decoración quitada. Puedes deshacer.');
+    rememberAssets();
+    draft.items = draft.items.filter(i => i.id !== selected); selection.delete(selected!); selected = null; status('Decoración quitada. Puedes deshacer.');
   } else if (command === 'lock') p.locked = !p.locked;
   else if (command === 'hide') p.hidden = !p.hidden;
   else if (command === 'depth' && editorScene.value === 'home') p.behindTv = !p.behindTv;
   else if (command === 'forward') p.z = clamp(p.z + 1, 0, 99);
   else if (command === 'backward') p.z = clamp(p.z - 1, 0, 99);
-  else if (command === 'center') { if (p.locked) return status('Desbloquea la posición antes de moverla.'); p.x = 50; p.y = 50; }
+  else if (command === 'center') { if (p.locked) return status('Desbloquea la posición antes de moverla.');
+    const dx = 50 - p.x, dy = 50 - p.y; p.x = 50; p.y = 50; shiftPeers(p, item.id, dx, dy); }
   else return;
   refreshItemList(); sendPreview();
 }
@@ -545,12 +590,27 @@ function editorShortcut(event: { key: string; ctrlKey: boolean; shiftKey: boolea
   const placement = selectedItem()?.placements[activeKey()];
   if (!placement || placement.locked) return;
   const delta = event.altKey ? .1 : event.shiftKey ? 5 : .5;
+  const before = { x: placement.x, y: placement.y };
   if (key === 'arrowleft') placement.x = clamp(placement.x - delta, -30, 130);
   else if (key === 'arrowright') placement.x = clamp(placement.x + delta, -30, 130);
   else if (key === 'arrowup') placement.y = clamp(placement.y - delta, -35, 145);
   else if (key === 'arrowdown') placement.y = clamp(placement.y + delta, -35, 145);
   else return;
+  shiftPeers(placement, selected!, placement.x - before.x, placement.y - before.y);
   refreshFields(); sendPreview('nudge');
+}
+
+function shiftPeers(source: Placement, id: string, dx: number, dy: number, scale = 1, turn = 0) {
+  const doc = preview.contentDocument;
+  const bounds = (p: Placement) => doc?.querySelector(p.anchor === 'frame' ? editorScene.value === 'home' ? '.screen-wrap' : editorView.value === 'portrait' ? '.arcade-scene' : '.arcade-screen' : '#decorationLayer')?.getBoundingClientRect();
+  const a = bounds(source);
+  for (const item of draft.items.filter(i => selection.has(i.id) && i.id !== id)) {
+    const p = item.placements[activeKey()]; if (!p || p.locked) continue;
+    const b = bounds(p);
+    p.x = clamp(p.x + dx * (a?.width ?? 1) / (b?.width ?? 1), -30, 130);
+    p.y = clamp(p.y + dy * (a?.height ?? 1) / (b?.height ?? 1), -35, 145);
+    p.width = clamp(p.width * scale, 1, 80); p.rotation = clamp(p.rotation + turn, -180, 180);
+  }
 }
 
 function convertAnchor(placement: Placement, next: 'frame' | 'scene') {
@@ -660,6 +720,7 @@ function refreshFields() {
   const placement = item?.placements[activeKey()];
   editorProperties.hidden = !placement;
   editorNudge.hidden = !placement;
+  refreshStudio();
   if (!placement) return;
   decorName.value = item!.name;
   decorLocked.checked = placement.locked === true;
@@ -689,6 +750,7 @@ function refreshFields() {
 
 function selectItem(id: string) {
   selected = id;
+  selection = new Set([id]);
   const item = selectedItem();
   if (item && !item.placements[activeKey()]) {
     item.placements[activeKey()] = { ...(placementFor(item, editorScene.value as Scene,
@@ -728,6 +790,8 @@ export function initDecorations() {
     window.addEventListener('message', (event) => {
       if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'decor-preview') return;
       selected = typeof event.data.selected === 'string' ? event.data.selected : null;
+      selection = new Set(Array.isArray(event.data.selectedIds) ? event.data.selectedIds : selected ? [selected] : []);
+      setTestLight(event.data.testLight ?? 'live');
       previewTool = event.data.tool === 'pan' ? 'pan' : 'select';
       previewSnap = event.data.snap === true; previewGrid = event.data.grid === true;
       stage.classList.toggle('pan-tool', previewTool === 'pan' || spaceHeld);
@@ -742,11 +806,27 @@ export function initDecorations() {
   }
 
   const initialLoad = loadDecorations();
+  initStudio({
+    draft: () => draft, saved: () => saved, item: selectedItem, key: activeKey,
+    selected: () => [...selection].filter(id => draft.items.some(i => i.id === id)),
+    select: (id, additive = false) => {
+      if (!additive) return selectItem(id);
+      selection.has(id) ? selection.delete(id) : selection.add(id);
+      selected = [...selection].at(-1) ?? null; refreshItemList(); sendPreview(undefined, false);
+    },
+    change: group => { refreshItemList(); refreshMoodFields(); sendPreview(group); },
+    convert: p => convertAnchor(p, 'scene'), command: editorCommand, status,
+    create: (item) => { if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= 60) return status('Máximo 60 decoraciones.');
+      item.placements[activeKey()] = defaultPlacement(); draft.items.push(item); selectItem(item.id); },
+    compare: value => { compareSaved = value; sendPreview(undefined, false); },
+    test: value => { previewTest = value; sendPreview(undefined, false); },
+    asset: authorizedUrl, resize: sizePreview,
+    restore: room => { const copy = structuredClone(room); draft.items = copy.items; draft.ambient = copy.ambient; draft.mood = copy.mood; selected = null; selection.clear(); refreshItemList(); refreshMoodFields(); sendPreview(); }
+  });
   setInterval(() => { if (editor.hidden && !document.hidden) loadDecorations(); }, 30000);
   window.addEventListener('resize', () => {
     render(saved, scene(), currentView(), false);
-    const compact = innerWidth <= 670;
-    if (compact !== compactEditor) { compactEditor = compact; editorEnvironment.open = !compact; }
+    editorEnvironment.open = true;
     if (!editor.hidden) sizePreview();
   });
   editorUndo.addEventListener('click', () => editorCommand('undo'));
@@ -789,7 +869,7 @@ export function initDecorations() {
   for (const field of [editorGrid, editorSnap]) field.addEventListener('change', () => sendPreview());
   for (const field of [editorMood, editorMoodIntensity, editorTvGlow]) {
     field.addEventListener('input', () => {
-      draft.mood = { preset: editorMood.value as RoomMood['preset'], intensity: Number(editorMoodIntensity.value), tvGlow: Number(editorTvGlow.value) };
+      draft.mood = { ...draft.mood, preset: editorMood.value as RoomMood['preset'], intensity: Number(editorMoodIntensity.value), tvGlow: Number(editorTvGlow.value) };
       refreshMoodFields(); sendPreview(`input:${field.id}`);
     });
     field.addEventListener('change', () => history.endGroup());
@@ -853,17 +933,19 @@ export function initDecorations() {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-dx], button[data-dy]');
     const placement = selectedItem()?.placements[activeKey()];
     if (!button || !placement || placement.locked) return;
+    const before = { x: placement.x, y: placement.y };
     placement.x = Math.round(clamp(placement.x + Number(button.dataset.dx || 0), -30, 130) * 10) / 10;
     placement.y = Math.round(clamp(placement.y + Number(button.dataset.dy || 0), -35, 145) * 10) / 10;
+    shiftPeers(placement, selected!, placement.x - before.x, placement.y - before.y);
     refreshFields();
     sendPreview();
   });
   new ResizeObserver(sizePreview).observe(previewFrame);
   editorScene.addEventListener('change', () => {
-    selected = null; updateAspectControls(); refreshItemList(); reloadPreview();
+    selected = null; selection.clear(); updateAspectControls(); refreshItemList(); reloadPreview();
   });
-  editorView.addEventListener('change', () => { selected = null; refreshItemList(); reloadPreview(); });
-  editorAspect.addEventListener('change', () => { selected = null; refreshItemList(); reloadPreview(); });
+  editorView.addEventListener('change', () => { selected = null; selection.clear(); refreshItemList(); reloadPreview(); });
+  editorAspect.addEventListener('change', () => { selected = null; selection.clear(); refreshItemList(); reloadPreview(); });
   editorItem.addEventListener('change', () => selectItem(editorItem.value));
   decorAnchor.addEventListener('change', () => {
     const placement = selectedItem()?.placements[activeKey()];
@@ -895,6 +977,7 @@ export function initDecorations() {
       };
       draft.items.push(item);
       selected = item.id;
+      selection = new Set([item.id]);
       refreshItemList();
       sendPreview();
       status('Imagen añadida. Arrástrala en la vista previa y guarda.');
@@ -915,6 +998,7 @@ export function initDecorations() {
         light: { color: '#ffc68a', intensity: 80, radius: 6 } } } };
     draft.items.push(item);
     selected = item.id;
+    selection = new Set([item.id]);
     refreshItemList();
     sendPreview();
     status('Luz añadida. Ajusta color, intensidad y alcance; guarda para todos.');
@@ -926,10 +1010,12 @@ export function initDecorations() {
     if (!placement) return;
     const values = inputs.map((field) => Number(field.value));
     if (values.some((value) => !Number.isFinite(value))) return;
+    const before = { x: placement.x, y: placement.y, width: placement.width, rotation: placement.rotation };
     placement.x = clamp(values[0], -30, 130);
     placement.y = clamp(values[1], -35, 145);
     placement.width = clamp(values[2], 1, 80);
     placement.rotation = clamp(values[3], -180, 180);
+    shiftPeers(placement, selected!, placement.x - before.x, placement.y - before.y, placement.width / before.width, placement.rotation - before.rotation);
     placement.opacity = clamp(values[4] / 100, 0, 1);
     placement.z = clamp(values[5], 0, 99);
     placement.hidden = decorHidden.checked;
@@ -940,7 +1026,7 @@ export function initDecorations() {
     placement.saturation = Number(filters[1].value);
     placement.hue = Number(filters[2].value);
     placement.shadow = Number(filters[3].value);
-    if (decorEmitLight.checked) placement.light = { color: decorLightColor.value,
+    if (decorEmitLight.checked) placement.light = { ...placement.light, color: decorLightColor.value,
       intensity: Number(decorLightIntensity.value), radius: Number(decorLightRadius.value),
       x: clamp(Number(decorLightX.value), 0, 100), y: clamp(Number(decorLightY.value), 0, 100) };
     else delete placement.light;
@@ -973,6 +1059,10 @@ export function initDecorations() {
   });
   decorRemove.addEventListener('click', () => editorCommand('remove'));
   editorSave.addEventListener('click', async () => {
+    rememberAssets();
+    if (JSON.stringify(draft.items) !== JSON.stringify(saved.items) || JSON.stringify(draft.mood) !== JSON.stringify(saved.mood) || draft.ambient !== saved.ambient) {
+      draft.versions = [{ id: crypto.randomUUID(), name: new Date().toLocaleString('es'), room: { items: structuredClone(saved.items), ambient: saved.ambient, mood: structuredClone(saved.mood) } }, ...(draft.versions ?? [])].slice(0, 3);
+    }
     const submitted = copyManifest(draft);
     editorSave.disabled = true;
     try {
@@ -981,6 +1071,7 @@ export function initDecorations() {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(submitted),
       });
       saved = submitted;
+      refreshStudio();
       render(saved, scene(), currentView(), false);
       updateHistoryButtons();
       status(JSON.stringify(draft) === JSON.stringify(saved) ? 'Guardado. Todos verán esta decoración.' : 'Guardado. Hay cambios nuevos pendientes.');
@@ -1052,6 +1143,13 @@ export function initDecorations() {
     if (event.data?.type === 'decor-select') {
       editorMenu.hidden = true;
       selected = typeof event.data.id === 'string' ? event.data.id : null;
+      if (!event.data.additive && !selection.has(selected ?? '')) selection.clear();
+      if (selected) {
+        if (event.data.additive && selection.has(selected)) selection.delete(selected); else selection.add(selected);
+        const group = selectedItem()?.group;
+        if (group && !event.data.individual) draft.items.filter(i => i.group === group).forEach(i => selection.add(i.id));
+      } else selection.clear();
+      if (selected && !selection.has(selected)) selected = [...selection].at(-1) ?? null;
       const item = selectedItem();
       if (item && !item.placements[activeKey()]) {
         const placement = placementFor(item, editorScene.value as Scene,
@@ -1066,6 +1164,9 @@ export function initDecorations() {
       if (!placement || placement.locked) return;
       const values = [event.data.x, event.data.y, event.data.width, event.data.rotation].map(Number);
       if (!values.every(Number.isFinite)) return;
+      const dx = values[0] - placement.x, dy = values[1] - placement.y;
+      const scale = values[2] / placement.width, turn = values[3] - placement.rotation;
+      shiftPeers(placement, item!.id, dx, dy, scale, turn);
       placement.x = clamp(values[0], -30, 130); placement.y = clamp(values[1], -35, 145);
       placement.width = clamp(values[2], 1, 80); placement.rotation = clamp(values[3], -180, 180);
       selected = item!.id;
@@ -1081,9 +1182,12 @@ function openWorkspace() {
   editorWorkspace.hidden = false;
   draft = copyManifest(saved);
   history.reset(draft); refreshMoodFields(); updateHistoryButtons();
-  editorEnvironment.open = !compactEditor;
+  editorEnvironment.open = true;
   editorMenu.hidden = true;
   selected = null;
+  selection.clear(); compareSaved = false;
+  document.querySelector('#studioCompare')?.setAttribute('aria-pressed', 'false');
+  const compareButton = document.querySelector('#studioCompare'); if (compareButton) compareButton.textContent = 'Antes / después';
   editorScene.value = scene();
   editorView.value = currentView();
   editorAspect.value = currentAspect();
