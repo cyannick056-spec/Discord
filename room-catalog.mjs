@@ -2,7 +2,7 @@
 export const rooms = [
   { id: 'bedroom', name: 'Dormitorio', description: 'Madera, azul suave y juegos', furniture: 'bed' },
   { id: 'retro', name: 'Sala retro', description: 'Una tarde de juegos de los 90', furniture: 'sofa' },
-  { id: 'rain', name: 'Habitación con lluvia', description: 'Ventana lluviosa y luz tranquila', furniture: 'sofa' },
+  { id: 'rain', name: 'Habitación con lluvia', description: 'Ventana lateral con lluvia animada', furniture: 'sofa' },
   { id: 'japanese', name: 'Cuarto japonés', description: 'Shoji, tatami y muebles bajos', furniture: 'shelf' },
   { id: 'cabin', name: 'Cabaña', description: 'Madera y una ventana al bosque', furniture: 'shelf' },
   { id: 'city', name: 'Apartamento', description: 'Una ventana hacia la ciudad', furniture: 'sofa' },
