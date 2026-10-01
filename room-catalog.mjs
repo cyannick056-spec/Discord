@@ -1,12 +1,7 @@
 // Public, allowlisted photographic assets; never resolve user-supplied paths.
 export const rooms = [
-  { id: 'bedroom', name: 'Dormitorio', description: 'Madera, azul suave y juegos', furniture: 'bed' },
-  { id: 'retro', name: 'Sala retro', description: 'Una tarde de juegos de los 90', furniture: 'sofa' },
-  { id: 'rain', name: 'Habitación con lluvia', description: 'Ventana lateral con lluvia animada', furniture: 'sofa' },
-  { id: 'rain-close', name: 'Lluvia · vista cercana', description: 'Ventana amplia junto a la TV; encuadre preparado para zoom', furniture: 'beanbag' },
-  { id: 'japanese', name: 'Cuarto japonés', description: 'Shoji, tatami y muebles bajos', furniture: 'shelf' },
-  { id: 'cabin', name: 'Cabaña', description: 'Madera y una ventana al bosque', furniture: 'shelf' },
-  { id: 'city', name: 'Apartamento', description: 'Una ventana hacia la ciudad', furniture: 'sofa' },
+  { id: 'morning', name: 'Mañana', description: 'Luz natural por la ventana; espacio para decorar', furniture: 'side-table' },
+  { id: 'night', name: 'Noche', description: 'La misma habitación con iluminación nocturna propia', furniture: 'side-table' },
 ];
 export const props = [
   { id: 'floor-lamp', name: 'Lámpara de pie', category: 'lamp' },
@@ -42,8 +37,10 @@ export const props = [
   { id: 'side-table', name: 'Mesa auxiliar', category: 'furniture', support: { corners: [[11.5,17],[88.5,17],[98.3,43.8],[1.7,43.8]], material: 'wood' } },
 ];
 export const roomIds = new Set(rooms.map(r => r.id));
+// Accepted only for loading/migrating older shared saves, never shown as rooms.
+export const legacyRoomIds = new Set(['bedroom', 'retro', 'rain', 'rain-close', 'japanese', 'cabin', 'city']);
 export const propIds = new Set(props.map(p => p.id));
 export function builtinUrl(id) { return propIds.has(id) ? `/rooms/props/${id}.webp` : ''; }
 export function visibleInRoom(item, presentation) {
-  return !item.roomKit || item.roomKit === presentation?.environment;
+  return !item.roomKit || item.roomKit === presentation?.environment || (roomIds.has(item.roomKit) && roomIds.has(presentation?.environment));
 }

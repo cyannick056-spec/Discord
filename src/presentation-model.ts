@@ -18,9 +18,16 @@ export function screenRect(r: { x: number; y: number; width: number; height: num
     width: r.width * (p?.width ?? 100) / 100, height: r.height * (p?.height ?? 100) / 100 };
 }
 export function cameraRect(r: { x: number; y: number; width: number; height: number }, p?: Presentation) {
-  const z = p?.camera?.zoom ?? 1;
-  return { x: r.x + r.width * ((1 - z) / 2 + (p?.camera?.x ?? 0) / 100),
-    y: r.y + r.height * ((1 - z) / 2 + (p?.camera?.y ?? 0) / 100), width: r.width * z, height: r.height * z };
+  const c = resolvedCamera(p), z = c.zoom;
+  return { x: r.x + r.width * ((1 - z) / 2 + c.x / 100),
+    y: r.y + r.height * ((1 - z) / 2 + c.y / 100), width: r.width * z, height: r.height * z };
+}
+// Two-times photographic overscan covers even the 0.5 zoom. Bound panning
+// to the actual photo at wider zooms so no blank margins can enter the view.
+export function resolvedCamera(p?: Presentation) {
+  const zoom = p?.camera?.zoom ?? 1;
+  const limit = p?.environment === 'morning' || p?.environment === 'night' ? Math.min(50, Math.max(0, (2 * zoom - 1) * 50)) : 50;
+  return { zoom, x: Math.max(-limit, Math.min(limit, p?.camera?.x ?? 0)), y: Math.max(-limit, Math.min(limit, p?.camera?.y ?? 0)) };
 }
 // Source crop reflects object-fit:cover and the extra video framing. Sampling
 // this crop makes the room light follow the part of the video actually shown.

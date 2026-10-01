@@ -1,6 +1,6 @@
 import { materialIds, MAX_LIBRARY_ITEMS } from './material-catalog.mjs';
 import { tvIds } from './tv-catalog.mjs';
-import { roomIds, propIds } from './room-catalog.mjs';
+import { roomIds, legacyRoomIds, propIds } from './room-catalog.mjs';
 const finite = (value, low, high) => typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high;
 const optionalNumbers = (object, fields) => Object.entries(fields).every(([key, [lo, hi]]) => object[key] === undefined || finite(object[key], lo, hi));
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -15,7 +15,7 @@ export function validPresentations(settings, views) {
   if (settings === undefined) return true;
   if (!object(settings)) return false;
   return Object.entries(settings).every(([view, p]) => views.has(view) && object(p) &&
-    (p.environment === undefined || roomIds.has(p.environment)) &&
+    (p.environment === undefined || roomIds.has(p.environment) || legacyRoomIds.has(p.environment)) &&
     (p.rain === undefined || (object(p.rain) && (p.rain.enabled === undefined || typeof p.rain.enabled === 'boolean') && (p.rain.forceMotion === undefined || typeof p.rain.forceMotion === 'boolean') && optionalNumbers(p.rain, { intensity: [0,100], speed: [.2,3] }))) &&
     (p.tvSupport === undefined || ['free', 'cabinet', 'floor'].includes(p.tvSupport)) &&
     (p.supportId === undefined || uuid(p.supportId)) &&
@@ -32,7 +32,7 @@ export function validPresentations(settings, views) {
 }
 export function validMetadata(item) {
   return (item.category === undefined || categories.includes(item.category)) &&
-    (item.roomKit === undefined || (item.kind === 'builtin' && roomIds.has(item.roomKit))) &&
+    (item.roomKit === undefined || (item.kind === 'builtin' && (roomIds.has(item.roomKit) || legacyRoomIds.has(item.roomKit)))) &&
     (item.kind !== 'builtin' || propIds.has(item.asset)) &&
     (item.favorite === undefined || typeof item.favorite === 'boolean') &&
     (item.group === undefined || uuid(item.group)) &&

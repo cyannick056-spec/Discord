@@ -3,14 +3,11 @@ import { gradeFilter, type Mood } from './studio-model';
 
 // Glass polygons in photograph coordinates. Frames and wall never receive rain.
 const panes = {
-  wide: [[[0, 0], [.073, .006], [.073, .69], [0, .732]], [[.096, .033], [.134, .088], [.134, .661], [.096, .682]]],
-  portrait: [[[0, .023], [.037, .047], [.037, .552], [0, .569]], [[.064, .076], [.099, .104], [.099, .532], [.064, .547]]],
+  wide: [[[.291,.251],[.370,.251],[.370,.502],[.291,.502]], [[.383,.251],[.464,.251],[.464,.502],[.383,.502]]],
+  portrait: [[[.235,.254],[.352,.254],[.352,.450],[.235,.450]], [[.382,.254],[.500,.254],[.500,.450],[.382,.450]]],
 };
-const closePanes = {
-  wide: [[[.041,.071],[.267,.071],[.267,.681],[.041,.681]], [[.281,.071],[.493,.071],[.493,.681],[.281,.681]]],
-  portrait: [[[.045,.087],[.294,.087],[.294,.563],[.045,.563]], [[.314,.087],[.581,.087],[.581,.563],[.314,.563]]],
-};
-let closeRoom = false;
+const nightWide = [[[.293,.229],[.370,.229],[.370,.465],[.293,.465]], [[.383,.229],[.464,.229],[.464,.465],[.383,.465]]];
+let night = false;
 let canvas: HTMLCanvasElement | undefined, image: HTMLImageElement, config: Presentation['rain'];
 let layer: HTMLDivElement;
 let orientation: 'wide' | 'portrait' = 'wide', active = false, animation = 0, last = 0, elapsed = 0;
@@ -29,8 +26,8 @@ export function configureWindowRain(backdrop: HTMLElement, photo: HTMLImageEleme
   layer.style.cssText = backdrop.style.cssText;
   canvas.style.filter = mood ? gradeFilter(mood, 'wall') : '';
   image = photo; config = p?.rain; orientation = portrait ? 'portrait' : 'wide';
-  closeRoom = p?.environment === 'rain-close';
-  active = (p?.environment === 'rain' || closeRoom) && config?.enabled !== false && (config?.intensity ?? 55) > 0 && !photo.hidden;
+  night = p?.environment === 'night';
+  active = Boolean(p?.environment) && config?.enabled === true && (config?.intensity ?? 55) > 0 && !photo.hidden;
   canvas.hidden = !active;
   layer.hidden = !active;
   canvas.dataset.motion = motionPaused() ? 'reduced' : 'running';
@@ -52,7 +49,7 @@ function draw(time: number) {
   c.clearRect(0, 0, w, h);
   const cover = Math.max(w / image.naturalWidth, h / image.naturalHeight), iw = image.naturalWidth * cover, ih = image.naturalHeight * cover;
   const ox = image.style.objectPosition === 'left center' ? 0 : (w - iw) / 2, oy = (h - ih) / 2;
-  const glassPanes = (closeRoom ? closePanes : panes)[orientation];
+  const glassPanes = night && orientation === 'wide' ? nightWide : panes[orientation];
   c.save(); c.beginPath();
   for (const pane of glassPanes) { pane.forEach(([x,y], i) => i ? c.lineTo(ox + x * iw, oy + y * ih) : c.moveTo(ox + x * iw, oy + y * ih)); c.closePath(); } c.clip();
   // A TV moved in front of the window still occludes its rain, including its bezel.
@@ -71,18 +68,18 @@ function draw(time: number) {
       const bottomX = pane[3][0] + (pane[2][0] - pane[3][0]) * u, bottomY = pane[3][1] + (pane[2][1] - pane[3][1]) * u;
       return [ox + (topX + (bottomX - topX) * v) * iw, oy + (topY + (bottomY - topY) * v) * ih];
     };
-    c.lineWidth = Math.max(.8, iw * .0008); c.lineCap = 'round';
-    c.strokeStyle = `rgba(208,232,249,${.25 + strength * .22})`;
+    c.lineWidth = Math.max(.45, iw * .0002); c.lineCap = 'round';
+    c.strokeStyle = `rgba(208,232,249,${.12 + strength * .12})`;
     for (let i = 0; i < Math.round(65 * strength); i++) {
       const seed = index * 10000 + i, [x, y] = point(noise(seed + 1), (noise(seed + 700) + elapsed * (.55 + noise(seed + 900) * .35)) % 1);
-      c.beginPath(); c.moveTo(x, y); c.lineTo(x - iw * .0015, y + ih * .025); c.stroke();
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x - iw * .0006, y + ih * .015); c.stroke();
     }
     for (let i = 0; i < Math.round(38 * strength); i++) {
       const seed = index * 10000 + i, v = (noise(seed + 3300) + elapsed * (.07 + noise(seed + 3900) * .13)) % 1;
       const [x, y] = point(.06 + noise(seed + 2100) * .88, v);
-      const r = Math.max(2, iw * (.0014 + noise(seed + 4400) * .002));
+      const r = Math.max(.85, iw * (.0005 + noise(seed + 4400) * .00065));
       const length = r * (9 + noise(seed + 4700) * 12), trail = c.createLinearGradient(x, y - length, x, y);
-      trail.addColorStop(0, 'rgba(219,241,255,0)'); trail.addColorStop(1, 'rgba(219,241,255,.45)');
+      trail.addColorStop(0, 'rgba(219,241,255,0)'); trail.addColorStop(1, 'rgba(219,241,255,.28)');
       c.strokeStyle = trail; c.lineWidth = r * .6; c.beginPath(); c.moveTo(x + r * .3, y - length); c.quadraticCurveTo(x - r * .3, y - length / 2, x, y); c.stroke();
       c.save(); c.beginPath(); c.ellipse(x, y, r, r * 1.8, 0, 0, Math.PI * 2); c.clip();
       // Refract a small crop of the photograph through the moving bead.
