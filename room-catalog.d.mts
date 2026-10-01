@@ -1,4 +1,4 @@
-export type RoomId = 'morning' | 'night';
+export type RoomId = 'cozy-night';
 export const rooms: { id: RoomId; name: string; description: string; furniture: string }[];
 export const props: { id: string; name: string; category: string; bounds?: number[]; support?: { corners: number[][]; material: 'wood' | 'matte' | 'glass' } }[];
 export const roomIds: Set<string>;

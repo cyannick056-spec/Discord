@@ -1,4 +1,3 @@
-import { configureWindowRain } from './window-rain';
 import { tvModels } from '../tv-catalog.mjs';
 import { screenRect, cameraRect, resolvedCamera, type Presentation } from './presentation-model';
 import { supportPlane, supportContact } from './support-surfaces';
@@ -35,8 +34,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
     transform: `translate(${b.width * (camera?.x ?? 0) / 100}px,${b.height * (camera?.y ?? 0) / 100}px) scale(${zoom})` });
   image.hidden = !home && !custom; image.style.filter = '';
   const orientation = innerHeight > innerWidth && innerHeight >= 430 ? 'portrait' : 'wide';
-  const daytime = mood?.daytime ?? 'night';
-  let src = daytime === 'night' ? `/crt-room-plate-${orientation}.webp` : `/crt-room-${daytime}-${orientation}.webp`;
+  let src = `/rooms/cozy-night-${orientation}.webp`;
   if (p?.environment) src = `/rooms/${p.environment}-${orientation}.webp`;
   if (custom) {
     const ticket = new URLSearchParams(location.search).get('ticket');
@@ -45,9 +43,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   }
   if (!image.hidden && image.getAttribute('src') !== src) image.src = src;
   image.style.objectFit = custom || p?.environment ? 'cover' : 'fill';
-  // Keep the side window inside narrow mobile crops instead of centering it away.
   image.style.objectPosition = 'center';
-  configureWindowRain(backdrop, image, home && !tiny ? p : undefined, orientation === 'portrait', mood);
   applyScreenFraming();
   if (home && !tiny) {
     const s = getComputedStyle(face), n = (key: string) => parseFloat(s.getPropertyValue('--' + key)) * 10;

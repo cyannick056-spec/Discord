@@ -9,7 +9,7 @@ export function roomPhotoRect() {
   return { x: b.x + (b.width - width) / 2, y: b.y + (b.height - height) / 2, width, height };
 }
 export function photoFloor() {
-  const b = roomPhotoRect(), line = innerHeight > innerWidth && innerHeight >= 430 ? .552 : getPresentation()?.environment === 'night' ? .61 : .629; return { x: b.x, y: b.y + b.height * line, width: b.width, height: b.height * (1-line), material: 'wood' as const, roughness: 80 };
+  const b = roomPhotoRect(), line = .60; return { x: b.x, y: b.y + b.height * line, width: b.width, height: b.height * (1-line), material: 'wood' as const, roughness: 90 };
 }
 const lightMaps = new Map<string, Promise<ImageData>>();
 // Match movable photographs to the light actually present at their location

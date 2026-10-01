@@ -1,8 +1,8 @@
 import { props, type RoomId } from '../room-catalog.mjs';
-import type { Manifest, Decoration, Placement } from './decorations';
+import type { Manifest, Decoration, Placement, PlacementKey } from './decorations';
 import { prepareRealRoom } from '../real-room.mjs';
 export { homeKeys } from '../real-room.mjs';
-export function prepareRoom(manifest: Manifest, id: RoomId) { return prepareRealRoom(manifest, id); }
+export function prepareRoom(manifest: Manifest, id: RoomId, key?: PlacementKey) { return prepareRealRoom(manifest, id, key); }
 export function roomPlacement(prop: string, portrait = false): Placement {
   const coords: Record<string, number[]> = portrait ? {
     cabinet: [50, 51, 90, 3], rug: [50, 79, 95, 0], sofa: [78, 62, 36, 2], bed: [82, 65, 34, 2], shelf: [82, 57, 30, 2],
