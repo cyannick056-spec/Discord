@@ -40,6 +40,12 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
     else if (zone === 'floor') ctx.rect(0, floor, ctx.canvas.width, Math.max(0, ctx.canvas.height - floor));
     else ctx.rect(0, 0, ctx.canvas.width, Math.max(0, cabinet));
     ctx.clip();
+    // Multiply fills create opaque white pixels on transparent canvas. Keep
+    // grading inside the actual photograph so its uncovered margins stay dark.
+    ctx.beginPath();
+    if (free && zone !== 'tv') ctx.rect(bx, by, bw, bh);
+    else ctx.rect(x, y, w, h);
+    ctx.clip();
     if (zone !== 'tv') { ctx.beginPath(); ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.roundRect(tv.x, tv.y, tv.width, tv.height, Math.min(tv.width, tv.height) * .012); ctx.clip('evenodd'); }
     ctx.globalAlpha = influence;
     ctx.filter = gradeFilter(mood, zone); if (free && zone !== 'tv') ctx.drawImage(backgroundImage, bx, by, bw, bh); else ctx.drawImage(backgroundImage, x, y, w, h); ctx.filter = 'none';
