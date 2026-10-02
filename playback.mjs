@@ -1,6 +1,6 @@
 import {validatePlayback} from './youtube-model.mjs';
 // Ephemeral playback belongs to an Activity instance, never to room decoration.
-export function installPlayback(app, authorize, {now=Date.now}={}) {
+export function installPlayback(app, authorize, {now=Date.now,requireHost=(_req,_res,next)=>next()}={}) {
   const sessions=new Map(), lifetime=6*60*60*1000;
   const session = (req,res,next) => {
     const id=req.query.instance;
@@ -13,7 +13,7 @@ export function installPlayback(app, authorize, {now=Date.now}={}) {
     req.playback=sessions.get(id);req.playback.touched=time;res.set('Cache-Control','no-store');next();
   };
   app.get('/api/playback',authorize,session,(req,res)=>res.json({...req.playback.state,serverNow:now()}));
-  app.put('/api/playback',authorize,session,(req,res)=>{
+  app.put('/api/playback',authorize,requireHost,session,(req,res)=>{
     const record=req.playback,time=now();
     if(req.body?.revision!==record.state.revision)return res.status(409).json({...record.state,serverNow:time});
     let value;try{value=validatePlayback(req.body);}catch(error){return res.status(400).json({error:error.message});}

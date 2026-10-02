@@ -1,3 +1,4 @@
+import {canControlActivity,hostHeaders} from './activity-controls';
 import {parseYouTubeLink,playbackPosition,type PlaybackState} from '../youtube-model.mjs';
 import {patchUrlMappings} from '@discord/embedded-app-sdk';
 import {isDiscordOrigin,youtubeMapping,youtubeBase,youtubeScriptUrl,youtubeEmbedUrl,youtubeResourceUrl,isYouTubeScriptResponse} from '../youtube-network.mjs';
@@ -86,7 +87,7 @@ export class YouTubeRoom {
     const params=new URLSearchParams(location.search), ticket=params.get('ticket') || '';
     const instance=params.get('instance_id') || `local-${ticket.split('.').at(-1) || 'preview'}`;
     this.url='/api/playback?'+new URLSearchParams({instance,...(ticket?{ticket}:{})});
-    document.querySelector('#sourceButton')!.addEventListener('click',()=>{this.dialog.showModal();void this.refresh().catch(e=>this.message(e.message));});
+    document.querySelector('#sourceButton')!.addEventListener('click',()=>{if(!canControlActivity())return;this.dialog.showModal();void this.refresh().catch(e=>this.message(e.message));});
     document.querySelector('#sourceClose')!.addEventListener('click',()=>this.dialog.close());
     this.dialog.addEventListener('close',()=>{this.selectionGeneration++;});
     this.dialog.addEventListener('cancel',()=>{this.selectionGeneration++;});
@@ -95,7 +96,7 @@ export class YouTubeRoom {
     });
     document.querySelector('#switchSource')!.addEventListener('click',()=>{this.selectionGeneration++;void this.publish({source:'switch',videoId:'',playlistId:'',position:0,playing:false}).then(()=>{this.notice.hidden=true;this.message('Switch seleccionado. Puedes volver a probar YouTube.');this.dialog.close();}).catch(e=>this.message(e.message));});
     document.querySelector('#youtubePlay')!.addEventListener('click',()=>this.toggle());
-    document.querySelector('#youtubeNext')!.addEventListener('click',()=>{if(this.ready && this.state?.playlistId)this.player?.nextVideo();});
+    document.querySelector('#youtubeNext')!.addEventListener('click',()=>{if(canControlActivity() && this.ready && this.state?.playlistId)this.player?.nextVideo();});
     document.querySelector('#youtubeRetry')!.addEventListener('click',()=>{void this.retry().catch(e=>this.message(e.message,true));});
     this.externalButton.addEventListener('click',()=>{void this.openCurrentExternally().catch(e=>this.message(e.message));});
     document.addEventListener('securitypolicyviolation',event=>{
@@ -176,10 +177,11 @@ export class YouTubeRoom {
     try{await this.fetching;}finally{this.fetching=null;}
   }
   private async publish(value:Partial<PlaybackState>){
+    if(!canControlActivity())throw new Error('Solo el host puede cambiar la reproducción');
     if(this.writing)return;this.writing=true;
     try{
       if(!this.state)await this.refresh();
-      const res=await fetch(this.url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...this.state,...value,revision:this.state!.revision})});
+      const res=await fetch(this.url,{method:'PUT',headers:{...hostHeaders(),'Content-Type':'application/json'},body:JSON.stringify({...this.state,...value,revision:this.state!.revision})});
       const next=await res.json();if(res.status===409){await this.apply(next);throw new Error('La reproducción cambió; vuelve a intentarlo');}
       if(!res.ok)throw new Error(next.error || 'No se pudo compartir el cambio');await this.apply(next);
     }finally{this.writing=false;}
@@ -259,13 +261,13 @@ export class YouTubeRoom {
     }});
     setTimeout(()=>{if(generation===this.generation && !this.ready)this.failPlayer('La ventana de YouTube no respondió. Reintenta o vuelve a Switch.');},15000);
   }
-  private captureSeek(){if(!this.ready || !this.hasPlayed || this.lastError!==null || this.autoplayBlocked || !this.state || !this.player || performance.now()<this.quietUntil)return;const expected=playbackPosition(this.state,Date.now()+this.clockOffset);if([1,2].includes(this.player.getPlayerState()) && Math.abs(this.player.getCurrentTime()-expected)>3)this.capture(true);}
+  private captureSeek(){if(!canControlActivity() || !this.ready || !this.hasPlayed || this.lastError!==null || this.autoplayBlocked || !this.state || !this.player || performance.now()<this.quietUntil)return;const expected=playbackPosition(this.state,Date.now()+this.clockOffset);if([1,2].includes(this.player.getPlayerState()) && Math.abs(this.player.getCurrentTime()-expected)>3)this.capture(true);}
   private capture(force=false){
-    if(!this.ready || !this.hasPlayed || this.lastError!==null || this.autoplayBlocked || !this.player || !this.state || !this.isYouTube() || this.writing || performance.now()<this.quietUntil)return;
+    if(!canControlActivity() || !this.ready || !this.hasPlayed || this.lastError!==null || this.autoplayBlocked || !this.player || !this.state || !this.isYouTube() || this.writing || performance.now()<this.quietUntil)return;
     const videoId=this.player.getVideoData().video_id || this.state.videoId,playing=this.player.getPlayerState()===1;
     if(force)void this.publish({videoId,playing,position:this.player.getCurrentTime(),index:Math.max(0,this.player.getPlaylistIndex())}).catch(e=>this.message(e.message));
   }
-  private toggle(){if(!this.ready || !this.player)return;[1,3].includes(this.player.getPlayerState())?this.player.pauseVideo():this.player.playVideo();}
+  private toggle(){if(!canControlActivity() || !this.ready || !this.player)return;[1,3].includes(this.player.getPlayerState())?this.player.pauseVideo():this.player.playVideo();}
   private tooSmall(){return innerWidth<216 || innerHeight<280;}
   async retry(){if(!this.isYouTube())return;this.generation++;this.resetDiagnostics();this.failedRevision=null;this.player?.destroy();this.player=null;this.ready=false;await this.apply(this.state!);}
 }

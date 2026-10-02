@@ -8,6 +8,7 @@ import { AccessToken } from 'livekit-server-sdk';
 import { installDecorations } from './decorations.mjs';
 import { installCloudflare } from './cloudflare.mjs';
 import { installPlayback } from './playback.mjs';
+import { installActivityControls } from './activity-controls.mjs';
 
 const app = express();
 const cloudflareMode = process.env.STREAM_PROVIDER === 'cloudflare';
@@ -20,12 +21,14 @@ app.use((_req,res,next)=>{res.set('Referrer-Policy','strict-origin-when-cross-or
 app.use('/api/decorations', express.json({ limit: '16mb' }));
 app.use(express.json({ limit: '256kb' }));
 installCloudflare(app, requireActivityTicket);
-installPlayback(app, requireActivityTicket);
+const activityControls=installActivityControls(app,requireActivityTicket,{editKey:process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY});
+installPlayback(app, requireActivityTicket, {requireHost:activityControls.requireHost});
 app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
   directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),
   editKey: process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY,
   rebuildRooms: true,
+  hostAuthorized: activityControls.isHost,
 });
 
 function required(name) {

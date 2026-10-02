@@ -1,3 +1,4 @@
+import {canControlActivity,hostHeaders,unlockHost} from './activity-controls';
 import { viewPresentation, viewMood, removeFromView, duplicateInView, saveView } from './view-state';
 import { MAX_SCENE_ITEMS, MAX_LIBRARY_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
 import { applyFurnitureMaterial } from './furniture-material';
@@ -263,10 +264,11 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     if (!placement || placement.hidden) continue;
     const slotIndex = item.kind === 'viewer-slot' ? slotColors.findIndex((color) => item.id === `viewer-slot-${color.id}`) : -1;
     const viewer = slotIndex >= 0 ? viewers[slotIndex] : undefined;
-    if (slotIndex >= 0 && !editable && !viewer) continue;
+
     const box = document.createElement('div');
     box.className = 'decoration-box';
     box.dataset.id = item.id;
+    if(slotIndex>=0 && !editable) box.hidden=!viewer;
     box.dataset.furniture = String(isSolidFurniture(item));
     box.dataset.solid=String(isSolidObject(item,placement));
     box.dataset.lightResponse=String(placement.lightResponse ?? defaultLightResponse);
@@ -898,7 +900,7 @@ function selectItem(id: string) {
 
 async function editorRequest(url: string, options: RequestInit) {
   const response = await fetch(url, { ...options, headers: {
-    ...options.headers, 'X-Decoration-Key': editKey, 'X-Activity-Ticket': activityTicket,
+    ...options.headers, ...hostHeaders(), 'X-Decoration-Key': editKey, 'X-Activity-Ticket': activityTicket,
   } });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
@@ -911,9 +913,10 @@ async function loadDecorations() {
   try {
     const response = await fetch(authorizedUrl('/api/decorations'), { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    saved = await response.json() as Manifest;
-    ensureViewerSlots(saved);
-    if (editor.hidden) render(saved, scene(), currentView(), false);
+    const next=await response.json() as Manifest;
+    ensureViewerSlots(next);
+    const changed=JSON.stringify(next)!==JSON.stringify(saved);saved=next;
+    if (editor.hidden && (changed || !lastRender)) render(saved, scene(), currentView(), false);
   } catch (error) { console.error('No se pudo cargar la decoración:', error); }
 }
 
@@ -925,7 +928,7 @@ const closeStatus = document.querySelector<HTMLElement>('#closeStatus')!;
 let saving = false;
 let closeAction: (() => void | Promise<void>) | undefined;
 function hasUnsavedChanges() {
-  return !editor.hidden && !!editKey && JSON.stringify(draft) !== JSON.stringify(saved);
+  return !editor.hidden && !editorWorkspace.hidden && JSON.stringify(draft) !== JSON.stringify(saved);
 }
 function closeEditor() {
   draft = copyManifest(saved); history.reset(draft);
@@ -1122,13 +1125,14 @@ export function initDecorations() {
     document.querySelector<HTMLButtonElement>('#settingsButton')!.setAttribute('aria-expanded', 'false');
     editor.hidden = false;
     stage.classList.add('editing-decoration');
-    if (editKey) openWorkspace();
+    if (canControlActivity()) openWorkspace();
     else editorKey.focus();
   });
   editorClose.addEventListener('click', () => requestClose(false));
   editorUnlock.addEventListener('click', async () => {
     editKey = editorKey.value;
     try {
+      await unlockHost(editKey);
       await editorRequest('/api/decorations/auth', { method: 'POST' });
       await initialLoad;
       editorKey.value = '';
@@ -1423,8 +1427,16 @@ function openWorkspace() {
 }
 
 export function setDecorationViewers(connected: Viewer[]) {
-  viewers = connected.slice(0, 5);
-  if (!previewMode && editor.hidden) render(saved, scene(), currentView(), false);
+  const next=connected.slice(0,5);if(JSON.stringify(next)===JSON.stringify(viewers))return;viewers=next;
+  if(previewMode || !editor.hidden)return;
+  // Roster updates only touch the avatar slots, never the cabinet or TV.
+  for(const [i,color] of slotColors.entries()) {
+    const box=layer.querySelector<HTMLElement>(`[data-id="viewer-slot-${color.id}"]`),viewer=viewers[i];if(!box)continue;
+    box.hidden=!viewer;const disc=box.querySelector<HTMLElement>('.viewer-disc');if(!disc || !viewer)continue;
+    disc.title=viewer.name;let avatar=disc.querySelector('img');
+    if(!avatar){avatar=document.createElement('img');avatar.draggable=false;avatar.referrerPolicy='no-referrer';disc.replaceChildren(avatar);}
+    if(avatar.getAttribute('src')!==viewer.avatar)avatar.src=viewer.avatar;avatar.alt=viewer.name;
+  }
 }
 
 function updateAspectControls() {

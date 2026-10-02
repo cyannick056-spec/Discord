@@ -46,3 +46,9 @@ test('automatic framing and per-object light settings validate while malformed w
   assert.equal(validStudioPlacement({lightResponse:0}),true);assert.equal(validStudioPlacement({lightResponse:100}),true);
   assert.equal(validStudioPlacement({lightResponse:101}),false);assert.equal(validStudioPlacement({lightResponse:'35'}),false);
 });
+
+test('detects encoded dark borders and slight asymmetric console overscan',()=>{
+ const pixels=frame(29,8,100,75);
+ for(let y=0;y<90;y++)for(let x=0;x<160;x++){const i=(y*160+x)*4;if(!pixels[i]){pixels[i]=18+(x+y)%7;pixels[i+1]=20;pixels[i+2]=22;pixels[i+3]=255;}}
+ assert.deepEqual(detectActiveArea(pixels,160,90),{x:29/160,y:8/90,width:100/160,height:75/90});
+});
