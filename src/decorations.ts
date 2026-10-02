@@ -350,7 +350,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       attachDrag(outline, placement, sceneName, view, box);
     }
     if (placement.light && placement.opacity > 0 && placement.light.intensity > 0) {
-      lights.push({ id: item.id, ...placement.light, behindTv:placement.behindTv, intensity: placement.light.intensity * placement.opacity });
+      lights.push({ id: item.id, ...placement.light, behindTv:placement.behindTv, wallOnly:item.kind === 'light' && placement.behindTv === true, intensity: placement.light.intensity * placement.opacity });
     }
   }
   if (editable && previewGrid) {
