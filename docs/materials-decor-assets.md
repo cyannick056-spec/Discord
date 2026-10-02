@@ -1,5 +1,5 @@
-# Materials and decoration assets
+# Materials and decorations
 
-SHIS Stream's current decoration materials are part of the live editor/runtime catalogue.
+SHIS Stream's public editor supports movable decorations and furniture appearance controls. Current material behavior is implemented by the live application and saved scene data.
 
-Old asset-generation prompts, temporary experiments and implementation diaries were removed from public documentation. Current behavior is defined by the application source and saved scene data.
+Development prompts, discarded assets and fix-by-fix implementation history are intentionally omitted from public documentation.
