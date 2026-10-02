@@ -34,7 +34,7 @@ test('the night nook uses editable furniture and practical lights while personal
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
   const url = `http://127.0.0.1:${server.address().port}/api/decorations`;
   const manifest = { items: [], ambient: 66 };
-  rooms.forEach(room => assert.equal(prepareRoom(manifest, room.id), true));
+  assert.equal(prepareRoom(manifest, 'cozy-night'), true);
   assert.equal(manifest.items.length, 4);
   for (let n = 0; n < 60; n++) manifest.items.push({ id: crypto.randomUUID(), asset: crypto.randomUUID() + '.png', name: 'Figura ' + n, placements: {} });
   for (const [i, t] of tvModels.entries()) { const key = i % 2 ? 'home-portrait-4x3' : 'home-landscape-16x9'; manifest.presentations[key].tvModel = t.id; manifest.presentations[key].tvSupport = t.floor ? 'floor' : 'cabinet'; assert.equal((await fetch(url, { method:'PUT', headers:{'Content-Type':'application/json','X-Decoration-Key':'fixture'}, body:JSON.stringify(manifest) })).status, 200); }

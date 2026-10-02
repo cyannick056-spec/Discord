@@ -12,7 +12,7 @@ function opaqueBounds(image: HTMLImageElement) {
   silhouettes.set(image.src,bounds); if(silhouettes.size>100) silhouettes.delete(silhouettes.keys().next().value!); return bounds;
 }
 export async function restOnSurface(manifest: Manifest, key: PlacementKey, ids: string[], supportId: string, presentation: Presentation | undefined,
-  basis: (p: Placement) => DOMRect, reposition: (box: HTMLDivElement,p: Placement) => void) {
+  basis: (p: Placement) => DOMRect, reposition: (box: HTMLDivElement,p: Placement) => void, authored = false) {
   const support = document.querySelector<HTMLDivElement>(`.decoration-box:not(.decor-depth-outline)[data-id="${CSS.escape(supportId)}"]`);
   if(!support || !support.dataset.support) return [];
   await support.querySelector('img')?.decode().catch(()=>{});
@@ -29,6 +29,10 @@ export async function restOnSurface(manifest: Manifest, key: PlacementKey, ids: 
     const corners=[[l,t],[r,t],[r,bottom],[l,bottom]].map(([x,y])=>new DOMPoint((x-.5)*w,(y-.5)*h).matrixTransform(matrix));
     const parent=box.parentElement!.getBoundingClientRect(), xs=corners.map(q=>q.x/q.w),ys=corners.map(q=>q.y/q.w);
     const foot={x:parent.x+parseFloat(box.style.left)+w/2+(Math.min(...xs)+Math.max(...xs))/2,y:parent.y+parseFloat(box.style.top)+h/2+Math.max(...ys)};
+    if(authored) {
+      const q=Math.max(0,Math.min(1,(foot.x-(a[0]+d[0])/2)/(((b[0]+c[0])-(a[0]+d[0]))/2)));
+      target.x=foot.x;target.y=(a[1]*(1-q)+b[1]*q)*.4+(d[1]*(1-q)+c[1]*q)*.6;
+    }
     const b0=basis(p);p.x=Math.max(-30,Math.min(130,p.x+(target.x-foot.x)/b0.width*100));p.y=Math.max(-35,Math.min(145,p.y+(target.y-foot.y)/b0.height*100));
     reposition(box,p); result.push({id,x:p.x,y:p.y,width:p.width,rotation:p.rotation});
   }

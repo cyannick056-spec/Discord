@@ -1,5 +1,5 @@
-export type RoomId = 'cozy-night';
-export const rooms: { id: RoomId; name: string; description: string; furniture: string }[];
+export type RoomId = 'cozy-night' | 'midnight-den' | 'walnut-den' | 'violet-den';
+export const rooms: { id: RoomId; name: string; description: string; furniture: string; floorLine?: number }[];
 export const props: { id: string; name: string; category: string; bounds?: number[]; support?: { corners: number[][]; material: 'wood' | 'matte' | 'glass' } }[];
 export const roomIds: Set<string>;
 export const legacyRoomIds: Set<string>;

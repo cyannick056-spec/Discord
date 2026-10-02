@@ -10,12 +10,13 @@ import { defaultRealPresentation } from '../real-room.mjs';
 import { rooms, props, builtinUrl, visibleInRoom, type RoomId } from '../room-catalog.mjs';
 import { tvModels } from '../tv-catalog.mjs';
 import { prepareRoom, builtinDecoration, roomPlacement } from './modular-rooms';
+import { compositionRestGroups } from '../room-compositions.mjs';
 
 type Host = {
   draft(): Manifest; saved(): Manifest; item(): Decoration | undefined; key(): string; selected(): string[];
   select(id: string, additive?: boolean): void; change(group?: string): void; convert(p: Placement): boolean;
   command(command: string): void; status(message: string): void; create(item: Decoration): void;
-  rest(ids: string[], supportId: string): void;
+  rest(ids: string[], supportId: string, authored?: boolean): void;
   compare(value: boolean): void; test(value: string): void; asset(path: string): string; resize(): void;
   restore(room: RoomSnapshot): void;
   background(file: File): Promise<string>;
@@ -85,8 +86,8 @@ export function initStudio(h: Host) {
   const objects = $('studioObjects'), lights = $('studioLights'), environment = $('studioMood');
   $('studioCollapse').insertAdjacentHTML('beforebegin', '<button id="studioSceneTab" role="tab" aria-selected="false" aria-controls="studioScene">Escena</button>');
   document.querySelector('.studio-scroll')!.insertAdjacentHTML('beforeend', '<section id="studioScene" role="tabpanel" aria-labelledby="studioSceneTab" hidden></section>');
-  $('studioScene').innerHTML = '<p class="studio-note">Cada vista guarda sus objetos, luces y encuadre por separado. Guardar esta vista no cambia las demás. El zoom de la vista previa solo ayuda a editar.</p><div class="studio-template-grid"><button data-studio-template="cozy-night">Rincón nocturno</button></div>' +
-    panel('studioBackground', 'Habitaciones fotográficas', '<div id="studioRoomGallery" class="studio-room-gallery">' + rooms.map(r => `<button type="button" data-studio-room="${r.id}" aria-pressed="false"><img src="/rooms/${r.id}-wide.webp" alt="" loading="lazy"/><span>${r.name}</span><small>${r.description}</small></button>`).join('') + '</div><p class="studio-note">Pared azul petróleo, mueble de nogal y luces lavanda y ámbar. Las piezas se pueden mover o quitar en esta vista; deja espacio para tus figuritas.</p><label>Escenario<select id="studioSceneStyle">' + rooms.map(r => `<option value="${r.id}">${r.name}</option>`).join('') + '<option value="custom">Mi imagen de fondo</option></select></label><label class="editor-upload">Subir fondo<input id="studioBackgroundUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif"/></label><label>Reutilizar imagen<select id="studioBackgroundAsset"></select></label><p class="studio-note">El fondo tiene superficies mates. La luz lavanda, la lámpara y los reflejos de la TV se calculan en tiempo real.</p>', true) +
+  $('studioScene').innerHTML = '<p class="studio-note">Cada vista guarda sus objetos, luces y encuadre por separado. Guardar esta vista no cambia las demás. El zoom de la vista previa solo ayuda a editar.</p>' +
+    panel('studioBackground', 'Presets completos · profundidad nocturna', '<div id="studioRoomGallery" class="studio-room-gallery">' + rooms.filter(r => r.id !== 'cozy-night').map(r => `<button type="button" data-studio-room="${r.id}" aria-pressed="false"><img src="/rooms/${r.id}-wide.webp" alt="" loading="lazy"/><span>${r.name}</span><small>${r.description}</small></button>`).join('') + '</div><p class="studio-note">Cada preset prepara fondo, TV, muebles, lámparas y sombras en esta vista. Conserva tus decoraciones personales. Reaplicarlo restablece sus piezas y encuadre; puedes deshacerlo.</p><label>Escenario<select id="studioSceneStyle">' + rooms.map(r => `<option value="${r.id}">${r.name}</option>`).join('') + '<option value="custom">Mi imagen de fondo</option></select></label><label class="editor-upload">Subir fondo<input id="studioBackgroundUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif"/></label><label>Reutilizar imagen<select id="studioBackgroundAsset"></select></label><p class="studio-note">Después de aplicarlo, mueve o quita sus piezas en Objetos. La luz de las lámparas y los reflejos de la TV se calculan en tiempo real; el fondo no tiene reflejos de pantalla pintados.</p>', true) +
     panel('studioViewZoom', 'Zoom independiente por vista', '<p class="studio-note">Cada zoom pertenece a su vista. Cambia Vista y Tamaño TV arriba y guarda la vista que estés ajustando.</p>' + zoomViews.map((key, i) => range('studioViewZoom' + i, zoomLabels[i], .5, 2.5, .05)).join(''), true) +
     panel('studioCamera', 'Encuadre del escenario', range('studioCameraX', 'Mover horizontalmente', -50, 50) + range('studioCameraY', 'Mover verticalmente', -50, 50) + range('studioCameraZoom', 'Zoom del escenario', .5, 2.5, .05) + '<div class="studio-buttons">' + buttons([['cameraTool', 'Encuadrar con el ratón'], ['resetCamera', 'Restablecer']]) + '</div>') +
     panel('studioTv', 'Modelo, posición y tamaño de la TV', '<label>Televisión<select id="studioTvModel">' + tvModels.map(t => `<option value="${t.id}">${t.name}</option>`).join('') + '</select></label><label>Apoyo de la TV<select id="studioTvSupport"><option value="free">Libre · mover manualmente</option><option value="cabinet">Apoyada sobre el mueble</option><option value="floor">Apoyada sobre el suelo</option></select></label>' + '<label>Mueble o base<select id="studioSupportObject"></select></label><label>Modelo del mueble de apoyo<select id="studioSupportStyle">' + props.filter(p => p.support).map(p => `<option value="${p.id}">${p.name}</option>`).join('') + '</select></label>' + range('studioTvX', 'Posición horizontal', -80, 80) + range('studioTvY', 'Posición vertical', -80, 80) + range('studioTvZoom', 'Tamaño de la TV', .3, 2.5, .05) + '<div class="studio-buttons">' + buttons([['tvTool', 'Mover TV en la escena'], ['resetTv', 'Restablecer']]) + '</div><p class="studio-note">Apoyada sigue al mueble cuando lo mueves. Al arrastrar la TV vuelve a Libre. Los modelos nuevos conservan sus proporciones; también puedes afinar la pantalla por separado.</p>') +
@@ -238,7 +239,14 @@ export function initStudio(h: Host) {
     (p[key] ??= {})[axis.toLowerCase() as 'x' | 'y' | 'zoom'] = Number($<HTMLInputElement>(`studio${group}${axis}`).value); h.change('presentation');
   });
   for (const axis of ['X', 'Y', 'Width', 'Height'] as const) $(`studioScreen${axis}`).addEventListener('input', () => { const p = presentation(); (p.screen ??= {})[axis.toLowerCase() as 'x' | 'y' | 'width' | 'height'] = Number($<HTMLInputElement>(`studioScreen${axis}`).value); h.change('screen'); });
-  const chooseRoom = (id: RoomId) => { if (prepareRoom(h.draft(), id, h.key() as import('./decorations').PlacementKey) === false) return h.status(`La habitación necesita espacio para sus piezas. Elimina alguna pieza colocada (máximo ${MAX_SCENE_ITEMS}).`); h.command('deselect'); h.change(); h.status('Habitación preparada. Mueve sus piezas en Objetos y guarda para compartirla.'); };
+  const chooseRoom = (id: RoomId) => {
+    if (!h.key().startsWith('home-')) return h.status('Elige Casa para aplicar una composición de TV.');
+    h.command('deselect');
+    if (prepareRoom(h.draft(), id, h.key() as PlacementKey) === false) return h.status(`La habitación necesita espacio para sus piezas (máximo ${MAX_SCENE_ITEMS}).`);
+    h.change('composition');
+    for(const group of compositionRestGroups(h.draft(),h.key())) h.rest(group.ids,group.supportId,true);
+    h.status('Composición aplicada a esta vista. Ajusta sus piezas en Objetos y guarda esta vista.');
+  };
   $('studioSceneStyle').addEventListener('change', () => { const value = $<HTMLSelectElement>('studioSceneStyle').value;
     if (rooms.some(r => r.id === value)) return chooseRoom(value as RoomId);
     const p = presentation(); delete p.environment; p.style = value as Presentation['style']; h.change(); });

@@ -1,9 +1,14 @@
 // Public, allowlisted photographic assets; never resolve user-supplied paths.
 export const rooms = [
   { id: 'cozy-night', name: 'Rincón nocturno', description: 'Azul petróleo, lavanda y una lámpara cálida', furniture: 'cabinet' },
+  { id: 'midnight-den', name: 'Madrugada clásica', description: 'CRT azul, lino cálido, nogal y un rincón con profundidad', furniture: 'cabinet', floorLine: .66 },
+  { id: 'walnut-den', name: 'Noche de nogal', description: 'Paneles de madera, lámpara de pie y una composición íntima', furniture: 'cabinet', floorLine: .66 },
+  { id: 'violet-den', name: 'Rincón violeta', description: 'Nicho malva, mueble oscuro y luz suave entre varias capas', furniture: 'cabinet-black', floorLine: .65 },
 ];
 export const props = [
   { id: 'floor-lamp', name: 'Lámpara de pie', category: 'lamp' },
+  { id: 'linen-lamp', name: 'Lámpara de lino y nogal', category: 'lamp' },
+  { id: 'linen-floor-lamp', name: 'Lámpara de pie de lino', category: 'lamp' },
   { id: 'mushroom-lamp', name: 'Lámpara de hongo', category: 'lamp' },
   { id: 'desk-lamp', name: 'Lámpara articulada', category: 'lamp' },
   { id: 'lava-lamp', name: 'Lámpara de lava animada', category: 'lamp' },

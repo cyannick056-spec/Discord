@@ -1,4 +1,5 @@
 import { getPresentation } from './scene-presentation';
+import { rooms } from '../room-catalog.mjs';
 // Full rendered photographic rectangle, including object-fit cover crops and
 // camera transforms. Floor effects must begin on the wood, never on the wall.
 export function roomPhotoRect() {
@@ -9,7 +10,8 @@ export function roomPhotoRect() {
   return { x: b.x + (b.width - width) / 2, y: b.y + (b.height - height) / 2, width, height };
 }
 export function photoFloor() {
-  const b = roomPhotoRect(), line = .60; return { x: b.x, y: b.y + b.height * line, width: b.width, height: b.height * (1-line), material: 'wood' as const, roughness: 90 };
+  const b = roomPhotoRect(), line = rooms.find(r => r.id === getPresentation()?.environment)?.floorLine ?? .60;
+  return { x: b.x, y: b.y + b.height * line, width: b.width, height: b.height * (1-line), material: 'wood' as const, roughness: 90 };
 }
 const lightMaps = new Map<string, Promise<ImageData>>();
 // Match movable photographs to the light actually present at their location
