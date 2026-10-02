@@ -113,4 +113,4 @@ Older Android and standalone Switch-forwarder experiments are kept in the compan
 
 ## Project status
 
-This repository is the active Discord Activity and backend for SHIS Stream. Public documentation describes the current supported setup; implementation history and one-off development/debugging notes are intentionally kept out of the main README.
+This repository is the active Discord Activity and backend for SHIS Stream. Public documentation intentionally describes only the current supported setup. Old one-off asset-generation notes, debugging diaries and retired deployment instructions are not kept in the public documentation.
