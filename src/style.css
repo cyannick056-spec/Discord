@@ -282,55 +282,6 @@ button[hidden] { display: none !important; }
   background: #b44f3e;
   box-shadow: 0 0 0 1px #4d5158, 0 0 7px rgba(189,72,52,.26);
 }
-.physical-button {
-  width: 26px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid #555a61;
-  border-radius: 6px;
-  background: #9da2a9;
-  color: #111318;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.sticker-layer { position: absolute; inset: 0; pointer-events: none; z-index: 7; }
-.sticker {
-  position: absolute;
-  display: block;
-  object-fit: contain;
-  pointer-events: none;
-  user-select: none;
-  filter: drop-shadow(1px 0 #fff) drop-shadow(-1px 0 #fff) drop-shadow(0 1px #fff) drop-shadow(0 -1px #fff) drop-shadow(0 2px 2px rgba(0,0,0,.4));
-  mix-blend-mode: normal;
-}
-.sticker-ball {
-  width: clamp(36px, 4.6vw, 62px);
-  left: clamp(7px, .8vw, 13px);
-  top: clamp(8px, 1vw, 16px);
-  border-radius: 50%;
-  transform: rotate(-6deg);
-}
-.sticker-ranma {
-  width: clamp(46px, 5.8vw, 78px);
-  right: clamp(8px, .9vw, 14px);
-  top: clamp(8px, 1vw, 16px);
-  transform: rotate(4deg);
-}
-.sticker-sailor-face {
-  width: clamp(46px, 5.6vw, 76px);
-  left: clamp(8px, .9vw, 14px);
-  bottom: clamp(38px, 4.8vw, 66px);
-  transform: rotate(-4deg);
-}
-.sticker-sailor-happy {
-  width: clamp(46px, 5.6vw, 76px);
-  right: clamp(8px, .9vw, 14px);
-  bottom: clamp(38px, 4.8vw, 66px);
-  transform: rotate(4deg);
-}
-
-.retro-table { display: none; }
 #audioMount { display: none; }
 
 @keyframes staticShift {
@@ -338,20 +289,6 @@ button[hidden] { display: none !important; }
   50% { transform: translate(2%, -1%); }
   100% { transform: translate(-1%, 2%); }
 }
-
-
-.tv-action {
-  min-width: 35px;
-  height: 22px;
-  padding: 0 5px;
-  border: 1px solid #626870;
-  border-radius: 4px;
-  background: linear-gradient(#b7bbc0, #7d838b);
-  color: #17191c;
-  font: 700 10px/1 system-ui, sans-serif;
-  cursor: pointer;
-}
-.tv-action:focus-visible { outline: 2px solid #e6ebef; outline-offset: 1px; }
 #aspectButton { position: absolute; right: 52px; }
 #exitButton { position: absolute; right: 5px; }
 
@@ -395,197 +332,10 @@ button[hidden] { display: none !important; }
   .bottom-buttons { gap: 4px; }
   .bottom-buttons i { width: 5px; }
   .sensor-dot, .power-lamp { width: 6px; }
-  .physical-button { width: 21px; height: 18px; font-size: 10px; }
-
-  .sticker-ball { width: 34px; left: 3px; top: 4px; }
-  .sticker-ranma { width: 42px; right: 2px; top: 3px; }
-  .sticker-sailor-face { width: 40px; left: 2px; bottom: 27px; }
-  .sticker-sailor-happy { width: 40px; right: 2px; bottom: 27px; }
-
-  .retro-table {
-    width: min(96vw, 650px);
-    display: block;
-    flex: 0 0 auto;
-  }
-  .cabinet-image {
-    display: block;
-    width: 100%;
-    height: auto;
-    margin-top: -1%;
-    margin-bottom: 0;
-    object-fit: contain;
-    filter: drop-shadow(0 9px 12px rgba(0,0,0,.3));
-  }
-  .table-top {
-    width: 100%;
-    height: clamp(73px, 9.5dvh, 88px);
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px 4px 1px 1px;
-    background:
-      repeating-linear-gradient(2deg, transparent 0 9px, rgba(34,18,10,.08) 10px 11px, transparent 12px 22px),
-      linear-gradient(180deg, #805c43 0%, #67442f 42%, #513322 100%);
-    border: 1px solid #3d281b;
-    box-shadow: inset 0 2px 1px rgba(255,237,207,.15), 0 7px 14px rgba(0,0,0,.22);
-  }
-  .table-top::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 5px;
-    height: 1px;
-    background: rgba(29,14,8,.42);
-  }
-  .cabinet-front {
-    width: 96%;
-    height: clamp(49px, 6dvh, 65px);
-    display: flex;
-    padding: 5px 7px;
-    gap: 5px;
-    background: repeating-linear-gradient(1deg, #563823 0 7px, #60402a 8px 14px);
-    border: 1px solid #321f15;
-    border-top: 0;
-    box-shadow: inset 0 3px 5px rgba(0,0,0,.22), 0 6px 12px rgba(0,0,0,.2);
-  }
-  .cabinet-door {
-    position: relative;
-    flex: 1;
-    border: 1px solid #3b261a;
-    background: linear-gradient(90deg, #543622, #69462d 14%, #65422b 84%, #4d301f);
-    box-shadow: inset 0 0 0 3px rgba(41,23,14,.24), inset 0 1px 2px rgba(255,224,175,.12);
-  }
-  .cabinet-door i {
-    position: absolute;
-    top: 48%;
-    right: 11px;
-    width: 8px;
-    height: 3px;
-    border-radius: 2px;
-    background: #aaa49a;
-    box-shadow: 0 1px 1px #261811;
-  }
-  .cabinet-door + .cabinet-door i { left: 11px; right: auto; }
-  .table-legs {
-    width: 92%;
-    display: flex;
-    justify-content: space-between;
-    padding: 0 17px;
-  }
-  .table-legs span {
-    width: 14px;
-    height: clamp(14px, 2.5dvh, 25px);
-    border-radius: 0 0 2px 2px;
-    background: linear-gradient(90deg, #2e1c13, #533522 45%, #301d13);
-  }
-
-  .n64-console {
-    width: clamp(172px, 45vw, 235px);
-    height: 74px;
-    position: relative;
-  }
-  .n64-cartridge {
-    position: absolute;
-    z-index: 3;
-    left: 50%;
-    top: -17px;
-    transform: translateX(-50%);
-    width: 58px;
-    height: 42px;
-    border-radius: 5px 5px 2px 2px;
-    background: linear-gradient(90deg, #62676d, #969a9d 14%, #797d81 85%, #555a5e);
-    border: 1px solid #454a50;
-    box-shadow: inset 0 2px 0 rgba(255,255,255,.22);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .cart-label {
-    width: 43px;
-    height: 25px;
-    border-radius: 1px;
-    background: linear-gradient(145deg, #252528, #08090b 80%);
-    border: 1px solid #37383b;
-    box-shadow: inset 0 0 0 2px #111215, 0 1px 1px rgba(255,255,255,.12);
-  }
-  .n64-shell {
-    position: absolute;
-    inset: 13px 0 0;
-    border-radius: 38% 38% 16px 16px / 48% 48% 16px 16px;
-    background:
-      radial-gradient(ellipse at 50% 4%, #70747a 0 18%, transparent 46%),
-      linear-gradient(180deg, #585c62 0%, #44484e 52%, #35393f 100%);
-    border: 1px solid #24272b;
-    box-shadow: inset 0 2px 0 rgba(255,255,255,.08), 0 6px 9px rgba(0,0,0,.3);
-  }
-  .n64-top-ridge {
-    position: absolute;
-    left: 22%;
-    right: 22%;
-    top: 7px;
-    height: 10px;
-    border-radius: 9px 9px 3px 3px;
-    background: linear-gradient(#2d3035, #22252a);
-    box-shadow: 0 1px 1px rgba(255,255,255,.12), inset 0 -1px 2px #15171a;
-  }
-  .n64-logo {
-    position: absolute;
-    left: 12px;
-    top: 17px;
-    width: 22px;
-    height: 25px;
-    display: grid;
-    place-items: center;
-  }
-  .n64-logo span {
-    color: #e7c533;
-    font-size: 20px;
-    font-weight: 1000;
-    line-height: 1;
-    text-shadow: 4px 0 #2e8b56, -2px 2px #c84c3c, 1px -3px #3470bb;
-  }
-  .n64-ports {
-    position: absolute;
-    left: 50%;
-    bottom: 8px;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 5px;
-  }
-  .n64-ports i {
-    width: 22px;
-    height: 13px;
-    border-radius: 7px 7px 5px 5px;
-    background: radial-gradient(ellipse at 50% 55%, #0a0b0c 0 3px, #555b62 4px 6px, #272b31 7px);
-    border: 1px solid #1a1d20;
-  }
-  .n64-led {
-    position: absolute;
-    right: 17px;
-    top: 24px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #cf4a39;
-    box-shadow: 0 0 5px rgba(207,74,57,.45);
-  }
-  .n64-foot {
-    position: absolute;
-    bottom: -5px;
-    width: 28px;
-    height: 10px;
-    background: #292c30;
-    border-radius: 0 0 8px 8px;
-  }
-  .n64-foot.left { left: 18px; }
-  .n64-foot.right { right: 18px; }
 }
 
 /* Any landscape viewport behaves like PC: TV only, no furniture. */
 @media (orientation: landscape) {
-  .retro-table { display: none !important; }
   .room-scene { justify-content: center; padding: 0; }
   .tv-scene { width: min(98vw, calc(96dvh * 1.56)); max-height: 96dvh; }
 }
@@ -594,7 +344,6 @@ button[hidden] { display: none !important; }
 @media (max-width: 520px) and (max-height: 360px) {
   .stage { padding: 2px; }
   .room-scene { width: 100%; height: 100%; justify-content: center; }
-  .retro-table { display: none !important; }
   .tv-scene, .tv-scene.aspect-4x3 { width: 100%; height: 100%; max-height: none; }
   .tv-shell, .tv-scene.aspect-4x3 .tv-shell { width: 100%; height: 100%; aspect-ratio: auto; }
   .tv-face {
@@ -625,7 +374,6 @@ button[hidden] { display: none !important; }
     border-radius: 2px;
   }
   .video-mount video, .tv-scene.aspect-4x3 .video-mount video { object-fit: contain; }
-  .sticker-layer { display: none !important; }
   .bottom-bar { grid-column: 1; grid-row: 3; gap: 2px; border-top: 0; }
   .tv-face::before {
     content: "";
@@ -637,7 +385,6 @@ button[hidden] { display: none !important; }
   .bottom-buttons { gap: 2px; }
   .bottom-buttons i { width: 3px; border-width: 0; }
   .sensor-dot, .power-lamp { width: 3px; }
-  .physical-button, .tv-action { display: none !important; }
   .osd-bottom, .osd-room { display: none; }
   .osd-top { top: 2px; left: 2px; right: 2px; font-size: 4px; }
   .osd-channel, .osd-state { padding: 0 1px; background: transparent; }

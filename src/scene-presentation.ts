@@ -2,13 +2,13 @@ import { tvModels } from '../tv-catalog.mjs';
 import { screenRect, cameraRect, resolvedCamera, videoCrop, type Presentation } from './presentation-model';
 import {activeVideoArea,sampleActiveVideo,resetActiveVideo} from './video-auto-framing';
 import { supportPlane, supportContact } from './support-surfaces';
-import type { Mood } from './studio-model';
+import {sceneImage} from './scene-images';
 let current: Presentation | undefined;
 const liveAutoVideo=!new URLSearchParams(location.search).has('editorPreview');
 const autoVideo=()=>liveAutoVideo || current?.video?.auto!==false;
 let screenBase = { x: 0, y: 0, width: 1, height: 1 };
 export function getPresentation() { return current; }
-export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
+export function applyPresentation(p: Presentation | undefined) {
   current = p;
   const stage = document.querySelector<HTMLElement>('#stage')!, room = document.querySelector<HTMLElement>('.room-scene')!;
   const home = stage.classList.contains('home-mode'), face = document.querySelector<HTMLElement>('.tv-face')!;
@@ -69,6 +69,8 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   }
   applyVideoFraming();
   window.dispatchEvent(new Event('shis-presentation-change'));
+  const artUrl=/url\(["']?([^"')]+)["']?\)/.exec(getComputedStyle(face).getPropertyValue('--room-art'))?.[1];
+  return Promise.allSettled([...(image.hidden ? [] : [image.decode()]), ...(artUrl ? [sceneImage(artUrl).decode()] : []), ...(!home ? [document.querySelector<HTMLImageElement>('.arcade-art')!.decode()] : [])]);
 }
 function configureTvModel(face: HTMLElement, p: Presentation | undefined, tiny: boolean) {
   for (const key of ['room-art', 'glass-x', 'glass-y', 'glass-w', 'glass-h', 'model-left', 'model-top', 'model-art-w', 'model-art-h', ...['x','y','w','h'].flatMap(k => ['tv-body-' + k, 'tv-feet-' + k, 'photo-' + k])]) face.style.removeProperty('--' + key);

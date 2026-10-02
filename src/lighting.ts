@@ -379,6 +379,7 @@ export function initRoomLighting() {
     }
   }
   draw();
+  window.addEventListener('shis-scene-ready',draw);
   let refreshPending = false;
   window.addEventListener('shis-presentation-change', () => {
     if (refreshPending) return; refreshPending = true;

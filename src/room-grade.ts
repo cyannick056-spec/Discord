@@ -1,9 +1,9 @@
+import {sceneImage} from './scene-images';
 import { getPresentation } from './scene-presentation';
 import { paintTv } from './tv-paint';
 import { gradeFilter, type Mood, type Zone } from './studio-model';
 import { photoFloor } from './room-geometry';
 type Rect = { x: number; y: number; width: number; height: number };
-const textures = new Map<string, HTMLImageElement>();
 let cached: { key: string; canvas: HTMLCanvasElement } | undefined;
 
 // Grade the photograph under the objects, preserving its black pixels. The
@@ -12,8 +12,7 @@ export function paintRoomGrade(ctx: CanvasRenderingContext2D, face: HTMLElement,
   const style = getComputedStyle(face);
   const url = /url\(["']?([^"')]+)["']?\)/.exec(style.getPropertyValue('--room-art'))?.[1];
   if (!url) return;
-  let image = textures.get(url);
-  if (!image) { image = new Image(); image.src = url; textures.set(url, image); }
+  const image = sceneImage(url);
   if (!image.complete || !image.naturalWidth) return;
   const art = face.getBoundingClientRect();
   const x = (art.x - scene.x) * scale, y = (art.y - scene.y) * scale, w = art.width * scale, h = art.height * scale;

@@ -1,7 +1,6 @@
 import { applyPresentation } from './scene-presentation';
 import type { Presentation } from './presentation-model';
-import type { Mood } from './studio-model';
-export function sceneControls(layer: HTMLElement, presentation: Presentation, mood: Mood | undefined, kind: 'tv' | 'camera' | 'screen', update: () => void, suspended: () => boolean) {
+export function sceneControls(layer: HTMLElement, presentation: Presentation, kind: 'tv' | 'camera' | 'screen', update: () => void, suspended: () => boolean) {
   const element = document.createElement('div'); element.className = 'scene-edit-outline'; element.dataset.camera = String(kind === 'camera'); element.dataset.screen = String(kind === 'screen');
   const handle = document.createElement('span'); handle.className = 'scene-edit-resize'; handle.title = 'Cambiar tamaño'; element.append(handle); layer.append(element);
   const place = () => {
@@ -31,7 +30,7 @@ export function sceneControls(layer: HTMLElement, presentation: Presentation, mo
       else { const limit = kind === 'tv' ? 80 : 50;
         p.x = Math.min(limit, Math.max(-limit, (origin.x ?? 0) + (e.clientX - start.x) / (room.width * camera) * 100));
         p.y = Math.min(limit, Math.max(-limit, (origin.y ?? 0) + (e.clientY - start.y) / (room.height * camera) * 100)); } }
-      applyPresentation(presentation, mood); update(); place(); emit();
+      void applyPresentation(presentation); update(); place(); emit();
     };
     const end = () => { element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', end); element.removeEventListener('pointercancel', end); element.removeEventListener('lostpointercapture', end); parent.postMessage({ type: 'decor-gesture-end' }, location.origin); };
     element.addEventListener('pointermove', move); element.addEventListener('pointerup', end); element.addEventListener('pointercancel', end); element.addEventListener('lostpointercapture', end);
@@ -41,6 +40,6 @@ export function sceneControls(layer: HTMLElement, presentation: Presentation, mo
     if (event.ctrlKey || event.metaKey) return; event.preventDefault(); event.stopPropagation();
     if (kind === 'screen') { const p = presentation.screen ??= {}, factor = Math.exp(-event.deltaY * .002); p.width = Math.min(150, Math.max(50, (p.width ?? 100) * factor)); p.height = Math.min(150, Math.max(50, (p.height ?? 100) * factor)); }
     else { const p = presentation[kind] ??= {}; p.zoom = Math.min(2.5, Math.max(kind === 'tv' ? .3 : .5, (p.zoom ?? 1) * Math.exp(-event.deltaY * .002))); }
-    applyPresentation(presentation, mood); update(); place(); emit(); clearTimeout(timer); timer = setTimeout(() => parent.postMessage({ type: 'decor-gesture-end' }, location.origin), 220);
+    void applyPresentation(presentation); update(); place(); emit(); clearTimeout(timer); timer = setTimeout(() => parent.postMessage({ type: 'decor-gesture-end' }, location.origin), 220);
   }, { passive: false }); place();
 }
