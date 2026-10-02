@@ -36,17 +36,19 @@ export function prepareRealRoom(room, id, viewKey) {
 }
 
 // Elimina únicamente decoración integrada retirada. Nunca toca imágenes personales,
-// figuras subidas por el usuario, luces creadas por el usuario ni sus posiciones.
+// figuras subidas por el usuario ni luces creadas manualmente por el usuario.
 export function cleanupBuiltinDecorations(manifest) {
+  const generatedLight = item => item?.kind === 'light' && item?.name === 'Luz lavanda detrás de la TV';
+  const keep = item => !generatedLight(item) && (item?.kind !== 'builtin' || item?.category === 'furniture');
   const cleanRoom = room => {
     if (!room || !Array.isArray(room.items)) return;
-    room.items = room.items.filter(item => item.kind !== 'builtin' || item.category === 'furniture');
+    room.items = room.items.filter(keep);
     for (const item of room.items) if (item.kind === 'builtin' && item.category === 'furniture') delete item.roomKit;
   };
   cleanRoom(manifest);
   for (const entries of [manifest.profiles, manifest.versions]) for (const entry of entries ?? []) cleanRoom(entry.room);
   if (Array.isArray(manifest.library)) {
-    manifest.library = manifest.library.filter(item => item.kind !== 'builtin' || item.category === 'furniture');
+    manifest.library = manifest.library.filter(keep);
     for (const item of manifest.library) if (item.kind === 'builtin' && item.category === 'furniture') delete item.roomKit;
   }
   return manifest;
