@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import {parseYouTubeLink,playbackPosition,validatePlayback} from '../youtube-model.mjs';
 import {installPlayback} from '../playback.mjs';
+import {youtubeBase,youtubeScriptUrl,isDiscordOrigin,isYouTubeScriptResponse} from '../youtube-network.mjs';
+test('YouTube uses the configured Discord route for scripts and iframe host; rejects HTML masquerading as a loader',()=>{
+ const discord='https://1553964489517568082.discordsays.com/?instance_id=123';
+ assert.equal(youtubeScriptUrl(discord),'https://1553964489517568082.discordsays.com/youtube/iframe_api');
+ assert.equal(youtubeBase(discord),'https://1553964489517568082.discordsays.com/youtube');
+ assert.equal(youtubeScriptUrl('https://1553964489517568082.discordsays.com/.proxy/?frame_id=1'),'https://1553964489517568082.discordsays.com/.proxy/youtube/iframe_api');
+ assert.equal(youtubeScriptUrl('http://localhost:5185/?instance_id=123'),'https://www.youtube.com/iframe_api');
+ assert.equal(isDiscordOrigin('https://discordsays.com.evil.test/'),false);
+ assert.equal(isDiscordOrigin('https://evil.test/?domain=1553964489517568082.discordsays.com'),false);
+ assert.equal(isYouTubeScriptResponse(200,'application/javascript; charset=utf-8'),true);
+ assert.equal(isYouTubeScriptResponse(200,'text/javascript'),true);
+ for(const [status,content] of [[200,'text/html'],[404,'application/javascript'],[403,'text/plain'],[200,'application/json'],[302,'application/javascript']])assert.equal(isYouTubeScriptResponse(status,content),false);
+});
 test('YouTube links normalize videos, shorts, timestamps and playlists; reject unrelated or malformed URLs',()=>{
  assert.deepEqual(parseYouTubeLink('https://youtu.be/dQw4w9WgXcQ?t=1m30s'),{videoId:'dQw4w9WgXcQ',playlistId:'',position:90,index:0});
  assert.equal(parseYouTubeLink('https://www.youtube.com/shorts/dQw4w9WgXcQ').videoId,'dQw4w9WgXcQ');

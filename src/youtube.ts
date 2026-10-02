@@ -1,17 +1,37 @@
 import {parseYouTubeLink,playbackPosition,type PlaybackState} from '../youtube-model.mjs';
+import {patchUrlMappings} from '@discord/embedded-app-sdk';
+import {isDiscordOrigin,youtubeMapping,youtubeBase,youtubeScriptUrl,isYouTubeScriptResponse} from '../youtube-network.mjs';
 type YTPlayer = {destroy():void;playVideo():void;pauseVideo():void;seekTo(t:number,allow:boolean):void;setVolume(n:number):void;unMute():void;getPlayerState():number;getCurrentTime():number;getVideoData():{video_id?:string};getPlaylistIndex():number;nextVideo():void;loadVideoById(value:{videoId:string;startSeconds:number}):void;loadPlaylist(value:{list:string;listType:string;index:number;startSeconds:number}):void};
-type YTConstructor = new (mount:HTMLElement,options:{videoId?:string;width:string;height:string;playerVars:Record<string,string|number>;events:Record<string,(event:{data:number;target:YTPlayer})=>void>})=>YTPlayer;
+type YTConstructor = new (mount:HTMLElement,options:{host:string;videoId?:string;width:string;height:string;playerVars:Record<string,string|number>;events:Record<string,(event:{data:number;target:YTPlayer})=>void>})=>YTPlayer;
 declare global {interface Window {YT?:{Player:YTConstructor};onYouTubeIframeAPIReady?:()=>void}}
 let apiPromise:Promise<YTConstructor>|null=null;
+let remappingInstalled=false;
 function loadApi() {
   if(window.YT?.Player)return Promise.resolve(window.YT.Player);
   if(apiPromise)return apiPromise;
-  apiPromise=new Promise<YTConstructor>((resolve,reject)=>{
-    const script=document.createElement('script');script.src='https://www.youtube.com/iframe_api';script.referrerPolicy='strict-origin-when-cross-origin';
-    const timer=setTimeout(()=>{script.remove();apiPromise=null;reject(new Error('YouTube no pudo conectarse en esta actividad.'));},15000);
-    window.onYouTubeIframeAPIReady=()=>{clearTimeout(timer);resolve(window.YT!.Player);};
-    script.onerror=()=>{clearTimeout(timer);script.remove();apiPromise=null;reject(new Error('Discord o la conexión bloquearon YouTube.'));};document.head.append(script);
-  });return apiPromise;
+  apiPromise=(async()=>{
+    const mapped=isDiscordOrigin(location.href),src=youtubeScriptUrl(location.href);
+    if(mapped){
+      // Probe the exact mapped asset before loading it. A missing mapping can
+      // return the Activity's HTML entry page, even with an HTTP 200 response.
+      let response:Response;
+      try{response=await fetch(src,{cache:'no-store',signal:AbortSignal.timeout(10000)});}
+      catch{throw new Error('No se pudo comprobar el acceso de esta actividad a YouTube.');}
+      if(!isYouTubeScriptResponse(response.status,response.headers.get('Content-Type') || ''))throw new Error('La ruta de YouTube no entregó el reproductor. Revisa su configuración en Discord; puedes seguir usando Switch.');
+      if(!remappingInstalled){
+        const prefix=new URL(youtubeBase(location.href)).pathname;
+        patchUrlMappings([{...youtubeMapping,prefix}],{patchFetch:false,patchWebSocket:false,patchXhr:false,patchSrcAttributes:true});remappingInstalled=true;
+      }
+    }
+    return new Promise<YTConstructor>((resolve,reject)=>{
+      const script=document.createElement('script');script.src=src;script.referrerPolicy='strict-origin-when-cross-origin';
+      let finished=false;
+      const finish=(error?:Error)=>{if(finished)return;finished=true;clearTimeout(timer);if(error){script.remove();reject(error);}else resolve(window.YT!.Player);};
+      const timer=setTimeout(()=>finish(new Error('El programa del reproductor de YouTube no terminó de cargar. Reintenta o vuelve a Switch.')),15000);
+      window.onYouTubeIframeAPIReady=()=>finish();
+      script.onerror=()=>finish(new Error(mapped?'Discord no pudo cargar el programa de YouTube por su ruta configurada.':'No se pudo conectar con el programa de YouTube.'));document.head.append(script);
+    });
+  })().catch(error=>{apiPromise=null;throw error;});return apiPromise;
 }
 export class YouTubeRoom {
   private player:YTPlayer|null=null;
@@ -23,6 +43,9 @@ export class YouTubeRoom {
   private clockOffset=0;
   private fetching:Promise<void>|null=null;
   private stopped=false;
+  private creating:Promise<void>|null=null;
+  private failedRevision:number|null=null;
+  private selectionGeneration=0;
   private dialog=document.querySelector<HTMLDialogElement>('#sourceDialog')!;
   private status=document.querySelector<HTMLElement>('#youtubeStatus')!;
   private notice=document.querySelector<HTMLElement>('#mediaNotice')!;
@@ -35,21 +58,28 @@ export class YouTubeRoom {
     this.url='/api/playback?'+new URLSearchParams({instance,...(ticket?{ticket}:{})});
     document.querySelector('#sourceButton')!.addEventListener('click',()=>{this.dialog.showModal();void this.refresh().catch(e=>this.message(e.message));});
     document.querySelector('#sourceClose')!.addEventListener('click',()=>this.dialog.close());
+    this.dialog.addEventListener('close',()=>{this.selectionGeneration++;});
+    this.dialog.addEventListener('cancel',()=>{this.selectionGeneration++;});
     document.querySelector('#youtubeForm')!.addEventListener('submit',event=>{
       event.preventDefault();void this.select().catch(e=>this.message(e.message));
     });
     document.querySelector('#switchSource')!.addEventListener('click',()=>{void this.publish({source:'switch',videoId:'',playlistId:'',position:0,playing:false}).then(()=>this.dialog.close()).catch(e=>this.message(e.message));});
     document.querySelector('#youtubePlay')!.addEventListener('click',()=>this.toggle());
     document.querySelector('#youtubeNext')!.addEventListener('click',()=>{if(this.ready && this.state?.playlistId)this.player?.nextVideo();});
-    document.addEventListener('securitypolicyviolation',event=>{if(event.blockedURI.includes('youtube'))this.message('Discord bloqueó el acceso a YouTube. La integración necesita habilitar ese dominio.',true);});
+    document.querySelector('#youtubeRetry')!.addEventListener('click',()=>{void this.retry().catch(e=>this.message(e.message,true));});
+    document.addEventListener('securitypolicyviolation',event=>{
+      if(this.isYouTube() && event.blockedURI.includes('youtube') && /^(frame|child)-src/.test(event.effectiveDirective)){
+        this.failPlayer('Discord bloqueó la ventana del reproductor de YouTube. Hay que revisar su configuración en la actividad.');
+      }
+    });
     setInterval(()=>{if(!document.hidden && !this.stopped)void this.refresh().catch(()=>{});},1500);
     setInterval(()=>this.captureSeek(),1000);
     document.addEventListener('visibilitychange',()=>{if(!document.hidden)void this.refresh().catch(()=>{});});
-    window.addEventListener('beforeunload',()=>{this.stopped=true;this.generation++;});
+    window.addEventListener('beforeunload',()=>{this.stopped=true;this.generation++;this.selectionGeneration++;});
     window.addEventListener('resize',()=>{
       if(!this.isYouTube())return;
       if(this.tooSmall()){this.generation++;this.player?.destroy();this.player=null;this.ready=false;this.mount.replaceChildren();this.message('Amplía la actividad para ver YouTube.',true);}
-      else if(!this.player)void this.createPlayer(this.state!).catch(e=>this.message(e.message,true));
+      else if(!this.player && this.failedRevision!==this.state?.revision)void this.ensurePlayer(this.state!);
     });
   }
   isYouTube(){return this.state?.source==='youtube';}
@@ -58,7 +88,13 @@ export class YouTubeRoom {
   private message(value:string,visible=false){this.status.textContent=value;if(visible){this.notice.hidden=false;this.notice.textContent=value;}}
   private async select(){
     const selection=parseYouTubeLink(document.querySelector<HTMLInputElement>('#youtubeLink')!.value);
-    await this.refresh();await this.publish({...selection,source:'youtube',playing:true});this.dialog.close();
+    const generation=++this.selectionGeneration,button=document.querySelector<HTMLButtonElement>('#youtubeForm button')!;
+    button.disabled=true;this.message('Comprobando acceso a YouTube…');
+    try{
+      await loadApi();if(generation!==this.selectionGeneration || !this.dialog.open)return;
+      await this.refresh();if(generation!==this.selectionGeneration || !this.dialog.open)return;
+      this.failedRevision=null;await this.publish({...selection,source:'youtube',playing:true});this.dialog.close();
+    }finally{button.disabled=false;}
   }
   async refresh(){
     if(this.fetching)return this.fetching;
@@ -83,7 +119,7 @@ export class YouTubeRoom {
       document.querySelector('#sourceButton')!.textContent=`Fuente: ${next.source==='youtube'?'YouTube':'Switch'}`;
     }
     if(next.source!=='youtube')return;
-    if(!this.player){void this.createPlayer(next).catch(e=>this.message(e.message,true));return;}
+    if(!this.player){if(this.failedRevision!==next.revision)void this.ensurePlayer(next);return;}
     if(!this.ready)return;
     const time=playbackPosition(next,Date.now()+this.clockOffset),current=this.player.getVideoData().video_id;
     const different = next.playlistId ? old?.playlistId!==next.playlistId || (next.index ?? 0)!==this.player.getPlaylistIndex() : next.videoId!==current;
@@ -94,13 +130,24 @@ export class YouTubeRoom {
     const playing=this.player.getPlayerState()===1;
     if(playing!==next.playing){this.quietUntil=performance.now()+1500;if(next.playing)this.player.playVideo();else this.player.pauseVideo();}
   }
+  private async ensurePlayer(initial:PlaybackState){
+    if(this.creating)return this.creating;
+    const revision=initial.revision;
+    this.creating=this.createPlayer(initial).catch(error=>{
+      if(this.isYouTube() && this.state?.revision===revision){this.failedRevision=revision;this.message(error.message,true);}
+    });
+    try{await this.creating;}finally{this.creating=null;}
+  }
+  private failPlayer(value:string){
+    this.generation++;this.ready=false;this.player?.destroy();this.player=null;this.mount.replaceChildren();this.failedRevision=this.state?.revision ?? null;this.message(value,true);
+  }
   private async createPlayer(initial:PlaybackState){
     if(this.tooSmall()){this.message('Amplía la actividad para ver YouTube.',true);return;}
     const generation=++this.generation;
     const Player=await loadApi();if(generation!==this.generation || !this.isYouTube())return;
     const target=document.createElement('div');this.mount.replaceChildren(target);
     this.quietUntil=performance.now()+2500;
-    this.player=new Player(target,{width:'100%',height:'100%',videoId:initial.videoId || undefined,
+    this.player=new Player(target,{host:youtubeBase(location.href),width:'100%',height:'100%',videoId:initial.videoId || undefined,
       playerVars:{enablejsapi:1,origin:location.origin,playsinline:1,controls:1,autoplay:initial.playing?1:0,start:Math.floor(playbackPosition(initial,Date.now()+this.clockOffset)),...(initial.playlistId?{listType:'playlist',list:initial.playlistId}: {})},
       events:{onReady:event=>{
         if(generation!==this.generation)return;this.ready=true;this.player=event.target;event.target.setVolume(this.volume());
@@ -111,7 +158,7 @@ export class YouTubeRoom {
       onAutoplayBlocked:()=>this.message('Pulsa reproducir en YouTube para activar el vídeo y su audio.',true),
       onError:event=>{const reasons:Record<number,string>={2:'Enlace inválido.',5:'No se pudo reproducir este vídeo.',100:'Este vídeo es privado o ya no está disponible.',101:'El autor no permite reproducir este vídeo aquí.',150:'El autor no permite reproducir este vídeo aquí.',153:'YouTube no reconoció esta actividad como reproductor.'};this.message(reasons[event.data] || 'No se pudo abrir YouTube. Prueba otro vídeo.',true);},
     }});
-    setTimeout(()=>{if(generation===this.generation && !this.ready)this.message('YouTube no respondió. Revisa la conexión o vuelve a Switch.',true);},15000);
+    setTimeout(()=>{if(generation===this.generation && !this.ready)this.failPlayer('La ventana de YouTube no respondió. Reintenta o vuelve a Switch.');},15000);
   }
   private captureSeek(){if(!this.ready || !this.state || !this.player || performance.now()<this.quietUntil)return;const expected=playbackPosition(this.state,Date.now()+this.clockOffset);if([1,2].includes(this.player.getPlayerState()) && Math.abs(this.player.getCurrentTime()-expected)>3)this.capture(true);}
   private capture(force=false){
@@ -121,5 +168,5 @@ export class YouTubeRoom {
   }
   private toggle(){if(!this.ready || !this.player)return;this.player.getPlayerState()===1?this.player.pauseVideo():this.player.playVideo();}
   private tooSmall(){return innerWidth<216 || innerHeight<280;}
-  async retry(){if(!this.isYouTube())return;this.generation++;this.player?.destroy();this.player=null;this.ready=false;await this.apply(this.state!);}
+  async retry(){if(!this.isYouTube())return;this.generation++;this.failedRevision=null;this.player?.destroy();this.player=null;this.ready=false;await this.apply(this.state!);}
 }
