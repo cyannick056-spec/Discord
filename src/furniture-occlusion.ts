@@ -1,20 +1,37 @@
+import {defaultLightResponse,lightResponse} from './light-response';
 // Background illumination belongs to the wall/floor behind solid furniture.
 // Reuse the rendered sprite alpha, including its crop and real leg openings.
-let cached: {context:CanvasRenderingContext2D;key:string;sprites:HTMLCanvasElement[]} | undefined;
-export function paintFurnitureOcclusion(ctx: CanvasRenderingContext2D, scene: DOMRect, scale: number) {
-  const boxes=[...document.querySelectorAll<HTMLElement>('.decoration-box[data-furniture=true]:not(.decor-depth-outline):not([data-prop=rug])')];
-  const sprites=boxes.map(b=>b.querySelector<HTMLCanvasElement>('.decoration-material')).filter((s):s is HTMLCanvasElement=>Boolean(s));
-  const key=JSON.stringify([scene.x,scene.y,scale,ctx.canvas.width,ctx.canvas.height,boxes.map(b=>[b.style.cssText,b.offsetWidth,b.offsetHeight,b.parentElement!.getBoundingClientRect().toJSON(),b.querySelector('img')?.style.clipPath])]);
-  if(cached?.context===ctx && cached.key===key && sprites.length===cached.sprites.length && sprites.every((s,i)=>s===cached!.sprites[i])) return;
+const masks=new WeakMap<CanvasRenderingContext2D,{key:string;sprites:(HTMLCanvasElement|HTMLImageElement)[]}>();
+const photoMasks=new WeakMap<HTMLImageElement,HTMLCanvasElement>();
+export function paintFurnitureOcclusion(ctx: CanvasRenderingContext2D, scene: DOMRect, scale: number, protection=false) {
+  const selector=protection ? '.decoration-box:not(.decor-depth-outline):not([data-prop=rug])' : '.decoration-box[data-furniture=true]:not(.decor-depth-outline):not([data-prop=rug])';
+  const boxes=[...document.querySelectorAll<HTMLElement>(selector)];
+  const spriteFor=(b:HTMLElement)=>b.querySelector<HTMLCanvasElement>('.decoration-material') ?? (protection?b.querySelector<HTMLImageElement>('img.decoration'):null);
+  const sprites=boxes.map(spriteFor).filter((s):s is HTMLCanvasElement|HTMLImageElement=>Boolean(s));
+  const cached=masks.get(ctx);
+  const face=document.querySelector<HTMLElement>('.tv-face'),art=face?.getBoundingClientRect(),tvStyle=face?getComputedStyle(face):undefined;
+  const tvRects=art && tvStyle?['tv-body','tv-feet'].map(prefix=>{const n=(k:string)=>parseFloat(tvStyle.getPropertyValue(`--${prefix}-${k}`))/100;return {x:(art.x-scene.x+art.width*n('x'))*scale,y:(art.y-scene.y+art.height*n('y'))*scale,width:art.width*n('w')*scale,height:art.height*n('h')*scale};}):[];
+  const key=JSON.stringify([protection,scene.x,scene.y,scale,ctx.canvas.width,ctx.canvas.height,tvRects,boxes.map(b=>[b.style.cssText,b.dataset.lightResponse,b.offsetWidth,b.offsetHeight,b.parentElement!.getBoundingClientRect().toJSON(),b.querySelector<HTMLImageElement>('img')?.complete,b.querySelector('img')?.style.clipPath])]);
+  if(cached?.key===key && sprites.length===cached.sprites.length && sprites.every((s,i)=>s===cached!.sprites[i])) return;
   ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
   for(const box of boxes) {
-    const sprite=box.querySelector<HTMLCanvasElement>('.decoration-material');
+    let sprite=spriteFor(box);
+    if(sprite instanceof HTMLImageElement) {
+      if(!sprite.complete || !sprite.naturalWidth) continue;
+      let canvas=photoMasks.get(sprite);if(!canvas){canvas=document.createElement('canvas');const ratio=Math.min(1,400/sprite.naturalWidth,600/sprite.naturalHeight);canvas.width=Math.max(1,Math.round(sprite.naturalWidth*ratio));canvas.height=Math.max(1,Math.round(sprite.naturalHeight*ratio));canvas.getContext('2d')!.drawImage(sprite,0,0,canvas.width,canvas.height);photoMasks.set(sprite,canvas);}sprite=canvas;
+    }
     if(!sprite || !box.offsetWidth || !box.offsetHeight) continue;
     const style=getComputedStyle(box), parent=box.parentElement!.getBoundingClientRect();
     const matrix=new DOMMatrix(style.transform), w=box.offsetWidth, h=box.offsetHeight;
     const ox=(parent.x+parseFloat(box.style.left)+w/2-scene.x)*scale;
     const oy=(parent.y+parseFloat(box.style.top)+h/2-scene.y)*scale;
-    ctx.save();ctx.translate(ox,oy);ctx.scale(scale,scale);
+    ctx.save();ctx.globalAlpha=protection?(1-lightResponse(Number(box.dataset.lightResponse ?? defaultLightResponse)))*Number(style.opacity):1;
+    if(box.parentElement!.classList.contains('decorations-behind-tv')) {
+      ctx.beginPath();ctx.rect(0,0,ctx.canvas.width,ctx.canvas.height);
+      for(const r of tvRects) if(r.width>0 && r.height>0 && Object.values(r).every(Number.isFinite)) ctx.roundRect(r.x,r.y,r.width,r.height,Math.min(r.width,r.height)*.012);
+      ctx.clip('evenodd');
+    }
+    ctx.translate(ox,oy);ctx.scale(scale,scale);
     // Affine transforms are exact. Perspective uses an inverted texture projection,
     // preserving the sprite alpha rather than blocking its bounding rectangle.
     if(matrix.m14===0 && matrix.m24===0) {
@@ -47,5 +64,5 @@ export function paintFurnitureOcclusion(ctx: CanvasRenderingContext2D, scene: DO
     }
     ctx.restore();
   }
-  cached={context:ctx,key,sprites};
+  masks.set(ctx,{key,sprites});
 }

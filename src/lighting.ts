@@ -1,8 +1,7 @@
 import { paintReflections, reflectionPlanes } from './reflections';
 import { paintRoomGrade } from './room-grade';
 import { type Mood } from './studio-model';
-import { getPresentation } from './scene-presentation';
-import { videoCrop } from './presentation-model';
+import { getPresentation,visibleVideoCrop } from './scene-presentation';
 import { frameColor, blendColor, type LightColor } from './light-color';
 import { supportPlane, supportElement, type SurfacePlane } from './support-surfaces';
 import { photoFloor } from './room-geometry';
@@ -41,6 +40,7 @@ export function initRoomLighting() {
   const occludedGlow=document.createElement('canvas'),occludedCtx=occludedGlow.getContext('2d')!;
   const furnitureMask=document.createElement('canvas'),furnitureCtx=furnitureMask.getContext('2d')!;
   const backgroundMask=document.createElement('canvas'),backgroundCtx=backgroundMask.getContext('2d')!;
+  const objectProtection=document.createElement('canvas'),objectCtx=objectProtection.getContext('2d')!;
   const sample = document.createElement('canvas');
   sample.width = 64; sample.height = 36;
   const testSample = document.createElement('canvas'); testSample.width = 64; testSample.height = 36;
@@ -159,9 +159,10 @@ export function initRoomLighting() {
     const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
     if (shade.width !== width || shade.height !== height) {
       shade.width = tint.width = grade.width = reflection.width = floorReflection.width = width; shade.height = tint.height = grade.height = reflection.height = floorReflection.height = height;
-      for(const canvas of [wallShadow,contactShadow,castMask,occludedGlow,furnitureMask,backgroundMask]) {canvas.width=width;canvas.height=height;}
+      for(const canvas of [wallShadow,contactShadow,castMask,occludedGlow,furnitureMask,backgroundMask,objectProtection]) {canvas.width=width;canvas.height=height;}
     }
     paintFurnitureOcclusion(furnitureCtx,bounds,scale);
+    paintFurnitureOcclusion(objectCtx,bounds,scale,true);
     reflectionCtx?.clearRect(0, 0, width, height);
     floorReflectionCtx?.clearRect(0, 0, width, height);
     shadowCtx.clearRect(0, 0, width, height);
@@ -195,12 +196,12 @@ export function initRoomLighting() {
     if (video && video.readyState >= 2 && video.videoWidth && stage.classList.contains('has-signal')) {
       // A future cross-origin iframe cannot be sampled. Failing a read must
       // never stop the existing stream or repeatedly throw on every tick.
-      const framing = JSON.stringify([getPresentation()?.video, glass.width / glass.height]);
+      const crop=visibleVideoCrop(video,glass.width,glass.height);
+      const framing = JSON.stringify([getPresentation()?.video, glass.width / glass.height,crop]);
       if (video !== blockedVideo && (video !== sampledVideo || video.currentTime !== lastTime || framing !== lastFraming)) {
         try {
-          const crop = videoCrop(video.videoWidth, video.videoHeight, glass.width, glass.height, getPresentation()?.video, getComputedStyle(video).objectFit);
           sampleCtx.fillStyle = '#000'; sampleCtx.fillRect(0, 0, 64, 36);
-          if (getPresentation()?.video?.fit === 'contain') {
+          if (getPresentation()?.video?.auto===false && getPresentation()?.video?.fit === 'contain') {
             const fit = Math.min(glass.width / video.videoWidth, glass.height / video.videoHeight);
             const dw = video.videoWidth * fit / glass.width * 64, dh = video.videoHeight * fit / glass.height * 36;
             sampleCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, (64 - dw) / 2, (36 - dh) / 2, dw, dh);
@@ -346,6 +347,9 @@ export function initRoomLighting() {
         if(silhouette) illuminateCasing(silhouette,source,color);
       }
     }
+    // Each object controls how strongly room darkness and colored spill affect
+    // its albedo. Contact/cast shadows stay on their own physical surfaces.
+    for(const ctx of [shadowCtx,tintCtx]) {ctx.save();ctx.globalCompositeOperation='destination-out';ctx.drawImage(objectProtection,0,0);ctx.restore();}
     // Preserve the live picture and its native CRT treatment exactly.
     for (const ctx of [shadowCtx, tintCtx, reflectionCtx, floorReflectionCtx].filter((c): c is CanvasRenderingContext2D => Boolean(c))) {
       ctx.save(); ctx.globalCompositeOperation = 'destination-out';

@@ -1,5 +1,6 @@
 import { tvModels } from '../tv-catalog.mjs';
-import { screenRect, cameraRect, resolvedCamera, type Presentation } from './presentation-model';
+import { screenRect, cameraRect, resolvedCamera, videoCrop, type Presentation } from './presentation-model';
+import {activeVideoArea,sampleActiveVideo,resetActiveVideo} from './video-auto-framing';
 import { supportPlane, supportContact } from './support-surfaces';
 import type { Mood } from './studio-model';
 let current: Presentation | undefined;
@@ -117,6 +118,15 @@ export function applyVideoFraming() {
   const container = document.querySelector<HTMLElement>('#videoMount')!;
   const glass = container.closest<HTMLElement>('.screen-wrap, .arcade-screen')!;
   const video = container.querySelector<HTMLVideoElement>('video'); if (!video) return;
+  for(const property of ['width','height','left','top','position']) video.style.removeProperty(property);
+  if(current?.video?.auto!==false && video.videoWidth && video.videoHeight) {
+    const sw=glass.clientWidth,sh=glass.clientHeight,area=activeVideoArea(video);
+    if(!sw || !sh) return;
+    const factor=Math.max(sw/(area.width*video.videoWidth),sh/(area.height*video.videoHeight));
+    video.style.position='absolute';video.style.objectFit='fill';video.style.objectPosition='50% 50%';video.style.transform='none';
+    Object.assign(video.style,{width:`${video.videoWidth*factor}px`,height:`${video.videoHeight*factor}px`,left:`${(sw-area.width*video.videoWidth*factor)/2-area.x*video.videoWidth*factor}px`,top:`${(sh-area.height*video.videoHeight*factor)/2-area.y*video.videoHeight*factor}px`});
+    return;
+  }
   const fit = current?.video?.fit;
   if (fit) video.style.objectFit = fit; else video.style.removeProperty('object-fit');
   if (fit === 'contain') { video.style.transform = 'none'; video.style.objectPosition = '50% 50%'; return; }
@@ -132,7 +142,13 @@ export function applyVideoFraming() {
 export function initVideoFraming() {
   const mount = document.querySelector('#videoMount')!;
   new MutationObserver(applyVideoFraming).observe(mount, { childList: true });
-  mount.addEventListener('loadedmetadata', applyVideoFraming, true);
+  mount.addEventListener('loadedmetadata', event=>{if(event.target instanceof HTMLVideoElement) resetActiveVideo(event.target);applyVideoFraming();}, true);
+  const timer=setInterval(()=>{const video=mount.querySelector('video');if(!document.hidden && current?.video?.auto!==false && video && sampleActiveVideo(video)) applyVideoFraming();},500);
+  window.addEventListener('resize',applyVideoFraming);
+  window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
+}
+export function visibleVideoCrop(video:HTMLVideoElement,sw:number,sh:number) {
+  return videoCrop(video.videoWidth,video.videoHeight,sw,sh,current?.video,getComputedStyle(video).objectFit,current?.video?.auto!==false?activeVideoArea(video):undefined);
 }
 
 // Runtime support follows the actual movable cabinet; it never rewrites saved
