@@ -1328,7 +1328,7 @@
 #youtubeStatus { font-size:13px; line-height:1.5; }
 .source-actions { display:flex; flex-wrap:wrap; gap:8px; }
 #sourceDialog button { padding:10px 13px; border:1px solid #837796; border-radius:8px; background:#393049; color:#fff; cursor:pointer; }
-.media-notice { position:absolute; left:50%; bottom:72px; transform:translateX(-50%); z-index:240; max-width:min(480px,90vw); padding:12px 16px; background:#171322ee; color:#efeaf7; border-radius:12px; font-size:13px; }
+.media-notice { position:absolute; left:50%; bottom:72px; transform:translateX(-50%); z-index:240; max-width:min(480px,90vw); padding:12px 16px; background:#171322ee; color:#efeaf7; border-radius:12px; font-size:13px; pointer-events:none; }
 .preview-mode #sourceButton { display:none; }
 #sourceButton::before { content:"▻"; }
 #sourceButton::after { content:"Switch"; }
