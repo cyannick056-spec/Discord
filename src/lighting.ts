@@ -6,8 +6,10 @@ import { videoCrop } from './presentation-model';
 import { frameColor, blendColor, type LightColor } from './light-color';
 import { supportPlane, supportElement } from './support-surfaces';
 import { photoFloor } from './room-geometry';
+import { tvSilhouette, paintCastMask, paintTvContact, weightShadowByLight } from './tv-shadows';
+import { lightAt, type ShadowLight } from './tv-shadow-model';
 
-export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number; behindTv?: boolean };
+export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number; behindTv?: boolean; wallOnly?: boolean };
 let sources: DecorationLight[] = [];
 let ambient = 62;
 export type RoomMood = Mood;
@@ -30,6 +32,12 @@ export function initRoomLighting() {
   const reflection = document.querySelector<HTMLCanvasElement>('#roomReflection')!, reflectionCtx = reflection.getContext('2d');
   const floorReflection = document.createElement('canvas'); floorReflection.id = 'roomFloorReflection';
   reflection.parentElement!.append(floorReflection); const floorReflectionCtx = floorReflection.getContext('2d');
+  const wallShadow=document.createElement('canvas');wallShadow.id='roomTvWallShadow';
+  const contactShadow=document.createElement('canvas');contactShadow.id='roomTvContactShadow';
+  reflection.parentElement!.append(wallShadow,contactShadow);
+  const wallShadowCtx=wallShadow.getContext('2d')!, contactCtx=contactShadow.getContext('2d')!;
+  const castMask=document.createElement('canvas'),castCtx=castMask.getContext('2d')!;
+  const occludedGlow=document.createElement('canvas'),occludedCtx=occludedGlow.getContext('2d')!;
   const sample = document.createElement('canvas');
   sample.width = 64; sample.height = 36;
   const testSample = document.createElement('canvas'); testSample.width = 64; testSample.height = 36;
@@ -80,7 +88,7 @@ export function initRoomLighting() {
     if (valid(event.data.screen) && valid(event.data.floor)) previewColors = event.data;
   });
 
-  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60, onTv = false, clip?: { x:number;y:number;width:number;height:number }) {
+  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60, onTv = false, clip?: { x:number;y:number;width:number;height:number }, occlusion?: HTMLCanvasElement) {
     if (!shadowCtx || !tintCtx || rx <= 0 || ry <= 0) return;
     const power = Math.min(2, color.strength * gain);
     if (power < .005) return;
@@ -94,15 +102,21 @@ export function initRoomLighting() {
         ctx.roundRect(tvBounds.x, tvBounds.y, tvBounds.width, tvBounds.height, Math.min(tvBounds.width, tvBounds.height) * .012);
         ctx.clip('evenodd');
       }
-      ctx.translate(x, y); ctx.rotate(angle * Math.PI / 180); ctx.scale(rx, ry);
-      ctx.globalCompositeOperation = isTint ? 'source-over' : 'destination-out';
-      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      const paint=occlusion ? occludedCtx : ctx;
+      if(occlusion) {paint.clearRect(0,0,occludedGlow.width,occludedGlow.height);paint.save();}
+      paint.translate(x, y); paint.rotate(angle * Math.PI / 180); paint.scale(rx, ry);
+      if(!occlusion) ctx.globalCompositeOperation = isTint ? 'source-over' : 'destination-out';
+      const gradient = paint.createRadialGradient(0, 0, 0, 0, 0, 1);
       const rgb = `${Math.round(color.r)},${Math.round(color.g)},${Math.round(color.b)}`;
       const alpha = Math.min(.95, power * (isTint ? .23 : .9));
       gradient.addColorStop(0, `rgba(${isTint ? rgb : '0,0,0'},${alpha})`);
       gradient.addColorStop(.15 + softness / 100 * .4, `rgba(${isTint ? rgb : '0,0,0'},${alpha * .6})`);
       gradient.addColorStop(1, `rgba(${isTint ? rgb : '0,0,0'},0)`);
-      ctx.fillStyle = gradient; ctx.fillRect(-1, -1, 2, 2);
+      paint.fillStyle = gradient; paint.fillRect(-1, -1, 2, 2);
+      if(occlusion) {
+        paint.restore();paint.globalCompositeOperation='destination-out';paint.drawImage(occlusion,0,0);paint.globalCompositeOperation='source-over';
+        ctx.globalCompositeOperation=isTint?'source-over':'destination-out';ctx.drawImage(occludedGlow,0,0);
+      }
       ctx.restore();
     }
   }
@@ -118,10 +132,12 @@ export function initRoomLighting() {
     const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
     if (shade.width !== width || shade.height !== height) {
       shade.width = tint.width = grade.width = reflection.width = floorReflection.width = width; shade.height = tint.height = grade.height = reflection.height = floorReflection.height = height;
+      for(const canvas of [wallShadow,contactShadow,castMask,occludedGlow]) {canvas.width=width;canvas.height=height;}
     }
     reflectionCtx?.clearRect(0, 0, width, height);
     floorReflectionCtx?.clearRect(0, 0, width, height);
     shadowCtx.clearRect(0, 0, width, height);
+    wallShadowCtx.clearRect(0,0,width,height);contactCtx.clearRect(0,0,width,height);
     tintCtx.clearRect(0, 0, width, height);
     gradeCtx?.clearRect(0, 0, width, height);
     shadowCtx.fillStyle = `rgba(0,0,0,${1 - ambient / 100})`;
@@ -142,13 +158,6 @@ export function initRoomLighting() {
       const vignette=shadowCtx.createRadialGradient(width*.5,height*.48,width*.12,width*.5,height*.48,Math.max(width,height)*.66);
       vignette.addColorStop(0,'rgba(0,0,0,0)');vignette.addColorStop(.5,`rgba(0,0,0,${depth*.12})`);vignette.addColorStop(1,`rgba(0,0,0,${depth*.65})`);
       shadowCtx.fillStyle=vignette;shadowCtx.fillRect(0,0,width,height);
-      if(tvBounds) {
-        const t=tvBounds;
-        shadowCtx.filter=`blur(${Math.max(3,t.width*.045)}px)`;shadowCtx.fillStyle=`rgba(0,0,0,${depth*.32})`;
-        shadowCtx.fillRect(t.x+t.width*.015,t.y+t.height*.045,t.width,t.height);
-        shadowCtx.filter=`blur(${Math.max(2,t.width*.025)}px)`;
-        shadowCtx.beginPath();shadowCtx.ellipse(t.x+t.width*.5,t.y+t.height,t.width*.48,t.height*.045,0,0,Math.PI*2);shadowCtx.fill();
-      }
       shadowCtx.restore();
     }
     if (gradeCtx && stage.classList.contains('home-mode')) paintRoomGrade(gradeCtx, document.querySelector<HTMLElement>('.tv-face')!,
@@ -243,6 +252,18 @@ export function initRoomLighting() {
       glow(width * .06, height * .35, width * .35, height * .5, accent(mood.accent ?? '#b93cff'));
       glow(width * .95, height * .5, width * .35, height * .45, accent(mood.accent2 ?? '#1ec8e6'));
     }
+    const silhouette=tvBounds ? tvSilhouette(document.querySelector<HTMLElement>('.tv-face')!) : undefined;
+    const wallBottom=(photoFloor().y-bounds.y)*scale;
+    const plane=supportPlane(getPresentation());
+    const shadowSurface=getPresentation()?.tvSupport==='floor' ? toScene(photoFloor()) : getPresentation()?.tvSupport==='cabinet' && plane ? {...toScene(plane),quad:plane.quad?.map(([x,y])=>[(x-bounds.x)*scale,(y-bounds.y)*scale] as [number,number])} : undefined;
+    const strength=.45+.55*depth;
+    const fillLight=screenColor.strength*tvGain*.5+(mood.backlight?.intensity ?? 0)/100*.8;
+    if(silhouette && tvBounds) {
+      wallShadowCtx.save();wallShadowCtx.beginPath();wallShadowCtx.rect(0,0,width,Math.max(0,wallBottom));wallShadowCtx.clip();
+      wallShadowCtx.globalAlpha=strength*.12/(1+fillLight);wallShadowCtx.filter=`blur(${Math.max(1,tvBounds.width*.018)}px)`;
+      wallShadowCtx.drawImage(silhouette,tvBounds.x-tvBounds.width*.008,tvBounds.y-tvBounds.height*.008,tvBounds.width*1.016,tvBounds.height*1.016);wallShadowCtx.restore();
+      if(shadowSurface) paintTvContact(contactCtx,silhouette,tvBounds,shadowSurface,strength/(1+screenColor.strength*tvGain*.2));
+    }
     const boxes = new Map([...document.querySelectorAll<HTMLElement>('.decoration-box:not(.decor-depth-outline)')].map(el => [el.dataset.id, el]));
     for (const light of sources) {
       if(mood.practicalLights === false) continue;
@@ -258,8 +279,24 @@ export function initRoomLighting() {
       const color = { r: parseInt(light.color.slice(1, 3), 16), g: parseInt(light.color.slice(3, 5), 16),
         b: parseInt(light.color.slice(5, 7), 16), strength: light.intensity / 100 };
       const radius = Math.min(Math.max(width, height), box.offsetWidth * scale * light.radius);
-      if(light.behindTv) wallWash(x,y,radius*2,radius*1.5,color);
-      else glow(x, y, radius, radius * (light.shape === 'strip' ? .16 : light.shape === 'spot' ? .4 : 1), color, 1, light.angle ?? 0, light.softness ?? 60);
+      let occlusion:HTMLCanvasElement | undefined;
+      if(silhouette && tvBounds && !light.wallOnly) {
+        castCtx.clearRect(0,0,width,height);
+        const source:ShadowLight={x,y,radius,intensity:color.strength,shape:light.shape,angle:light.angle,softness:light.softness ?? 60};
+        const projection=paintCastMask(castCtx,silhouette,tvBounds,source,wallBottom);
+        if(projection) {
+          occlusion=castMask;
+          weightShadowByLight(occludedCtx,castMask,source);
+          wallShadowCtx.save();wallShadowCtx.globalAlpha=.26*strength/(1+fillLight);wallShadowCtx.drawImage(occludedGlow,0,0);wallShadowCtx.restore();
+        }
+        // Light physically reaching the base gently fills the soft contact area.
+        if(shadowSurface) {
+          const fill=lightAt(source,tvBounds.x+tvBounds.width/2,tvBounds.y+tvBounds.height)*.16;
+          if(fill>0) {contactCtx.save();contactCtx.globalCompositeOperation='destination-out';contactCtx.globalAlpha=fill;contactCtx.drawImage(contactShadow,0,0);contactCtx.restore();}
+        }
+      }
+      if(light.wallOnly) wallWash(x,y,radius*2,radius*1.5,color);
+      else glow(x, y, radius, radius * (light.shape === 'strip' ? .16 : light.shape === 'spot' ? .4 : 1), color, 1, light.angle ?? 0, light.softness ?? 60,false,undefined,occlusion);
     }
     // Preserve the live picture and its native CRT treatment exactly.
     for (const ctx of [shadowCtx, tintCtx, reflectionCtx, floorReflectionCtx].filter((c): c is CanvasRenderingContext2D => Boolean(c))) {
