@@ -1376,3 +1376,9 @@
 #sourceButton::after { content:"Switch"; }
 .youtube-source #sourceButton::before { content:"▶"; }
 .youtube-source #sourceButton::after { content:"YouTube"; }
+
+/* Spectators have local volume and exit only. Authentication remains on a TV hold. */
+.stage.spectator-mode #sourceButton, .stage.spectator-mode #settingsControl,
+.stage.spectator-mode #audioButton, .stage.spectator-mode #retryButton { display:none !important; }
+
+.decoration-box[hidden], #settingsControl[hidden] { display:none !important; }

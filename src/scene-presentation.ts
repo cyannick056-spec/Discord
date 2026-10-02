@@ -4,6 +4,8 @@ import {activeVideoArea,sampleActiveVideo,resetActiveVideo} from './video-auto-f
 import { supportPlane, supportContact } from './support-surfaces';
 import type { Mood } from './studio-model';
 let current: Presentation | undefined;
+const liveAutoVideo=!new URLSearchParams(location.search).has('editorPreview');
+const autoVideo=()=>liveAutoVideo || current?.video?.auto!==false;
 let screenBase = { x: 0, y: 0, width: 1, height: 1 };
 export function getPresentation() { return current; }
 export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
@@ -119,7 +121,7 @@ export function applyVideoFraming() {
   const glass = container.closest<HTMLElement>('.screen-wrap, .arcade-screen')!;
   const video = container.querySelector<HTMLVideoElement>('video'); if (!video) return;
   for(const property of ['width','height','left','top','position']) video.style.removeProperty(property);
-  if(current?.video?.auto!==false && video.videoWidth && video.videoHeight) {
+  if(autoVideo() && video.videoWidth && video.videoHeight) {
     const sw=glass.clientWidth,sh=glass.clientHeight,area=activeVideoArea(video);
     if(!sw || !sh) return;
     const factor=Math.max(sw/(area.width*video.videoWidth),sh/(area.height*video.videoHeight));
@@ -143,12 +145,12 @@ export function initVideoFraming() {
   const mount = document.querySelector('#videoMount')!;
   new MutationObserver(applyVideoFraming).observe(mount, { childList: true });
   mount.addEventListener('loadedmetadata', event=>{if(event.target instanceof HTMLVideoElement) resetActiveVideo(event.target);applyVideoFraming();}, true);
-  const timer=setInterval(()=>{const video=mount.querySelector('video');if(!document.hidden && current?.video?.auto!==false && video && sampleActiveVideo(video)) applyVideoFraming();},500);
+  const timer=setInterval(()=>{const video=mount.querySelector('video');if(!document.hidden && autoVideo() && video && sampleActiveVideo(video)) applyVideoFraming();},500);
   window.addEventListener('resize',applyVideoFraming);
   window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
 }
 export function visibleVideoCrop(video:HTMLVideoElement,sw:number,sh:number) {
-  return videoCrop(video.videoWidth,video.videoHeight,sw,sh,current?.video,getComputedStyle(video).objectFit,current?.video?.auto!==false?activeVideoArea(video):undefined);
+  return videoCrop(video.videoWidth,video.videoHeight,sw,sh,current?.video,getComputedStyle(video).objectFit,autoVideo()?activeVideoArea(video):undefined);
 }
 
 // Runtime support follows the actual movable cabinet; it never rewrites saved

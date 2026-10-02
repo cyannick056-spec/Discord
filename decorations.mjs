@@ -77,7 +77,7 @@ function validManifest(input) {
   });
 }
 
-export function installDecorations(app, { directory, editKey, restoreOriginal = false, rebuildRooms = false }) {
+export function installDecorations(app, { directory, editKey, restoreOriginal = false, rebuildRooms = false, hostAuthorized = () => false }) {
   const assetsDir = path.join(directory, 'assets');
   const manifestPath = path.join(directory, 'manifest.json');
   const blank = { items: [] };
@@ -122,6 +122,7 @@ export function installDecorations(app, { directory, editKey, restoreOriginal = 
   });
 
   function editorOnly(req, res, next) {
+    if (hostAuthorized(req)) return next();
     const supplied = Buffer.from(String(req.get('X-Decoration-Key') || ''));
     const expected = Buffer.from(String(editKey || ''));
     if (!expected.length || supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {

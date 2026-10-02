@@ -75,8 +75,8 @@
         </div>
 
         <nav class="scene-controls" aria-label="Controles de la actividad">
-          <button id="sourceButton" type="button" aria-controls="sourceDialog">Fuente: Switch</button>
-          <div id="settingsControl" class="settings-control">
+          <button id="sourceButton" hidden type="button" aria-controls="sourceDialog">Fuente: Switch</button>
+          <div id="settingsControl" class="settings-control" hidden>
             <button id="settingsButton" type="button" aria-label="Abrir ajustes" aria-expanded="false" aria-controls="settingsPanel" title="Ajustes">Ajustes</button>
             <div id="settingsPanel" class="settings-panel" hidden>
               <button id="modeButton" type="button" aria-label="Cambiar a modo arcade">Arcade</button>
@@ -118,9 +118,9 @@
             <div class="editor-history"><button id="editorUndo" type="button" disabled title="Ctrl + Z">Deshacer</button><button id="editorRedo" type="button" disabled title="Ctrl + Shift + Z">Rehacer</button><button id="editorExit" type="button" hidden>Salir de la app</button><button id="editorClose" type="button" aria-label="Cerrar editor">×</button></div>
           </header>
           <div id="editorAuth" class="editor-auth">
-            <p>Introduce tu clave de edición para cambiar la decoración compartida.</p>
+            <p>Introduce tu clave de edición para activar el modo host y cambiar la TV o la decoración compartida.</p>
             <label>Clave <input id="editorKey" type="password" autocomplete="off" /></label>
-            <button id="editorUnlock" type="button">Entrar al editor</button>
+            <button id="editorUnlock" type="button">Entrar como host</button>
           </div>
           <div id="editorWorkspace" class="editor-workspace" hidden>
             <div class="editor-toolbar">

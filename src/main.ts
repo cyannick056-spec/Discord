@@ -1,3 +1,4 @@
+import {canControlActivity,initActivityControls,changeActivityControls} from './activity-controls';
 import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import { initDecorations, setDecorationViewers, requestAppClose } from './decorations';
@@ -617,17 +618,20 @@ async function boot() {
   }
 }
 
-modeButton.addEventListener('click', () => setScene(sceneMode === 'home' ? 'arcade' : 'home'));
+modeButton.addEventListener('click', () => shareControls({scene:sceneMode === 'home' ? 'arcade' : 'home'}));
 settingsButton.addEventListener('click', () => {
+  if(!canControlActivity())return;
   settingsPanel.hidden = !settingsPanel.hidden;
   settingsButton.setAttribute('aria-expanded', String(!settingsPanel.hidden));
   volumePanel.hidden = true;
   volumeButton.setAttribute('aria-expanded', 'false');
 });
-filterButton.addEventListener('click', () => setRetroLevel(retroLevel === 'off' ? 'normal' : retroLevel === 'normal' ? 'immersive' : retroLevel === 'immersive' ? 'scanlines' : 'off'));
-smoothingButton.addEventListener('click', () => setSmoothing(!smoothing));
-aspectButton.addEventListener('click', () => setAspect(aspectMode === '4:3' ? '16:9' : '4:3'));
+filterButton.addEventListener('click', () => shareControls({retro:retroLevel === 'off' ? 'normal' : retroLevel === 'normal' ? 'immersive' : retroLevel === 'immersive' ? 'scanlines' : 'off'}));
+smoothingButton.addEventListener('click', () => shareControls({smoothing:!smoothing}));
+aspectButton.addEventListener('click', () => shareControls({aspect:aspectMode === '4:3' ? '16:9' : '4:3'}));
 volumeButton.addEventListener('click', () => {
+  if(currentMediaSource==='youtube')youtubeRoom?.activate();
+  else if(!audioButton.hidden) audioButton.click();
   volumePanel.hidden = !volumePanel.hidden;
   volumeButton.setAttribute('aria-expanded', String(!volumePanel.hidden));
   settingsPanel.hidden = true;
@@ -683,11 +687,40 @@ retryButton.addEventListener('click', async () => {
   }
 });
 
+function updateHostControls(){
+  const host=canControlActivity();stage.classList.toggle('spectator-mode',!host);
+  settingsControl.hidden=!host;document.querySelector<HTMLElement>('#sourceButton')!.hidden=!host;
+  videoMount.inert=!host && currentMediaSource==='youtube';
+  if(!host){settingsPanel.hidden=true;document.querySelector<HTMLDialogElement>('#sourceDialog')!.close();}
+}
+function shareControls(value:Parameters<typeof changeActivityControls>[0]){
+  if(!canControlActivity())return;
+  void changeActivityControls(value).catch(error=>{const notice=document.querySelector<HTMLElement>('#mediaNotice')!;notice.textContent=error.message;notice.hidden=false;});
+}
+window.addEventListener('shis-host-change',updateHostControls);
+updateHostControls();
+initActivityControls(state=>{
+  if(aspectMode!==state.aspect)setAspect(state.aspect);
+  if(sceneMode!==state.scene)setScene(state.scene);
+  if(retroLevel!==state.retro)setRetroLevel(state.retro);
+  if(smoothing!==state.smoothing)setSmoothing(state.smoothing);
+});
+// The owner can authenticate without adding a third spectator control.
+let hostPress:ReturnType<typeof setTimeout>|undefined,pressPoint:{x:number;y:number}|undefined;
+const cancelHostPress=()=>{clearTimeout(hostPress);hostPress=undefined;};
+player.addEventListener('pointerdown',event=>{
+  if(canControlActivity() || event.button!==0)return;
+  pressPoint={x:event.clientX,y:event.clientY};hostPress=setTimeout(()=>document.querySelector<HTMLButtonElement>('#editorButton')!.click(),1100);
+});
+player.addEventListener('pointermove',event=>{if(pressPoint && Math.hypot(event.clientX-pressPoint.x,event.clientY-pressPoint.y)>10)cancelHostPress();});
+for(const event of ['pointerup','pointercancel','pointerleave'])player.addEventListener(event,cancelHostPress);
+document.addEventListener('keydown',event=>{if(event.ctrlKey && event.shiftKey && event.key.toLowerCase()==='h'){event.preventDefault();document.querySelector<HTMLButtonElement>('#editorButton')!.click();}});
 initRoomLighting();
 initDecorations();
 if(!editorPreviewMode)youtubeRoom=new YouTubeRoom(async source=>{
   currentMediaSource=source;streamEpoch++;
   stage.classList.toggle('youtube-source',source==='youtube');
+  updateHostControls();
   if(signalLostTimer){clearTimeout(signalLostTimer);signalLostTimer=null;}
   const oldRoom=room;room=null;cloudflareViewer?.stop();cloudflareViewer=null;
   activeVideoTrack?.detach().forEach(el=>el.remove());activeVideoTrack=null;activeVideoPublisherId=null;activeVideoElement=null;
