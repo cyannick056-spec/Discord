@@ -1,3 +1,4 @@
+import {isCompactView} from './viewport.ts';
 import { paintReflections, reflectionPlanes } from './reflections';
 import { paintRoomGrade } from './room-grade';
 import { type Mood } from './studio-model';
@@ -154,7 +155,7 @@ export function initRoomLighting() {
   function draw() {
     if (!shadowCtx || !tintCtx || !sampleCtx || document.hidden) return;
     // Tiny Discord tiles have no room around the picture.
-    if (innerWidth <= 520 && innerHeight <= 360) return;
+    if (isCompactView()) return;
     const bounds = scene.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
     const scale = Math.min(1, 960 / Math.max(bounds.width, bounds.height));

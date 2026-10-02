@@ -1,3 +1,4 @@
+import {isCompactView} from './viewport.ts';
 import {beginSceneTransition,finishSceneTransition,sceneTransitionActive} from './scene-transition';
 import {canControlActivity,hostHeaders,unlockHost} from './activity-controls';
 import {refreshSpriteResolution} from './sprite-rendering';
@@ -156,7 +157,7 @@ let previewPanY = 0;
 let gestureStart: { zoom: number; targetX: number; targetY: number; x: number; y: number } | null = null;
 
 function currentView(): View {
-  if (innerWidth <= 520 && innerHeight <= 360) return 'window';
+  if (isCompactView()) return 'window';
   return innerHeight > innerWidth ? 'portrait' : 'landscape';
 }
 
@@ -763,12 +764,13 @@ function migrateLegacyInView() {
 // viewport media queries. Other orientations use the same device dimensions.
 function previewDimensions(): [number, number] {
   const view = editorView.value as View;
-  if (view === 'window') return innerWidth <= 520 && innerHeight <= 360 ? [innerWidth, innerHeight] : [480, 270];
+  if (view === 'window') return isCompactView() ? [innerWidth, innerHeight] : [480, 270];
   const portrait = innerHeight > innerWidth;
   return (view === 'portrait') === portrait ? [innerWidth, innerHeight] : [innerHeight, innerWidth];
 }
 
 function sizePreview() {
+  if(!previewFrame.clientWidth || !previewFrame.clientHeight) return;
   const [width, height] = previewDimensions();
   const baseScale = Math.min(previewFrame.clientWidth / width, previewFrame.clientHeight / height, 1);
   const scale = baseScale * previewZoom;
