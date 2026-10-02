@@ -4,9 +4,9 @@ import { type Mood } from './studio-model';
 import { getPresentation } from './scene-presentation';
 import { videoCrop } from './presentation-model';
 import { frameColor, blendColor, type LightColor } from './light-color';
-import { supportPlane, supportElement } from './support-surfaces';
+import { supportPlane, supportElement, type SurfacePlane } from './support-surfaces';
 import { photoFloor } from './room-geometry';
-import { tvSilhouette, paintCastMask, paintTvContact, weightShadowByLight } from './tv-shadows';
+import { tvSilhouette, paintCastMask, paintTvContact, weightShadowByLight, clipSurface } from './tv-shadows';
 import { lightAt, type ShadowLight } from './tv-shadow-model';
 
 export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number; behindTv?: boolean; wallOnly?: boolean };
@@ -88,15 +88,15 @@ export function initRoomLighting() {
     if (valid(event.data.screen) && valid(event.data.floor)) previewColors = event.data;
   });
 
-  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60, onTv = false, clip?: { x:number;y:number;width:number;height:number }, occlusion?: HTMLCanvasElement) {
+  function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60, onTv = false, clip?: SurfacePlane, occlusion?: HTMLCanvasElement) {
     if (!shadowCtx || !tintCtx || rx <= 0 || ry <= 0) return;
     const power = Math.min(2, color.strength * gain);
     if (power < .005) return;
     for (const [ctx, isTint] of [[shadowCtx, false], [tintCtx, true]] as const) {
       ctx.save();
-      if (clip) { ctx.beginPath();ctx.rect(clip.x,clip.y,clip.width,clip.height);ctx.clip(); }
-      // Room light must not wash over the photographed plastic. Only the
-      // separately controlled bezel light may illuminate the TV itself.
+      if (clip) clipSurface(ctx,clip);
+      // Broad room washes stay off the plastic. Screen spill and practical
+      // casing illumination use separate, bounded passes.
       if (tvBounds && !onTv) {
         ctx.beginPath(); ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
         ctx.roundRect(tvBounds.x, tvBounds.y, tvBounds.width, tvBounds.height, Math.min(tvBounds.width, tvBounds.height) * .012);
@@ -118,6 +118,27 @@ export function initRoomLighting() {
         ctx.globalCompositeOperation=isTint?'source-over':'destination-out';ctx.drawImage(occludedGlow,0,0);
       }
       ctx.restore();
+    }
+  }
+
+  function illuminateCasing(mask:HTMLCanvasElement, light:ShadowLight, color:LightColor) {
+    if(!tvBounds) return;
+    // Use the actual casing alpha: practical lights can reveal the plastic,
+    // without adding a painted highlight or illuminating transparent corners.
+    occludedCtx.clearRect(0,0,occludedGlow.width,occludedGlow.height);
+    occludedCtx.drawImage(mask,tvBounds.x,tvBounds.y,tvBounds.width,tvBounds.height);
+    occludedCtx.globalCompositeOperation='source-in';
+    occludedCtx.save();occludedCtx.translate(light.x,light.y);occludedCtx.rotate((light.angle ?? 0)*Math.PI/180);
+    occludedCtx.scale(light.radius,light.radius*(light.shape==='strip'?.16:light.shape==='spot'?.4:1));
+    const gradient=occludedCtx.createRadialGradient(0,0,0,0,0,1);
+    gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},${light.intensity})`);
+    gradient.addColorStop(.15+light.softness/100*.4,`rgba(${color.r},${color.g},${color.b},${light.intensity*.6})`);
+    gradient.addColorStop(1,`rgba(${color.r},${color.g},${color.b},0)`);
+    occludedCtx.fillStyle=gradient;occludedCtx.fillRect(-1,-1,2,2);occludedCtx.restore();
+    occludedCtx.globalCompositeOperation='source-over';
+    for(const [ctx,isTint] of [[shadowCtx!,false],[tintCtx!,true]] as const) {
+      ctx.save();ctx.globalCompositeOperation=isTint?'source-over':'destination-out';
+      ctx.globalAlpha=isTint?.10:.55;ctx.drawImage(occludedGlow,0,0);ctx.restore();
     }
   }
 
@@ -279,10 +300,10 @@ export function initRoomLighting() {
       const color = { r: parseInt(light.color.slice(1, 3), 16), g: parseInt(light.color.slice(3, 5), 16),
         b: parseInt(light.color.slice(5, 7), 16), strength: light.intensity / 100 };
       const radius = Math.min(Math.max(width, height), box.offsetWidth * scale * light.radius);
+      const source:ShadowLight={x,y,radius,intensity:color.strength,shape:light.shape,angle:light.angle,softness:light.softness ?? 60};
       let occlusion:HTMLCanvasElement | undefined;
       if(silhouette && tvBounds && !light.wallOnly) {
         castCtx.clearRect(0,0,width,height);
-        const source:ShadowLight={x,y,radius,intensity:color.strength,shape:light.shape,angle:light.angle,softness:light.softness ?? 60};
         const projection=paintCastMask(castCtx,silhouette,tvBounds,source,wallBottom);
         if(projection) {
           occlusion=castMask;
@@ -296,7 +317,24 @@ export function initRoomLighting() {
         }
       }
       if(light.wallOnly) wallWash(x,y,radius*2,radius*1.5,color);
-      else glow(x, y, radius, radius * (light.shape === 'strip' ? .16 : light.shape === 'spot' ? .4 : 1), color, 1, light.angle ?? 0, light.softness ?? 60,false,undefined,occlusion);
+      else {
+        const practical=box.querySelector('.lamp-animation') !== null && box.dataset.prop !== 'lava-lamp';
+        const wallClip={x:0,y:0,width,height:Math.max(0,wallBottom)};
+        glow(x,y,radius,radius*(light.shape==='strip'?.16:light.shape==='spot'?.4:1),color,practical?.72:1,light.angle ?? 0,light.softness ?? 60,false,practical?wallClip:undefined,occlusion);
+        if(practical && (!light.shape || light.shape==='point')) {
+          // Shade openings produce soft vertical lobes, rather than one flat
+          // disc. Their origin, range and occlusion follow the editable lamp.
+          glow(x,y-radius*.16,radius*.38,radius*.6,color,.32,0,90,false,wallClip,occlusion);
+          glow(x,y+radius*.19,radius*.5,radius*.6,color,.38,0,90,false,wallClip,occlusion);
+          const poolY=Math.max(wallBottom,y),floorPower=lightAt(source,x,poolY);
+          if(floorPower>.005) glow(x,poolY+radius*.08,radius*.62,radius*.23,{...color,strength:floorPower},.5,0,90,false,toScene(floorPlane));
+          if(plane) {
+            const surface={...toScene(plane),quad:plane.quad?.map(([px,py])=>[(px-bounds.x)*scale,(py-bounds.y)*scale] as [number,number])};
+            glow(x,y,radius,radius,color,.24,0,90,false,surface);
+          }
+        }
+        if(silhouette) illuminateCasing(silhouette,source,color);
+      }
     }
     // Preserve the live picture and its native CRT treatment exactly.
     for (const ctx of [shadowCtx, tintCtx, reflectionCtx, floorReflectionCtx].filter((c): c is CanvasRenderingContext2D => Boolean(c))) {
