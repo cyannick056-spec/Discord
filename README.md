@@ -1,114 +1,135 @@
-# SHIS Stream — Discord Activity
+# SHIS Stream — Actividad de Discord
 
-SHIS Stream is a private-use Discord Activity for watching a Nintendo Switch stream together inside a voice call. The production path uses a customized SysDVR sender on the Switch, a small Railway relay, Cloudflare Realtime SFU and the Discord Activity UI.
+SHIS Stream es una Activity privada de Discord para ver una Nintendo Switch dentro de una llamada y compartir una escena visual editable alrededor de la transmisión.
 
-## Current architecture
+El sistema usa **SysDVR SHIS Direct**, un relay nativo en **Railway**, **Cloudflare Realtime SFU** y la Activity de Discord.
+
+## Cómo funciona
 
 ```text
 Nintendo Switch
-  └─ SysDVR SHIS Direct (H.264 video + PCM audio)
-       ↓ TCP
-Railway native relay
-       ↓ authenticated signaling/media publish
+  └─ SysDVR SHIS Direct
+       ├─ vídeo H.264
+       └─ audio PCM
+          ↓ TCP
+Relay nativo en Railway
+          ↓ WebRTC
 Cloudflare Realtime SFU
-       ↓
-Discord Activity
-       ↓
-Viewers in the same Activity
+          ↓
+Activity de Discord
+          ↓
+Espectadores dentro de la misma Activity
 ```
 
-The Switch never needs Discord or Cloudflare credentials. It only knows the TCP relay endpoint, stream name and a private stream key. The relay authenticates that sender and publishes H.264/Opus media through Cloudflare Realtime SFU. The Activity authorizes viewers with Discord and subscribes them to the current Cloudflare publication.
+La Switch solo conoce el host TCP del relay, el puerto, el nombre lógico del stream y una clave privada. Las credenciales de Discord y Cloudflare permanecen en el servidor.
 
-The customized Switch sender lives in [`cyannick056-spec/Shis-Stream`](https://github.com/cyannick056-spec/Shis-Stream).
+El código del emisor de Switch está en [`cyannick056-spec/Shis-Stream`](https://github.com/cyannick056-spec/Shis-Stream).
 
-## Main features
+## Funciones
 
-- Nintendo Switch video and game audio inside a Discord Activity.
-- Casa/CRT and Arcade presentation modes.
-- Shared TV format, scene and effects controlled by the host.
-- Local volume and exit controls for spectators.
-- Decoration/editor system with movable figures, furniture, lights and viewer avatar slots.
-- Separate saved layouts for scene, orientation and TV aspect.
-- Runtime room lighting and TV-color spill driven by the live Switch image.
-- Compact Discord tiles use the full rectangular viewport and hide room/editor clutter.
-- The editor keeps drafts locally until the host explicitly saves the current view.
-- Shared decorations are stored on a persistent Railway volume.
+- Vídeo de Nintendo Switch y audio del juego dentro de Discord.
+- Modos visuales **Casa** y **Arcade**.
+- Formatos de TV 16:9 y 4:3.
+- Filtro CRT, barrido, suavizado de bordes y estados de señal.
+- Fuente alternativa de YouTube compartida dentro de la Activity.
+- Controles compartidos reservados al host.
+- Volumen local y salida independientes para espectadores.
+- Editor de escenas con fondos, televisores, muebles, figuras, luces y materiales.
+- Posición, tamaño, capas, brillo, saturación, sombras y emisión de luz por objeto.
+- Ajustes independientes para vista horizontal, vertical y ventana pequeña.
+- Perfiles, versiones de escena y biblioteca de objetos.
+- Avatares de espectadores integrados en la escena.
+- Persistencia de la decoración en un volumen de Railway.
 
-## Host access
+## Servicios
 
-Only the host can change shared scene state such as TV format, effects, playback source and saved decorations.
+### Activity y backend
 
-Host access is activated from the Activity using the configured editor key. The key is stored only in the server environment (`DECORATION_EDIT_KEY`) and must never be committed to this repository. Authorized host sessions are signed and scoped to the current Activity instance.
+Servicio Node.js/Express desplegado en Railway. Sirve la Activity, autoriza el acceso con Discord, guarda el estado compartido y actúa como backend de señalización para Cloudflare Realtime SFU.
 
-Spectators keep independent volume and can leave the Activity without changing the shared scene.
+La decoración compartida se guarda en `DECORATION_DATA_DIR`, normalmente `/data`, montado como volumen persistente.
 
-## Configuration
+### Relay nativo
 
-Copy `.env.example` to `.env` for local development. Never commit real credentials.
+Servicio Go desplegado en Railway con un proxy TCP público. Recibe H.264 y PCM desde SysDVR SHIS Direct, convierte el audio a Opus y publica vídeo/audio mediante WebRTC hacia Cloudflare Realtime SFU.
 
-Current Activity/server variables:
+El código está en `relay/`.
 
-- `DISCORD_CLIENT_ID` — Discord application/client ID.
-- `DISCORD_CLIENT_SECRET` — Discord OAuth client secret; server-side only.
-- `CLOUDFLARE_SFU_APP_ID` — Cloudflare Realtime SFU application ID.
-- `CLOUDFLARE_SFU_APP_SECRET` — Cloudflare Realtime SFU secret; server-side only.
-- `STREAM_KEY` — private key shared with the Switch relay path.
-- `DECORATION_EDIT_KEY` — separate host/editor password.
-- `DECORATION_DATA_DIR` — persistent decoration storage directory.
-- `DEFAULT_STREAM` — logical stream name shown by the Activity.
-- `PORT` — Activity HTTP port.
+### Cloudflare Realtime SFU
 
-Relay variables:
+Transporta la publicación del relay hacia los espectadores. Las credenciales de Cloudflare solo existen en el backend.
 
-- `SHIS_ACTIVITY_URL` — HTTPS origin of the Activity server used for authenticated Cloudflare signaling.
-- `STREAM_KEY` — must match the Switch configuration.
-- `DEFAULT_STREAM` — logical stream name.
-- `PORT` / `RELAY_PORT` — relay listen port exposed through Railway TCP proxy.
+## Acceso y permisos
 
-Cloudflare credentials remain on the Activity backend. They are not stored on the Switch and are not exposed to viewers.
+La Activity se abre desde Discord y usa OAuth para verificar al usuario. El backend entrega un ticket temporal para las peticiones protegidas.
 
-## Local development
+El host puede modificar el estado compartido de la escena y la TV. Los espectadores no pueden cambiar la escena; conservan controles locales como volumen y salida.
 
-Requires Node.js 20 or newer.
+El acceso de host/editor usa `DECORATION_EDIT_KEY`.
+
+## Variables de entorno
+
+Copia `.env.example` a `.env` para desarrollo local.
+
+- `DISCORD_CLIENT_ID` — ID público de la aplicación de Discord.
+- `DISCORD_CLIENT_SECRET` — secreto OAuth de Discord; solo servidor.
+- `CLOUDFLARE_SFU_APP_ID` — ID de la aplicación de Cloudflare Realtime SFU.
+- `CLOUDFLARE_SFU_APP_SECRET` — secreto de Cloudflare; solo servidor.
+- `SHIS_ACTIVITY_URL` — URL HTTPS de la Activity usada por el relay para señalización.
+- `STREAM_KEY` — clave privada del camino de publicación Switch → relay.
+- `DECORATION_EDIT_KEY` — clave del host/editor.
+- `DECORATION_DATA_DIR` — carpeta persistente de decoración.
+- `DEFAULT_STREAM` — nombre lógico del stream.
+- `PORT` — puerto HTTP del servicio Activity.
+
+Nunca guardes secretos reales en el repositorio.
+
+## Desarrollo local
+
+Requiere Node.js 20 o superior.
 
 ```bash
 npm install
+npm test
 npm run build
 npm start
 ```
 
-For Vite hot reload:
+Para desarrollo con Vite:
 
 ```bash
 npm run dev:server
 npm run dev
 ```
 
-The production service runs on Railway. The Activity uses an HTTPS endpoint and a persistent volume for shared decoration data; the native relay is a separate Railway service with a TCP proxy.
+## Relay
 
-## Switch sender
+El relay usa Go y las bibliotecas nativas de Opus.
 
-The active sender is **SysDVR SHIS Direct v0.6**. Build/install instructions and Switch-side source live in:
+```bash
+cd relay
+go test ./...
+go build .
+```
 
-- [`cyannick056-spec/Shis-Stream`](https://github.com/cyannick056-spec/Shis-Stream)
-- [`sysdvr-shis/`](https://github.com/cyannick056-spec/Shis-Stream/tree/main/sysdvr-shis)
+Railway construye el relay con `relay/Dockerfile`.
 
-The Switch configuration uses the relay TCP proxy host/port, a stream name and a private `stream_key`. Real endpoints and secrets are intentionally not stored in either public repository.
+## Estructura principal
 
-## Transport
+- `src/` — interfaz, reproducción, escenas, editor y lógica visual.
+- `server.mjs` — backend HTTP de la Activity.
+- `cloudflare.mjs` — señalización con Cloudflare Realtime SFU.
+- `activity-controls.mjs` — estado compartido host/espectadores.
+- `decorations.mjs` — almacenamiento y validación de escenas.
+- `playback.mjs` — reproducción compartida de YouTube.
+- `relay/` — relay TCP/WebRTC.
+- `public/` — assets visuales y páginas públicas.
+- `tests/` — pruebas del comportamiento actual.
 
-SHIS Stream is Cloudflare-only. The Activity backend, browser viewer and Railway relay do not require LiveKit credentials or a LiveKit account. The previous LiveKit publisher/viewer paths and dependencies were removed from the active codebase.
+## Seguridad
 
-Older Android and standalone Switch-forwarder experiments remain in the companion repository only as historical code. New work targets SysDVR SHIS Direct + Railway relay + Cloudflare Realtime SFU.
-
-## Security notes
-
-- Do not commit Discord secrets, Cloudflare secrets, stream keys or editor passwords.
-- Ordinary direct visits to the production Activity are rejected; viewer entry is authorized through Discord.
-- Viewer authorization does not grant publishing rights.
-- Shared state writes are host-authorized on the server.
-- Public repository source code is not a substitute for keeping deployment secrets private.
-
-## Project status
-
-This repository is the active Discord Activity and backend for SHIS Stream. Public documentation intentionally describes only the current supported setup.
+- No expongas secretos de Discord, Cloudflare, `STREAM_KEY` ni `DECORATION_EDIT_KEY`.
+- El navegador no recibe el secreto de Cloudflare.
+- La Switch no contiene credenciales de Discord ni Cloudflare.
+- Las escrituras de estado compartido requieren autorización de host.
+- Las visitas directas a la Activity no sustituyen el acceso autorizado desde Discord.
