@@ -28,5 +28,6 @@ test('host credentials are scoped, expire and protect shared format and playback
   assert.equal((await call('/api/activity-controls?instance=one','GET',null,{'X-Host-Token':auth.token+'tampered'})).status,200);
   assert.equal((await (await call('/api/activity-controls?instance=one','GET',null,{'X-Host-Token':auth.token+'tampered'})).json()).host,false);
   now+=6*60*60*1000+1;assert.equal((await call('/api/activity-controls?instance=one','PUT',viewer,host)).status,403);
+  const reset=await (await call('/api/activity-controls?instance=one')).json();assert.equal(reset.revision,0);assert.notEqual(reset.epoch,initial.epoch);
  }finally{await new Promise(r=>server.close(r));}
 });

@@ -15,7 +15,7 @@ export function installActivityControls(app,authorize,{editKey,now=Date.now}={})
   const session=(req,res,next)=>{
     const id=instance(req);if(!validInstance(id))return res.status(400).json({error:'Actividad inválida'});
     for(const [id,room] of rooms)if(now()-room.touched>lifetime)rooms.delete(id);
-    if(!rooms.has(id)){if(rooms.size>=128)return res.status(503).json({error:'Inténtalo en unos minutos'});rooms.set(id,{aspect:'16:9',scene:'home',retro:'immersive',smoothing:true,revision:0});}
+    if(!rooms.has(id)){if(rooms.size>=128)return res.status(503).json({error:'Inténtalo en unos minutos'});rooms.set(id,{aspect:'16:9',scene:'home',retro:'immersive',smoothing:true,revision:0,epoch:crypto.randomUUID()});}
     req.controls=rooms.get(id);req.controls.touched=now();res.set('Cache-Control','no-store');next();
   };
   app.post('/api/host/auth',authorize,(req,res)=>{
