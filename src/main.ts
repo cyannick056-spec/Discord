@@ -697,5 +697,9 @@ if(!editorPreviewMode)youtubeRoom=new YouTubeRoom(async source=>{
   window.dispatchEvent(new Event('shis-media-layout-change'));
   await oldRoom?.disconnect();
   if(source==='switch' && config && discordAccessToken)await connectViewer(config.defaultStream);
-},()=>volume);
+},()=>volume,async url=>{
+  if(!discordSdk)throw new Error('Abre la actividad en Discord para abrir YouTube.');
+  const result=await discordSdk.commands.openExternalLink({url});
+  if(result.opened===false)throw new Error('Se canceló la apertura fuera de la actividad.');
+});
 if (!editorPreviewMode) boot();
