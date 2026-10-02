@@ -7,6 +7,7 @@ import express from 'express';
 import { AccessToken } from 'livekit-server-sdk';
 import { installDecorations } from './decorations.mjs';
 import { installCloudflare } from './cloudflare.mjs';
+import { installPlayback } from './playback.mjs';
 
 const app = express();
 const cloudflareMode = process.env.STREAM_PROVIDER === 'cloudflare';
@@ -15,9 +16,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, 'dist');
 
 app.disable('x-powered-by');
+app.use((_req,res,next)=>{res.set('Referrer-Policy','strict-origin-when-cross-origin');next();});
 app.use('/api/decorations', express.json({ limit: '16mb' }));
 app.use(express.json({ limit: '256kb' }));
 installCloudflare(app, requireActivityTicket);
+installPlayback(app, requireActivityTicket);
 app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
   directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),

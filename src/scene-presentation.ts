@@ -20,6 +20,7 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   stage.classList.toggle('free-room', home && !tiny || p?.style === 'custom');
   stage.classList.toggle('classic-room', home && !tiny && (!p?.tvModel || p.tvModel === 'original'));
   art.style.removeProperty('translate');
+  art.style.removeProperty('scale');
   art.style.removeProperty('transform');
   const base = getComputedStyle(art).transform, b = room.getBoundingClientRect(), a = art.getBoundingClientRect();
   const camera = resolvedCamera(p), tv = p?.tv, zoom = camera.zoom;
@@ -45,12 +46,21 @@ export function applyPresentation(p: Presentation | undefined, mood?: Mood) {
   image.style.objectFit = custom || p?.environment ? 'cover' : 'fill';
   image.style.objectPosition = 'center';
   applyScreenFraming();
+  if(stage.classList.contains('youtube-source')){
+    const screen=document.querySelector<HTMLElement>(home?'#homeScreenMount':'#arcadeScreen')!,glass=screen.getBoundingClientRect();
+    const gain=Math.max(1,200/glass.width,200/glass.height);
+    if(glass.width*gain>innerWidth-16 && innerWidth>=216){
+      const oldWidth=screen.offsetWidth,newWidth=(innerWidth-16)/gain/(glass.width/oldWidth);
+      screen.style.left=`${parseFloat(getComputedStyle(screen).left)+(oldWidth-newWidth)/2}px`;screen.style.width=`${newWidth}px`;
+    }
+    if(Number.isFinite(gain))art.style.scale=String(gain);
+  }
   if (home && !tiny) {
     const s = getComputedStyle(face), n = (key: string) => parseFloat(s.getPropertyValue('--' + key)) * 10;
     const glass = document.querySelector<HTMLElement>('#homeScreenMount')!;
     const body = `<rect x="${n('tv-body-x')}" y="${n('tv-body-y')}" width="${n('tv-body-w')}" height="${n('tv-body-h')}" rx="8" fill="white"/>`;
     const feet = `<rect x="${n('tv-feet-x')}" y="${n('tv-feet-y')}" width="${n('tv-feet-w')}" height="${n('tv-feet-h')}" fill="white"/>`;
-    const aperture = `<rect x="${glass.offsetLeft / face.offsetWidth * 1000}" y="${glass.offsetTop / face.offsetHeight * 1000}" width="${glass.offsetWidth / face.offsetWidth * 1000}" height="${glass.offsetHeight / face.offsetHeight * 1000}" rx="${p?.screen?.rounded === false ? 0 : 12}" fill="black"/>`;
+    const aperture = `<rect x="${glass.offsetLeft / face.offsetWidth * 1000}" y="${glass.offsetTop / face.offsetHeight * 1000}" width="${glass.offsetWidth / face.offsetWidth * 1000}" height="${glass.offsetHeight / face.offsetHeight * 1000}" rx="${stage.classList.contains('youtube-source') || p?.screen?.rounded === false ? 0 : 12}" fill="black"/>`;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" preserveAspectRatio="none"><defs><mask id="shape">${body}${feet}${aperture}</mask></defs><rect width="1000" height="1000" fill="white" mask="url(#shape)"/></svg>`;
     face.style.setProperty('--detached-mask', `url("data:image/svg+xml,${encodeURIComponent(svg)}")`);
   }
@@ -144,4 +154,13 @@ export function applyTvSupport() {
   const target = p.tvSupport === 'floor' ? p.environment ? { x: world.x + world.width * .57, y: world.y + world.height * .89 } : { x: background.left + background.width / 2, y: background.top + background.height * .87 } : supportContact(plane!);
   art.style.translate = `${target.x - center}px ${target.y - bottom}px`;
   window.dispatchEvent(new Event('shis-presentation-change'));
+}
+export function containYouTubePlayer(){
+  const stage=document.querySelector('#stage')!;if(!stage.classList.contains('youtube-source'))return;
+  const art=document.querySelector<HTMLElement>(stage.classList.contains('home-mode')?'#tvScene':'#arcadeScene')!;
+  const g=document.querySelector('#player')!.getBoundingClientRect();
+  const dx=g.x<8?8-g.x:g.right>innerWidth-8?innerWidth-8-g.right:0;
+  const dy=g.y<8?8-g.y:g.bottom>innerHeight-68?innerHeight-68-g.bottom:0;
+  if(!dx && !dy)return;
+  const old=getComputedStyle(art).translate.split(' ').map(parseFloat);art.style.translate=`${(old[0]||0)+dx}px ${(old[1]||0)+dy}px`;
 }

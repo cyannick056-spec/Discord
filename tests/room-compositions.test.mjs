@@ -15,7 +15,7 @@ test('complete compositions replace only their own view, reuse pieces and preser
  const d={items:[personal]};prepareRealRoom(d,'cozy-night');const beforeB=structuredClone(d.presentations[b]),beforePersonal=structuredClone(personal);
  for(const id of Object.keys(compositions)) {
   assert.equal(prepareRealRoom(d,id,a),true);assert.deepEqual(d.presentations[b],beforeB);assert.deepEqual(d.items.find(i=>i.id===personal.id),beforePersonal);
-  const visible=d.items.filter(i=>i.roomKit && !i.placements[a]?.hidden);assert.equal(visible.length,8);assert.ok(visible.every(i=>i.roomKit===id));
+  const visible=d.items.filter(i=>i.roomKit && !i.placements[a]?.hidden);assert.equal(visible.length,compositions[id].pieces.length);assert.ok(visible.every(i=>i.roomKit===id));
   assert.ok(visible.some(i=>i.category==='lamp'&&i.placements[a].light.intensity>0));assert.ok(visible.some(i=>i.placements[a].contactShadow.opacity>0));
   assert.ok(d.presentations[a].mood.depth>0);assert.equal(d.presentations[a].rain,undefined);assert.equal(d.presentations[a].tvSupport,'cabinet');
   for(const group of compositionRestGroups(d,a))assert.ok(d.items.some(i=>i.id===group.supportId));
