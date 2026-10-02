@@ -1,6 +1,6 @@
 # SHIS Stream — Discord Activity
 
-SHIS Stream is a private-use Discord Activity for watching a Nintendo Switch stream together inside a voice call. The current production path uses a customized SysDVR sender on the Switch, a small Railway relay, Cloudflare Realtime SFU and the Discord Activity UI.
+SHIS Stream is a private-use Discord Activity for watching a Nintendo Switch stream together inside a voice call. The production path uses a customized SysDVR sender on the Switch, a small Railway relay, Cloudflare Realtime SFU and the Discord Activity UI.
 
 ## Current architecture
 
@@ -17,7 +17,7 @@ Discord Activity
 Viewers in the same Activity
 ```
 
-The Switch never needs Discord or Cloudflare credentials. It only knows the TCP relay endpoint, stream name and a private stream key. The relay authenticates that sender and publishes the media through Cloudflare Realtime SFU. The Activity authorizes viewers with Discord and subscribes them to the current publication.
+The Switch never needs Discord or Cloudflare credentials. It only knows the TCP relay endpoint, stream name and a private stream key. The relay authenticates that sender and publishes H.264/Opus media through Cloudflare Realtime SFU. The Activity authorizes viewers with Discord and subscribes them to the current Cloudflare publication.
 
 The customized Switch sender lives in [`cyannick056-spec/Shis-Stream`](https://github.com/cyannick056-spec/Shis-Stream).
 
@@ -50,18 +50,16 @@ Current Activity/server variables:
 
 - `DISCORD_CLIENT_ID` — Discord application/client ID.
 - `DISCORD_CLIENT_SECRET` — Discord OAuth client secret; server-side only.
-- `STREAM_PROVIDER=cloudflare` — current production transport.
 - `CLOUDFLARE_SFU_APP_ID` — Cloudflare Realtime SFU application ID.
 - `CLOUDFLARE_SFU_APP_SECRET` — Cloudflare Realtime SFU secret; server-side only.
 - `STREAM_KEY` — private key shared with the Switch relay path.
 - `DECORATION_EDIT_KEY` — separate host/editor password.
 - `DECORATION_DATA_DIR` — persistent decoration storage directory.
-- `DEFAULT_STREAM` — logical stream name.
+- `DEFAULT_STREAM` — logical stream name shown by the Activity.
 - `PORT` — Activity HTTP port.
 
 Relay variables:
 
-- `STREAM_PROVIDER=cloudflare`
 - `SHIS_ACTIVITY_URL` — HTTPS origin of the Activity server used for authenticated Cloudflare signaling.
 - `STREAM_KEY` — must match the Switch configuration.
 - `DEFAULT_STREAM` — logical stream name.
@@ -97,11 +95,11 @@ The active sender is **SysDVR SHIS Direct v0.6**. Build/install instructions and
 
 The Switch configuration uses the relay TCP proxy host/port, a stream name and a private `stream_key`. Real endpoints and secrets are intentionally not stored in either public repository.
 
-## Legacy compatibility
+## Transport
 
-Some LiveKit compatibility code remains in the project as an older transport/fallback path, and the server still contains legacy token endpoints used by previous sender experiments. They are not the current production path.
+SHIS Stream is Cloudflare-only. The Activity backend, browser viewer and Railway relay do not require LiveKit credentials or a LiveKit account. The previous LiveKit publisher/viewer paths and dependencies were removed from the active codebase.
 
-Older Android and standalone Switch-forwarder experiments are kept in the companion repository for reference only. New work should target SysDVR SHIS Direct + Railway relay + Cloudflare Realtime SFU.
+Older Android and standalone Switch-forwarder experiments remain in the companion repository only as historical code. New work targets SysDVR SHIS Direct + Railway relay + Cloudflare Realtime SFU.
 
 ## Security notes
 
@@ -113,4 +111,4 @@ Older Android and standalone Switch-forwarder experiments are kept in the compan
 
 ## Project status
 
-This repository is the active Discord Activity and backend for SHIS Stream. Public documentation intentionally describes only the current supported setup. Old one-off asset-generation notes, debugging diaries and retired deployment instructions are not kept in the public documentation.
+This repository is the active Discord Activity and backend for SHIS Stream. Public documentation intentionally describes only the current supported setup.

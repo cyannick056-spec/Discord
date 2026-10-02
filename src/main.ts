@@ -1,7 +1,6 @@
 import {beginSceneTransition} from './scene-transition';
 import {canControlActivity,initActivityControls,changeActivityControls} from './activity-controls';
 import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded-app-sdk';
-import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import { initDecorations, setDecorationViewers, requestAppClose } from './decorations';
 import { CloudflareViewer } from './cloudflare';
 import { initRoomLighting } from './lighting';
@@ -13,13 +12,6 @@ type AppConfig = {
   discordClientId: string;
   discordAuthAvailable: boolean;
   defaultStream: string;
-  streamProvider: 'livekit' | 'cloudflare';
-};
-
-type ViewerCredentials = {
-  serverUrl: string;
-  token: string;
-  roomName: string;
 };
 
 const statusText = document.querySelector<HTMLSpanElement>('#statusText')!;
@@ -54,7 +46,6 @@ const volumePanel = document.querySelector<HTMLDivElement>('#volumePanel')!;
 const volumeSlider = document.querySelector<HTMLInputElement>('#volumeSlider')!;
 const volumeValue = document.querySelector<HTMLOutputElement>('#volumeValue')!;
 
-let room: Room | null = null;
 let cloudflareViewer: CloudflareViewer | null = null;
 let config: AppConfig | null = null;
 let discordSdk: DiscordSDK | null = null;
@@ -62,8 +53,6 @@ let discordAccessToken = '';
 let retryDiscordAuthorization: (() => Promise<void>) | null = null;
 let participantOrder: string[] = [];
 let signalLostTimer: ReturnType<typeof setTimeout> | null = null;
-let activeVideoTrack: RemoteTrack | null = null;
-let activeVideoPublisherId: string | null = null;
 let activeVideoElement: HTMLVideoElement | null = null;
 let youtubeRoom:YouTubeRoom|null=null;
 let currentMediaSource:'switch'|'youtube'='switch';
@@ -212,8 +201,6 @@ function drawSignalSweeps(now: number) {
   const { width, height } = signalSweep;
   const data = sweepFrame.data;
   data.fill(0);
-  // Exactly the thin moving grain band from the no-signal canvas. The wider
-  // sweep uses that screen's CSS signalRoll animation and its 4.8s period.
   const band = Math.floor((now / 31) % height);
   for (let y = Math.max(0, band - 2); y < Math.min(height, band + 3); y++) {
     const strength = 1 - Math.abs(y - band) / 3;
@@ -287,8 +274,6 @@ async function initDiscord(clientId: string) {
     authState = 'sí';
   }
   const showParticipants = () => {
-    // A voice call can outlive the Activity. Only its instance roster belongs
-    // on the TV; the authenticated local viewer covers mobile roster gaps.
     const byId = new Map<string, Participant>();
     for (const person of [...activityPeople, ...(selfUser ? [selfUser] : [])]) {
       if (!person.bot && !byId.has(person.id)) byId.set(person.id, person);
@@ -308,8 +293,6 @@ async function initDiscord(clientId: string) {
     viewerStatus.title = `En esta Activity: ${activityOk ? activityPeople.length : 'lista no disponible'}.`;
     viewerRetry.hidden = authState !== '×';
   };
-  // The gate already verified this viewer; show their avatar even while the
-  // Activity roster is still being requested from Discord.
   showParticipants();
   const onActivityUpdate = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
     activityOk = true;
@@ -376,7 +359,7 @@ async function initDiscord(clientId: string) {
   retryDiscordAuthorization = authenticateDiscord;
   viewerRetry.addEventListener('click', () => {
     void authenticateDiscord().then(() => {
-      if (currentMediaSource==='switch' && discordAccessToken && config && !room && !cloudflareViewer) void connectViewer(config.defaultStream).catch(showConnectionError);
+      if (currentMediaSource==='switch' && discordAccessToken && config && !cloudflareViewer) void connectViewer(config.defaultStream).catch(showConnectionError);
     });
   });
   let refreshInFlight = false;
@@ -387,7 +370,6 @@ async function initDiscord(clientId: string) {
     try {
       const activity = await discordSdk!.commands.getActivityInstanceConnectedParticipants();
       activityOk = true;
-      // An event received during this request is newer than its snapshot.
       if (startedRevision === rosterRevision) {
         activityPeople = activity.participants.filter((person) => !person.bot);
       }
@@ -401,8 +383,6 @@ async function initDiscord(clientId: string) {
     showParticipants();
     refreshInFlight = false;
   };
-  // A client may not support the update event. The initial query and periodic
-  // refresh still work independently of that subscription.
   void discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, onActivityUpdate)
     .catch((error) => console.warn('No se pudo seguir cambios de participantes:', error));
   void refreshParticipants();
@@ -413,67 +393,12 @@ async function initDiscord(clientId: string) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshParticipants(); });
 }
 
-function getLiveKitConnectUrl(serverUrl: string) {
-  if (!isInsideDiscord()) return serverUrl;
-
-  const proxyUrl = new URL('/livekit', window.location.origin);
-  proxyUrl.protocol = serverUrl.startsWith('ws:') ? 'ws:' : 'wss:';
-  return proxyUrl.toString().replace(/\/$/, '');
-}
-
 function clearVideo() {
   if(currentMediaSource==='youtube')return;
-  activeVideoTrack?.detach().forEach((element) => element.remove());
-  activeVideoTrack = null;
-  activeVideoPublisherId = null;
   activeVideoElement = null;
   videoMount.replaceChildren();
   signalLost();
 }
-
-function attachTrack(track: RemoteTrack, publisherId: string) {
-  if(currentMediaSource==='youtube')return;
-  const element = track.attach();
-  element.autoplay = true;
-
-  if (track.kind === Track.Kind.Video) {
-    const video = element as HTMLVideoElement;
-    video.setAttribute('playsinline', 'true');
-    activeVideoTrack?.detach().forEach((old) => old.remove());
-    activeVideoTrack = track;
-    activeVideoPublisherId = publisherId;
-    activeVideoElement = video;
-    lastDecodedFrameAt = performance.now();
-    videoStalled = false;
-    videoMount.replaceChildren(video);
-    setStatus('SEÑAL DETECTADA…');
-    if ('requestVideoFrameCallback' in video) {
-      const onFrame: VideoFrameRequestCallback = (now) => {
-        if (activeVideoElement !== video) return;
-        lastDecodedFrameAt = now;
-        videoStalled = false;
-        if (!stage.classList.contains('has-signal')) {
-          setLive(true);
-          setStatus('');
-        }
-        video.requestVideoFrameCallback(onFrame);
-      };
-      video.requestVideoFrameCallback(onFrame);
-    } else {
-      // Older embedded browsers rely on track disconnect and relay timeout.
-      setLive(true);
-      setStatus('');
-    }
-  } else if (track.kind === Track.Kind.Audio) {
-    element.style.display = 'none';
-    element.volume = volume / 100;
-    audioMount.appendChild(element);
-    element.play().then(() => { audioButton.hidden = true; }).catch(() => {
-      audioButton.hidden = false;
-    });
-  }
-}
-
 
 function attachCloudflareTrack(kind: 'video' | 'audio', mediaTrack: MediaStreamTrack) {
   if(currentMediaSource==='youtube')return;
@@ -492,8 +417,6 @@ function attachCloudflareTrack(kind: 'video' | 'audio', mediaTrack: MediaStreamT
   element.autoplay = true;
   element.srcObject = new MediaStream([mediaTrack]);
   element.setAttribute('playsinline', 'true');
-  activeVideoTrack = null;
-  activeVideoPublisherId = 'cloudflare';
   activeVideoElement = element;
   lastDecodedFrameAt = performance.now();
   videoStalled = false;
@@ -535,71 +458,40 @@ async function connectViewer(stream: string) {
     clearTimeout(signalLostTimer);
     signalLostTimer = null;
   }
+
+  if (cloudflareViewer) {
+    cloudflareViewer.stop();
+    cloudflareViewer = null;
+  }
+  audioMount.replaceChildren();
+  activeVideoElement = null;
+  videoMount.replaceChildren();
+  audioButton.hidden = true;
+
   retryButton.hidden = true;
   setStatus('SINTONIZANDO…');
   setLive(false);
+  roomText.textContent = `shis-${stream}`;
 
-  if (room) {
-    const previousRoom=room;room=null;
-    await previousRoom.disconnect();
-  }
-
-  if(epoch!==streamEpoch)return;
-  if (config?.streamProvider === 'cloudflare') {
-    if (cloudflareViewer) {cloudflareViewer.stop();audioMount.replaceChildren();clearVideo();}
-    roomText.textContent = `shis-${config.defaultStream}`;
-    cloudflareViewer = new CloudflareViewer(
-      () => discordAccessToken,
-      (kind,track) => {if(epoch===streamEpoch)attachCloudflareTrack(kind,track);},
-      () => { if(epoch!==streamEpoch || currentMediaSource==='youtube')return; audioMount.replaceChildren(); audioButton.hidden = true; clearVideo(); },
-      error => {if(epoch===streamEpoch)showConnectionError(error);},
-    );
-    await cloudflareViewer.start();
-    if(epoch!==streamEpoch)return;
-    if (!activeVideoElement) setStatus('BUSCANDO SEÑAL…');
+  const viewer = new CloudflareViewer(
+    () => discordAccessToken,
+    (kind,track) => {if(epoch===streamEpoch)attachCloudflareTrack(kind,track);},
+    () => {
+      if(epoch!==streamEpoch || currentMediaSource==='youtube' || cloudflareViewer!==viewer)return;
+      audioMount.replaceChildren();
+      audioButton.hidden = true;
+      clearVideo();
+    },
+    error => {if(epoch===streamEpoch && cloudflareViewer===viewer)showConnectionError(error);},
+  );
+  cloudflareViewer = viewer;
+  await viewer.start();
+  if(epoch!==streamEpoch) {
+    viewer.stop();
+    if (cloudflareViewer===viewer) cloudflareViewer=null;
     return;
   }
-
-  const response = await fetch(`/api/viewer-token?stream=${encodeURIComponent(stream)}`, {
-    headers: { Authorization: `Bearer ${discordAccessToken}` }, cache: 'no-store',
-  });
-  const body = await response.json().catch(() => ({}));
-  if(epoch!==streamEpoch)return;
-  if (!response.ok) {
-    if (response.status === 401) {
-      discordAccessToken = '';
-      try { sessionStorage.removeItem('shis-discord-access'); } catch { /* No storage. */ }
-    }
-    throw new Error(body.error || `HTTP ${response.status}`);
-  }
-  const credentials = body as ViewerCredentials;
-  roomText.textContent = credentials.roomName;
-
-  const nextRoom = new Room({ adaptiveStream: false });
-  room = nextRoom;
-
-  nextRoom.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-    if (room === nextRoom) attachTrack(track, participant.identity);
-  });
-  nextRoom.on(RoomEvent.TrackUnsubscribed, (track) => {
-    track.detach().forEach((element) => element.remove());
-    if (track.kind === Track.Kind.Audio) audioButton.hidden = true;
-    if (room === nextRoom && track === activeVideoTrack) clearVideo();
-  });
-  nextRoom.on(RoomEvent.ParticipantConnected, () => {
-    if (videoMount.childElementCount === 0) setStatus('SEÑAL DETECTADA…');
-  });
-  nextRoom.on(RoomEvent.ParticipantDisconnected, (participant) => {
-    if (room === nextRoom && participant.identity === activeVideoPublisherId) clearVideo();
-  });
-  nextRoom.on(RoomEvent.Disconnected, () => {
-    if (room === nextRoom) clearVideo();
-  });
-
-  const connectUrl = getLiveKitConnectUrl(credentials.serverUrl);
-  await nextRoom.connect(connectUrl, credentials.token, { autoSubscribe: true });
-  if(epoch!==streamEpoch){await nextRoom.disconnect();return;}
-  if (videoMount.childElementCount === 0) setStatus('BUSCANDO SEÑAL…');
+  if (!activeVideoElement) setStatus('BUSCANDO SEÑAL…');
 }
 
 function showConnectionError(error: unknown) {
@@ -671,10 +563,7 @@ audioButton.addEventListener('click', async () => {
   if(currentMediaSource==='youtube'){youtubeRoom?.activate();audioButton.hidden=true;return;}
   const audioElements = [...audioMount.querySelectorAll('audio')];
   if (audioElements.length === 0) return;
-  const results = await Promise.allSettled([
-    ...audioElements.map((element) => element.play()),
-    room?.startAudio() ?? Promise.resolve(),
-  ]);
+  const results = await Promise.allSettled(audioElements.map((element) => element.play()));
   audioButton.hidden = results.every((result) => result.status === 'fulfilled');
   if (!audioButton.hidden) audioButton.title = 'El audio sigue bloqueado; toca de nuevo para activarlo';
 });
@@ -708,7 +597,6 @@ initActivityControls(state=>{
   if(retroLevel!==state.retro)setRetroLevel(state.retro);
   if(smoothing!==state.smoothing)setSmoothing(state.smoothing);
 });
-// The owner can authenticate without adding a third spectator control.
 let hostPress:ReturnType<typeof setTimeout>|undefined,pressPoint:{x:number;y:number}|undefined;
 const cancelHostPress=()=>{clearTimeout(hostPress);hostPress=undefined;};
 player.addEventListener('pointerdown',event=>{
@@ -725,13 +613,12 @@ if(!editorPreviewMode)youtubeRoom=new YouTubeRoom(async source=>{
   stage.classList.toggle('youtube-source',source==='youtube');
   updateHostControls();
   if(signalLostTimer){clearTimeout(signalLostTimer);signalLostTimer=null;}
-  const oldRoom=room;room=null;cloudflareViewer?.stop();cloudflareViewer=null;
-  activeVideoTrack?.detach().forEach(el=>el.remove());activeVideoTrack=null;activeVideoPublisherId=null;activeVideoElement=null;
+  cloudflareViewer?.stop();cloudflareViewer=null;
+  activeVideoElement=null;
   videoMount.replaceChildren();audioMount.replaceChildren();audioButton.hidden=true;retryButton.hidden=true;
   document.querySelector<HTMLElement>('#mediaNotice')!.hidden=true;
   setLive(source==='youtube');setStatus('');roomText.textContent='';
   window.dispatchEvent(new Event('shis-media-layout-change'));
-  await oldRoom?.disconnect();
   if(source==='switch' && config && discordAccessToken)await connectViewer(config.defaultStream);
 },()=>volume,async url=>{
   if(!discordSdk)throw new Error('Abre la actividad en Discord para abrir YouTube.');

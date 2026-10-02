@@ -4,14 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import express from 'express';
-import { AccessToken } from 'livekit-server-sdk';
 import { installDecorations } from './decorations.mjs';
 import { installCloudflare } from './cloudflare.mjs';
 import { installPlayback } from './playback.mjs';
 import { installActivityControls } from './activity-controls.mjs';
 
 const app = express();
-const cloudflareMode = process.env.STREAM_PROVIDER === 'cloudflare';
 const port = Number(process.env.PORT || 3000);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.join(__dirname, 'dist');
@@ -43,10 +41,6 @@ function normalizeStream(value) {
     .replace(/[^a-zA-Z0-9_-]/g, '-')
     .slice(0, 48);
   return stream || 'cris';
-}
-
-function roomFor(stream) {
-  return `shis-${normalizeStream(stream)}`;
 }
 
 function sameSecret(a, b) {
@@ -84,22 +78,8 @@ function requireActivityTicket(req, res, next) {
   res.set('Cache-Control', 'no-store').status(401).json({ error: 'Abre Shis Stream desde Discord' });
 }
 
-async function mintToken({ roomName, identity, publish, subscribe, ttl = '6h' }) {
-  const apiKey = required('LIVEKIT_API_KEY');
-  const apiSecret = required('LIVEKIT_API_SECRET');
-  const token = new AccessToken(apiKey, apiSecret, { identity, ttl });
-  token.addGrant({
-    roomJoin: true,
-    room: roomName,
-    canPublish: publish,
-    canSubscribe: subscribe,
-    canPublishData: false,
-  });
-  return token.toJwt();
-}
-
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, service: 'shis-stream' });
+  res.json({ ok: true, service: 'shis-stream', streamProvider: 'cloudflare' });
 });
 
 app.get('/api/config', (_req, res) => {
@@ -108,7 +88,6 @@ app.get('/api/config', (_req, res) => {
     discordClientId: process.env.DISCORD_CLIENT_ID || '',
     discordAuthAvailable: Boolean(process.env.DISCORD_CLIENT_SECRET),
     defaultStream: normalizeStream(process.env.DEFAULT_STREAM || 'cris'),
-    streamProvider: cloudflareMode ? 'cloudflare' : 'livekit',
   });
 });
 
@@ -146,75 +125,6 @@ app.post('/api/discord-token', async (req, res) => {
   }
 });
 
-app.get('/api/publisher-token', async (req, res) => {
-  if (cloudflareMode) return res.status(410).json({ error: 'Usa Cloudflare SFU' });
-  try {
-    const configuredKey = required('STREAM_KEY');
-    if (!sameSecret(req.get('X-Stream-Key'), configuredKey)) {
-      return res.status(401).json({ error: 'Clave de transmisión incorrecta' });
-    }
-
-    const stream = normalizeStream(req.query.stream);
-    const roomName = roomFor(stream);
-    const token = await mintToken({
-      roomName,
-      identity: `switch-${crypto.randomUUID()}`,
-      publish: true,
-      subscribe: false,
-    });
-
-    res.set('Cache-Control', 'no-store');
-    res.json({ serverUrl: required('LIVEKIT_URL'), token, roomName });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Server error' });
-  }
-});
-
-app.get('/api/viewer-token', async (req, res) => {
-  if (cloudflareMode) return res.status(410).json({ error: 'Usa Cloudflare SFU' });
-  res.set('Cache-Control', 'no-store');
-  if (!process.env.DISCORD_CLIENT_ID || !process.env.DISCORD_CLIENT_SECRET) {
-    return res.status(503).json({ error: 'La autorización de Discord no está configurada' });
-  }
-  const authorization = req.get('Authorization') || '';
-  const accessToken = /^Bearer ([A-Za-z0-9._~-]+)$/.exec(authorization)?.[1];
-  if (!accessToken) return res.status(401).json({ error: 'Abre la actividad en Discord para ver la transmisión' });
-  try {
-    // Verify the viewer with Discord on the server. URL parameters, iframe
-    // headers and the client-side SDK alone are not proof of identity.
-    const profileResponse = await fetch('https://discord.com/api/v10/oauth2/@me', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!profileResponse.ok) {
-      return res.status(401).json({ error: 'La autorización de Discord caducó; vuelve a entrar a la actividad' });
-    }
-    const authorizationInfo = await profileResponse.json();
-    if (authorizationInfo.application?.id !== process.env.DISCORD_CLIENT_ID ||
-        !authorizationInfo.scopes?.includes('identify') ||
-        typeof authorizationInfo.user?.id !== 'string' ||
-        !/^\d{15,22}$/.test(authorizationInfo.user.id)) {
-      return res.status(401).json({ error: 'No se pudo verificar tu perfil de Discord' });
-    }
-    // Viewers cannot create arbitrary LiveKit rooms by changing the URL.
-    const stream = normalizeStream(process.env.DEFAULT_STREAM || 'cris');
-    const roomName = roomFor(stream);
-    const token = await mintToken({
-      roomName,
-      identity: `viewer-${crypto.randomUUID()}`,
-      publish: false,
-      subscribe: true,
-      ttl: '2m',
-    });
-
-    res.json({ serverUrl: required('LIVEKIT_URL'), token, roomName });
-  } catch (error) {
-    console.error('Viewer authorization failed:', error);
-    res.status(502).json({ error: 'No se pudo verificar el acceso con Discord' });
-  }
-});
-
 if (existsSync(distDir)) {
   const serveActivityEntry = (req, res) => {
     res.set('Cache-Control', 'no-store');
@@ -238,7 +148,7 @@ app.use((req, res) => {
 });
 
 const server = app.listen(port, '0.0.0.0', () => {
-  console.log(`SHIS Stream Activity listening on :${port}`);
+  console.log(`SHIS Stream Activity listening on :${port} (Cloudflare SFU)`);
 });
 
 process.once('SIGTERM', () => {
