@@ -1,4 +1,5 @@
 import {defaultLightResponse,lightResponse} from './light-response';
+import {resizeSprite,sampleSpriteAlpha} from './sprite-rendering';
 // Background illumination belongs to the wall/floor behind solid furniture.
 // Reuse the rendered sprite alpha, including its crop and real leg openings.
 const masks=new WeakMap<CanvasRenderingContext2D,{key:string;sprites:(HTMLCanvasElement|HTMLImageElement)[]}>();
@@ -18,7 +19,7 @@ export function paintFurnitureOcclusion(ctx: CanvasRenderingContext2D, scene: DO
     let sprite=spriteFor(box);
     if(sprite instanceof HTMLImageElement) {
       if(!sprite.complete || !sprite.naturalWidth) continue;
-      let canvas=photoMasks.get(sprite);if(!canvas){canvas=document.createElement('canvas');const ratio=Math.min(1,400/sprite.naturalWidth,600/sprite.naturalHeight);canvas.width=Math.max(1,Math.round(sprite.naturalWidth*ratio));canvas.height=Math.max(1,Math.round(sprite.naturalHeight*ratio));canvas.getContext('2d')!.drawImage(sprite,0,0,canvas.width,canvas.height);photoMasks.set(sprite,canvas);}sprite=canvas;
+      let canvas=photoMasks.get(sprite);if(!canvas){const ratio=Math.min(1,400/sprite.naturalWidth,600/sprite.naturalHeight);canvas=resizeSprite(sprite,Math.max(1,Math.round(sprite.naturalWidth*ratio)),Math.max(1,Math.round(sprite.naturalHeight*ratio)));photoMasks.set(sprite,canvas);}sprite=canvas;
     }
     if(!sprite || !box.offsetWidth || !box.offsetHeight) continue;
     const style=getComputedStyle(box), parent=box.parentElement!.getBoundingClientRect();
@@ -56,8 +57,7 @@ export function paintFurnitureOcclusion(ctx: CanvasRenderingContext2D, scene: DO
           const px=(left+x+.5-ox)/scale,py=(top+y+.5-oy)/scale,den=inverse[6]*px+inverse[7]*py+inverse[8];
           const u=((inverse[0]*px+inverse[1]*py+inverse[2])/den+w/2)/w,v=((inverse[3]*px+inverse[4]*py+inverse[5])/den+h/2)/h;
           if(u<crop[3]/100 || u>=1-crop[1]/100 || v<crop[0]/100 || v>=1-crop[2]/100) continue;
-          const sx=Math.min(sprite.width-1,Math.floor(u*sprite.width)),sy=Math.min(sprite.height-1,Math.floor(v*sprite.height));
-          if(sx>=0 && sy>=0) pixels.data[(y*bitmap.width+x)*4+3]=source[(sy*sprite.width+sx)*4+3];
+          pixels.data[(y*bitmap.width+x)*4+3]=sampleSpriteAlpha(source,sprite.width,sprite.height,u*sprite.width-.5,v*sprite.height-.5);
         }
         bitmap.getContext('2d')!.putImageData(pixels,0,0);ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(bitmap,left,top);
       }

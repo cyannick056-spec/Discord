@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import {finishPixels,isSolidObject} from '../src/object-finish.ts';
 import {edgeColors} from '../src/tv-light-detail.ts';
 import {validMood,validStudioPlacement} from '../studio-validation.mjs';
+import {sampleSpriteAlpha} from '../src/sprite-rendering.ts';
+
+test('projected light masks interpolate silhouette coverage without filling holes',()=>{
+  const pixels=new Uint8ClampedArray([0,0,0,0,0,0,0,255,0,0,0,0,0,0,0,255]);
+  assert.equal(sampleSpriteAlpha(pixels,2,2,.5,.5),127.5);
+  assert.equal(sampleSpriteAlpha(pixels,2,2,1,0),255);
+  assert.equal(sampleSpriteAlpha(pixels,2,2,0,0),0);
+  assert.equal(sampleSpriteAlpha(pixels,2,2,-1,0),0);
+});
 
 test('solid figures preserve cutouts and soft edges while tint preserves their texture',()=>{
   const pixels=new Uint8ClampedArray([160,120,80,210,80,60,40,190,9,7,5,0,40,30,20,45]);
