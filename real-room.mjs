@@ -1,5 +1,6 @@
 import { roomIds, props } from './room-catalog.mjs';
 import { MAX_SCENE_ITEMS } from './material-catalog.mjs';
+import { applyRoomComposition, compositions } from './room-compositions.mjs';
 export const homeKeys = ['home-landscape-16x9', 'home-landscape-4x3', 'home-portrait-16x9', 'home-portrait-4x3', 'home-window-16x9', 'home-window-4x3'];
 const starterAssets = ['cabinet', 'mushroom-lamp', 'plant-small', 'lavender-light'];
 export function realRoomPlacement(asset, portrait) {
@@ -19,6 +20,13 @@ export function defaultRealPresentation(key, environment = 'cozy-night') {
 }
 export function prepareRealRoom(room,id,viewKey) {
   if(!roomIds.has(id)) return false;
+  if(compositions[id]) {
+    const keys=viewKey?[viewKey]:homeKeys;
+    // Preflight all keys on a copy so a full library cannot partially apply.
+    const trial=structuredClone(room);
+    for(const key of keys) if(!applyRoomComposition(trial,id,key)) return false;
+    room.items=trial.items;room.presentations=trial.presentations;return true;
+  }
   const keys = viewKey ? [viewKey] : homeKeys;
   const missing = starterAssets.filter(asset => !room.items.some(i=>asset==='lavender-light' ? i.kind==='light' && i.name==='Luz lavanda detrás de la TV' : i.roomKit===id && i.asset===asset));
   if(room.items.filter(i=>i.kind!=='viewer-slot').length+missing.length > MAX_SCENE_ITEMS) return false;

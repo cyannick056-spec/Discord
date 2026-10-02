@@ -973,10 +973,13 @@ export function initDecorations() {
       if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'decor-rest-on' || !lastRender) return;
       const ids = Array.isArray(event.data.ids) ? event.data.ids.filter((id: unknown) => typeof id === 'string') : [];
       if (typeof event.data.supportId !== 'string') return;
-      const { manifest, sceneName, view } = lastRender;
+      const render = lastRender;
+      const { manifest, sceneName, view } = render;
+      const restKey = key(sceneName,view,currentAspect());
       const values = await restOnSurface(manifest, key(sceneName,view,currentAspect()), ids, event.data.supportId,
-        manifest.presentations?.[key(sceneName,view,currentAspect())], p => basis(p,sceneName,view), (box,p) => position(box,p,sceneName,view));
-      parent.postMessage({ type:'decor-rested', values }, location.origin);
+        manifest.presentations?.[key(sceneName,view,currentAspect())], p => basis(p,sceneName,view), (box,p) => position(box,p,sceneName,view), event.data.authored === true);
+      if(lastRender !== render) return;
+      parent.postMessage({ type:'decor-rested', values, key:restKey, authored:event.data.authored === true }, location.origin);
     });
     stage.classList.add('preview-mode');
     initPreviewGestures();
@@ -1015,7 +1018,7 @@ export function initDecorations() {
     convert: p => convertAnchor(p, 'scene'), command: editorCommand, status,
     create: (item) => { if (draft.items.filter(i => i.kind !== 'viewer-slot').length >= MAX_SCENE_ITEMS) return status(`Máximo ${MAX_SCENE_ITEMS} piezas; combina muebles e imágenes libremente.`);
       item.placements[activeKey()] ??= defaultPlacement(); draft.items.push(item); selectItem(item.id); },
-    rest: (ids, supportId) => { sendPreview(); preview.contentWindow?.postMessage({ type:'decor-rest-on',ids,supportId },location.origin); },
+    rest: (ids, supportId, authored) => { if(!authored) sendPreview(); preview.contentWindow?.postMessage({ type:'decor-rest-on',ids,supportId,authored },location.origin); },
     compare: value => { compareSaved = value; sendPreview(undefined, false); },
     test: value => { previewTest = value; sendPreview(undefined, false); },
     asset: authorizedUrl, resize: sizePreview,
@@ -1258,13 +1261,13 @@ export function initDecorations() {
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
     if (event.data?.type === 'decor-rested') {
-      if (compareSaved || !Array.isArray(event.data.values)) return;
+      if (compareSaved || !Array.isArray(event.data.values) || event.data.key && event.data.key !== activeKey()) return;
       for (const value of event.data.values) {
         const p = draft.items.find(i=>i.id===value.id)?.placements[activeKey()];
         if (!p || p.locked || ![value.x,value.y].every(Number.isFinite)) continue;
         p.x=clamp(value.x,-30,130);p.y=clamp(value.y,-35,145);
       }
-      history.record(draft,'rest-on');history.endGroup();refreshFields();sendPreview(undefined,false);status('Objeto apoyado. Puedes moverlo y ajustar su perspectiva.');return;
+      history.record(draft,event.data.authored ? 'composition' : 'rest-on');if(!event.data.authored) history.endGroup();refreshFields();if(event.data.authored) updateHistoryButtons();else {sendPreview(undefined,false);status('Objeto apoyado. Puedes moverlo y ajustar su perspectiva.');}return;
     }
     if (event.data?.type === 'presentation-change') {
       if (compareSaved || !['tv', 'camera', 'screen'].includes(event.data.kind)) return;
