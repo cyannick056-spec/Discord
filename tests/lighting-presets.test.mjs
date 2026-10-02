@@ -10,6 +10,7 @@ test('night lighting presets preserve geometry, other views and personalized dec
   for(const preset of lightingPresets) {
     const d=structuredClone(fixture);assert.equal(applyLightingPreset(d,a,preset.id),true);
     assert.deepEqual(d.presentations[b],fixture.presentations[b]);assert.deepEqual(d.items[1],fixture.items[1]);
+    assert.equal(d.items.length,fixture.items.length);
     assert.deepEqual(d.presentations[a].tv,fixture.presentations[a].tv);assert.deepEqual(d.presentations[a].camera,fixture.presentations[a].camera);
     assert.deepEqual(d.presentations[a].reflection,fixture.presentations[a].reflection);assert.equal(d.presentations[a].tvModel,'crt-wood');
     assert.equal(d.items[0].placements[a].hidden,true);assert.equal(d.items[0].placements[b].hidden,false);assert.equal(validMood(d.presentations[a].mood),true);

@@ -1278,6 +1278,10 @@
 .scene-edit-outline[data-screen=true]::before { content: "Pantalla · arrastra para ajustar"; }
 
 .lamp-animation { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; mix-blend-mode:screen; }
+.studio-color-palette { grid-column:1/-1; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.studio-color-palette button { display:flex; align-items:center; gap:7px; text-align:left; font-size:12px; min-height:34px; }
+.studio-color-palette button span { flex-shrink:0; width:17px; height:17px; border-radius:50%; border:1px solid #ffffff45; }
+.studio-color-palette button[aria-pressed=true] { outline:2px solid #b9c9e1; outline-offset:-2px; }
 .studio-lamp-gallery { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
 .studio-lamp-gallery button { display:flex; align-items:center; gap:6px; text-align:left; }
 .studio-lamp-gallery img { width:30px; height:46px; object-fit:contain; }
