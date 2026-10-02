@@ -4,6 +4,17 @@ import express from 'express';
 import {parseYouTubeLink,playbackPosition,validatePlayback} from '../youtube-model.mjs';
 import {installPlayback} from '../playback.mjs';
 import {youtubeBase,youtubeScriptUrl,youtubeEmbedUrl,youtubeResourceUrl,isDiscordOrigin,isYouTubeScriptResponse} from '../youtube-network.mjs';
+import {safeResourceLabel,needsPlaybackCommand,playbackSelectionKey} from '../youtube-diagnostics.mjs';
+test('playback diagnostics exclude credentials, signed query strings and video identifiers; buffering does not repeatedly restart playback',()=>{
+ assert.equal(safeResourceLabel('https://name:password@www.google.com/js/th/private-id?ticket=secret#token'),'www.google.com/js/th');
+ assert.equal(safeResourceLabel('https://1553964489517568082.discordsays.com/youtube/embed/dQw4w9WgXcQ?ticket=secret'),'1553964489517568082.discordsays.com/youtube/embed');
+ assert.equal(safeResourceLabel('https://r3.googlevideo.com/videoplayback?sig=secret&ip=1.2.3.4'),'r3.googlevideo.com/videoplayback');
+ assert.equal(safeResourceLabel('data:secret'),'recurso sin dominio');assert.equal(safeResourceLabel('invalid-secret'),'recurso sin dominio');
+ assert.equal(needsPlaybackCommand(3,true),false);assert.equal(needsPlaybackCommand(1,true),false);
+ assert.equal(needsPlaybackCommand(2,true),true);assert.equal(needsPlaybackCommand(3,false),true);assert.equal(needsPlaybackCommand(2,false),false);
+ assert.equal(playbackSelectionKey({videoId:'dQw4w9WgXcQ',playing:false,position:0}),playbackSelectionKey({videoId:'dQw4w9WgXcQ',playing:true,position:100}));
+ assert.notEqual(playbackSelectionKey({playlistId:'PL1234567890',index:0}),playbackSelectionKey({playlistId:'PL1234567890',index:1}));
+});
 test('existing YouTube iframe URLs preserve playback parameters while message origin remains a bare origin',()=>{
  const host='https://1553964489517568082.discordsays.com';
  const url=new URL(youtubeEmbedUrl(host+'/',{videoId:'dQw4w9WgXcQ',position:90.9,playing:true}));
