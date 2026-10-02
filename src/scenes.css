@@ -88,7 +88,7 @@
 @media (orientation: landscape) {
   .home-mode .tv-scene { position: relative; top: auto; left: auto; transform: none; }
 }
-@media (max-width: 520px) and (max-height: 360px) {
+@media (max-height: 360px), (max-width: 520px) and (max-height: 400px), (max-width: 360px) and (max-height: 520px) {
   .home-mode .tv-scene, .home-mode .tv-scene.aspect-4x3 {
     position: relative; top: auto; left: auto; transform: none;
     width: 100%; height: 100%; max-height: none;
@@ -242,7 +242,7 @@
       radial-gradient(ellipse at 50% 105%, rgba(24,66,84,.25), transparent 42%);
   }
 }
-@media (max-width: 520px) and (max-height: 360px) {
+@media (max-height: 360px), (max-width: 520px) and (max-height: 400px), (max-width: 360px) and (max-height: 520px) {
   .home-mode .tv-face { background: #242c34 !important; }
   .home-mode .tv-scene.aspect-4x3 .tv-face { background: #242c34 !important; }
 }
@@ -484,7 +484,7 @@
 
 /* Discord's compact activity surface gets the picture, with just two slim
    graphite side rails. The outer call grid remains under Discord's control. */
-@media (max-width: 520px) and (max-height: 360px) {
+@media (max-height: 360px), (max-width: 520px) and (max-height: 400px), (max-width: 360px) and (max-height: 520px) {
   .home-mode .tv-status-light { display: none; }
   .stage.home-mode { padding: 0; background: #34383e; }
   .home-mode .room-scene { display: block; width: 100%; height: 100%; }
@@ -683,7 +683,7 @@
 }
 
 /* Discord's smallest call tile shows the scene without Activity controls. */
-@media (max-width: 520px) and (max-height: 360px) {
+@media (max-height: 360px), (max-width: 520px) and (max-height: 400px), (max-width: 360px) and (max-height: 520px) {
   .scene-controls { display: none !important; }
 }
 
@@ -939,7 +939,7 @@
 .editor-properties input[type=color] { width: 100%; height: 34px; padding: 2px; }
 #editorAmbient { max-width: 110px; }
 #editorAmbientValue { min-width: 3em; }
-@media (max-width: 520px) and (max-height: 360px) {
+@media (max-height: 360px), (max-width: 520px) and (max-height: 400px), (max-width: 360px) and (max-height: 520px) {
   .room-lighting canvas { display: none; }
 }
 
@@ -1196,3 +1196,41 @@
 
 /* Do not expose a legacy default before the shared scene has loaded. */
 .scene-unready > .room-scene { visibility: hidden; }
+
+/* The editor uses every pixel allocated to the Activity. Safe areas protect
+   its contents without leaving an outer frame or rounded viewport corners. */
+.decor-editor {
+  inset: 0; border: 0; border-radius: 0; box-shadow: none;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+.preview-frame, .editor-sidebar { border-radius: 0; }
+.compact-edit-notice { display: none; }
+@media (max-height: 360px), (max-width: 520px) and (max-height: 400px), (max-width: 360px) and (max-height: 520px) {
+  .stage { padding: 0; background: #080b12 !important; }
+  #stage #tvScene, #stage #arcadeScene {
+    position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; aspect-ratio: auto; transform: none;
+  }
+  #stage .tv-shell { width: 100%; height: 100%; aspect-ratio: auto; }
+  .stage .room-backdrop, .stage .decoration-layer, .stage .room-lighting { display: none !important; }
+  .stage .tv-face { border: 0; border-radius: 0; box-shadow: none; }
+  .stage .screen-wrap, .stage .tv-scene.aspect-4x3 .screen-wrap, .stage .arcade-screen {
+    inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none;
+  }
+  .stage .player, .stage .video-mount, .stage .empty-state, .stage .crt-overlay { border-radius: 0 !important; }
+  #stage .screen-wrap, #stage .arcade-screen, #stage .player { border-radius: 0 !important; }
+  .stage .scene-controls, .stage #audioButton, .stage .media-notice { display: none !important; }
+  .editing-decoration > .room-scene, .editing-decoration > .decor-editor { visibility: hidden; }
+  .editing-decoration > .decor-editor { display: none !important; }
+  .editing-decoration .compact-edit-notice {
+    position: absolute; inset: 0; z-index: 240; display: grid; place-items: center;
+    color: #e4f6ff; background: #080b12; font: 600 clamp(16px, 5vw, 27px)/1.2 system-ui, sans-serif;
+    letter-spacing: .04em; text-shadow: 0 0 10px #9bc7ffb3, 0 0 25px #9281eb80;
+    animation: compactEditGlow 3s ease-in-out infinite alternate;
+  }
+  .editing-decoration dialog, .editing-decoration .editor-menu { visibility: hidden; pointer-events: none; }
+  .editing-decoration dialog::backdrop { background: transparent; backdrop-filter: none; }
+}
+@keyframes compactEditGlow {
+  to { text-shadow: 0 0 14px #b9d9ffd9, 0 0 32px #9281eba6; }
+}
+@media (prefers-reduced-motion: reduce) { .compact-edit-notice { animation: none !important; } }

@@ -1,3 +1,4 @@
+import {isCompactView} from './viewport.ts';
 type Rect = { x: number; y: number; width: number; height: number };
 
 // The body and feet belong to the photograph, not to its video aperture.
@@ -11,7 +12,7 @@ export function projectRect(percent: Rect, art: Rect, scene: Rect): Rect {
 
 export function maskBehindTv(behind: HTMLElement, layer: HTMLElement, face: HTMLElement) {
   protectPlayer(layer);
-  if (innerWidth <= 520 && innerHeight <= 360) {
+  if (isCompactView()) {
     // In a call tile the TV fills the scene; everything behind it is hidden.
     behind.hidden = true;
     return;

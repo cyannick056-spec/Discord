@@ -1,3 +1,4 @@
+import {isCompactView} from './viewport.ts';
 import { tvModels } from '../tv-catalog.mjs';
 import { screenRect, cameraRect, resolvedCamera, videoCrop, type Presentation } from './presentation-model';
 import {activeVideoArea,sampleActiveVideo,resetActiveVideo} from './video-auto-framing';
@@ -14,7 +15,7 @@ export function applyPresentation(p: Presentation | undefined) {
   const home = stage.classList.contains('home-mode'), face = document.querySelector<HTMLElement>('.tv-face')!;
   const art = document.querySelector<HTMLElement>(home ? '#tvScene' : '#arcadeScene')!;
   const backdrop = document.querySelector<HTMLElement>('#roomBackdrop')!;
-  const tiny = innerWidth <= 520 && innerHeight <= 360;
+  const tiny = isCompactView();
   configureTvModel(face, p, tiny);
   stage.classList.toggle('modular-room', home && Boolean(p?.environment));
   stage.classList.toggle('flat-panel', home && p?.tvModel === 'flat-modern');
@@ -49,7 +50,7 @@ export function applyPresentation(p: Presentation | undefined) {
   image.style.objectFit = custom || p?.environment ? 'cover' : 'fill';
   image.style.objectPosition = 'center';
   applyScreenFraming();
-  if(stage.classList.contains('youtube-source')){
+  if(stage.classList.contains('youtube-source') && !tiny){
     const screen=document.querySelector<HTMLElement>(home?'#homeScreenMount':'#arcadeScreen')!,glass=screen.getBoundingClientRect();
     const gain=Math.max(1,200/glass.width,200/glass.height);
     if(glass.width*gain>innerWidth-16 && innerWidth>=216){
@@ -114,7 +115,7 @@ function applyScreenFraming() {
   const s = getComputedStyle(screen), transform = new DOMMatrix(s.transform === 'none' ? undefined : s.transform);
   screenBase = { x: parseFloat(s.left) + transform.e, y: parseFloat(s.top) + transform.f, width: parseFloat(s.width), height: parseFloat(s.height) };
   stage.classList.toggle('square-screen', current?.screen?.rounded === false);
-  if (!current?.screen) return;
+  if (isCompactView() || !current?.screen) return;
   const r = screenRect(screenBase, current.screen);
   Object.assign(screen.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.width}px`, height: `${r.height}px`, transform: 'none' });
 }
@@ -131,6 +132,7 @@ export function applyVideoFraming() {
     Object.assign(video.style,{width:`${video.videoWidth*factor}px`,height:`${video.videoHeight*factor}px`,left:`${(sw-area.width*video.videoWidth*factor)/2-area.x*video.videoWidth*factor}px`,top:`${(sh-area.height*video.videoHeight*factor)/2-area.y*video.videoHeight*factor}px`});
     return;
   }
+  if(isCompactView()) { video.style.objectFit='cover';video.style.objectPosition='50% 50%';video.style.transform='none';return; }
   const fit = current?.video?.fit;
   if (fit) video.style.objectFit = fit; else video.style.removeProperty('object-fit');
   if (fit === 'contain') { video.style.transform = 'none'; video.style.objectPosition = '50% 50%'; return; }
@@ -159,7 +161,7 @@ export function visibleVideoCrop(video:HTMLVideoElement,sw:number,sh:number) {
 // object coordinates. Free TV controls explicitly detach this relationship.
 export function applyTvSupport() {
   const p = current;
-  if (innerWidth <= 520 && innerHeight <= 360) return;
+  if (isCompactView()) return;
   if (!p?.tvSupport || p.tvSupport === 'free' || !document.querySelector('#stage')?.classList.contains('home-mode')) return;
   const art = document.querySelector<HTMLElement>('#tvScene')!, face = document.querySelector<HTMLElement>('.tv-face')!;
   art.style.removeProperty('translate');
@@ -176,6 +178,7 @@ export function applyTvSupport() {
   window.dispatchEvent(new Event('shis-presentation-change'));
 }
 export function containYouTubePlayer(){
+  if(isCompactView()) return;
   const stage=document.querySelector('#stage')!;if(!stage.classList.contains('youtube-source'))return;
   const art=document.querySelector<HTMLElement>(stage.classList.contains('home-mode')?'#tvScene':'#arcadeScene')!;
   const g=document.querySelector('#player')!.getBoundingClientRect();
