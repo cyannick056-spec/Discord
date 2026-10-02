@@ -49,13 +49,16 @@ export function validMood(m) {
     (m.practicalLights === undefined || typeof m.practicalLights === 'boolean') &&
     ['accent', 'accent2'].every(key => m[key] === undefined || (typeof m[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(m[key]))) &&
     finite(m.intensity, 0, 100) && finite(m.tvGlow, 0, 200) &&
-    optionalNumbers(m, { rim: [0, 200], cabinet: [0, 200], floor: [0, 200], reach: [30, 180], transition: [150, 2000], depth: [0, 100] }) &&
+    optionalNumbers(m, { rim: [0, 200], cabinet: [0, 200], floor: [0, 200], reach: [30, 180], transition: [150, 2000], depth: [0, 100], tvDetail:[0,100],tvSoftness:[0,100] }) &&
     (m.backlight === undefined || (!!object(m.backlight) && typeof m.backlight.color === 'string' && /^#[a-fA-F0-9]{6}$/.test(m.backlight.color) && finite(m.backlight.intensity, 0, 100) && finite(m.backlight.reach, 50, 180))) &&
     (m.grade === undefined || validGrade(m.grade)) &&
     (m.zones === undefined || (object(m.zones) && Object.entries(m.zones).every(([zone, g]) => ['wall', 'cabinet', 'floor', 'tv', 'figures'].includes(zone) && validGrade(g))));
 }
 export function validStudioPlacement(p) {
   if(p.lightResponse!==undefined && !finite(p.lightResponse,0,100)) return false;
+  if(p.solid!==undefined && typeof p.solid!=='boolean') return false;
+  if(p.tint!==undefined && (typeof p.tint!=='string' || !/^#[a-fA-F0-9]{6}$/.test(p.tint))) return false;
+  if(p.tintStrength!==undefined && !finite(p.tintStrength,0,100)) return false;
   const t = p.transform;
   return (p.material === undefined || (object(p.material) && materialIds.has(p.material.preset) && (p.material.scope === undefined || ['top','all'].includes(p.material.scope)) && (p.material.color === undefined || /^#[a-fA-F0-9]{6}$/.test(p.material.color)) && optionalNumbers(p.material, { strength: [0,100], scale: [.25,4], roughness: [0,100] }))) &&
     (p.lava === undefined || (object(p.lava) && (p.lava.motion === undefined || typeof p.lava.motion === 'boolean') && optionalNumbers(p.lava, { speed: [.2, 3] }))) &&

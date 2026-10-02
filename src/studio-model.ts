@@ -7,7 +7,7 @@ export type Zone = 'wall' | 'cabinet' | 'floor' | 'tv' | 'figures';
 export type Daytime = 'morning' | 'day' | 'evening' | 'night';
 export type Mood = { daytime?: Daytime; preset: 'neutral' | 'blue-night' | 'warm' | 'classic-night' | 'tv-only' | 'moonlight' | 'soft-night' | 'neon'; intensity: number; tvGlow: number;
   grade?: Grade; zones?: Partial<Record<Zone, Grade>>; rim?: number; cabinet?: number; floor?: number; reach?: number; transition?: number; accent?: string; accent2?: string;
-  backlight?: { color: string; intensity: number; reach: number }; depth?: number; practicalLights?: boolean };
+  backlight?: { color: string; intensity: number; reach: number }; depth?: number; practicalLights?: boolean; tvDetail?:number; tvSoftness?:number };
 export function perspectiveAngles(t: Transform = {}, x = 50) {
   if (!t.auto) return { x: t.tiltX ?? 0, y: t.tiltY ?? 0 };
   const side = Math.max(-1, Math.min(1, (x - 50) / 50));

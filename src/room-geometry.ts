@@ -31,6 +31,6 @@ export async function applyPhotoLight(box: HTMLElement, sprite: HTMLImageElement
     const i=(y*128+x)*4, luminance=map.data[i]*.2126+map.data[i+1]*.7152+map.data[i+2]*.0722;
     const gain=objectLightGain(Math.min(1.05,Math.max(.22,Math.sqrt(luminance/145))),Number(box.dataset.lightResponse ?? defaultLightResponse));
     sprite.style.filter=baseFilter+` brightness(${gain})`;box.dataset.lightGain=String(gain);
-    box.querySelectorAll<HTMLCanvasElement>('.decoration-material').forEach(c=>c.style.filter=sprite.style.filter);
+    box.querySelectorAll<HTMLCanvasElement>('.decoration-material,.decoration-finish').forEach(c=>c.style.filter=sprite.style.filter);
   } catch { /* Leave the original object if a light map is unavailable. */ }
 }

@@ -8,6 +8,7 @@ import { photoFloor } from './room-geometry';
 import { tvSilhouette, paintCastMask, paintTvContact, weightShadowByLight, clipSurface } from './tv-shadows';
 import { lightAt, type ShadowLight } from './tv-shadow-model';
 import { paintFurnitureOcclusion } from './furniture-occlusion';
+import {edgeColors,uniformEdges,type EdgeColors} from './tv-light-detail';
 
 export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number; behindTv?: boolean; wallOnly?: boolean };
 let sources: DecorationLight[] = [];
@@ -41,6 +42,7 @@ export function initRoomLighting() {
   const furnitureMask=document.createElement('canvas'),furnitureCtx=furnitureMask.getContext('2d')!;
   const backgroundMask=document.createElement('canvas'),backgroundCtx=backgroundMask.getContext('2d')!;
   const objectProtection=document.createElement('canvas'),objectCtx=objectProtection.getContext('2d')!;
+  const reflectionMask=document.createElement('canvas'),reflectionMaskCtx=reflectionMask.getContext('2d')!;
   const sample = document.createElement('canvas');
   sample.width = 64; sample.height = 36;
   const testSample = document.createElement('canvas'); testSample.width = 64; testSample.height = 36;
@@ -48,6 +50,7 @@ export function initRoomLighting() {
   const sampleCtx = sample.getContext('2d', { willReadFrequently: true });
   if (!shadowCtx || !tintCtx || !sampleCtx) return;
   const dark: LightColor = { r: 0, g: 0, b: 0, strength: 0 };
+  let edges=uniformEdges(dark),lastEdges=uniformEdges(dark);
   let screenColor = { ...dark }, floorColor = { ...dark };
   let lastScreenSample = { ...dark }, lastFloorSample = { ...dark };
   let sampledVideo: HTMLVideoElement | null = null;
@@ -57,7 +60,7 @@ export function initRoomLighting() {
   let blockedVideo: HTMLVideoElement | null = null;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const previewMode = new URLSearchParams(location.search).has('editorPreview');
-  let previewColors: { screen: LightColor; floor: LightColor } | null = null;
+  let previewColors: { screen: LightColor; floor: LightColor; edges?:EdgeColors; framing?:string } | null = null;
   let tvBounds: { x: number; y: number; width: number; height: number } | undefined;
   // A separable, feathered rectangular wash avoids a visible circular bulb.
   // The small alpha mask is reused for ambient and live screen light.
@@ -91,7 +94,7 @@ export function initRoomLighting() {
     if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'room-video-light') return;
     const valid = (color: LightColor) => color && [color.r, color.g, color.b].every(value => Number.isFinite(value) && value >= 0 && value <= 255) &&
       Number.isFinite(color.strength) && color.strength >= 0 && color.strength <= 1;
-    if (valid(event.data.screen) && valid(event.data.floor)) previewColors = event.data;
+    if (valid(event.data.screen) && valid(event.data.floor)) previewColors = {screen:event.data.screen,floor:event.data.floor,edges:event.data.edges && ['top','bottom','left','right'].every(k=>valid(event.data.edges[k]))?event.data.edges:undefined,framing:typeof event.data.framing==='string'?event.data.framing:undefined};
   });
 
   function glow(x: number, y: number, rx: number, ry: number, color: LightColor, gain = 1, angle = 0, softness = 60, onTv = false, clip?: SurfacePlane, occlusion?: HTMLCanvasElement) {
@@ -159,10 +162,11 @@ export function initRoomLighting() {
     const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
     if (shade.width !== width || shade.height !== height) {
       shade.width = tint.width = grade.width = reflection.width = floorReflection.width = width; shade.height = tint.height = grade.height = reflection.height = floorReflection.height = height;
-      for(const canvas of [wallShadow,contactShadow,castMask,occludedGlow,furnitureMask,backgroundMask,objectProtection]) {canvas.width=width;canvas.height=height;}
+      for(const canvas of [wallShadow,contactShadow,castMask,occludedGlow,furnitureMask,backgroundMask,objectProtection,reflectionMask]) {canvas.width=width;canvas.height=height;}
     }
     paintFurnitureOcclusion(furnitureCtx,bounds,scale);
     paintFurnitureOcclusion(objectCtx,bounds,scale,true);
+    paintFurnitureOcclusion(reflectionMaskCtx,bounds,scale,'foreground');
     reflectionCtx?.clearRect(0, 0, width, height);
     floorReflectionCtx?.clearRect(0, 0, width, height);
     shadowCtx.clearRect(0, 0, width, height);
@@ -192,7 +196,10 @@ export function initRoomLighting() {
     if (gradeCtx && stage.classList.contains('home-mode')) paintRoomGrade(gradeCtx, document.querySelector<HTMLElement>('.tv-face')!,
       { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, { x: gx, y: gy, width: gw, height: gh }, mood, scale);
     const video = document.querySelector<HTMLVideoElement>('#videoMount video');
-    let target = { ...dark }, floorTarget = { ...dark };
+    const framingSettings=getPresentation()?.video;
+    const sharedFraming=JSON.stringify([framingSettings?.auto!==false,framingSettings?.auto===false?framingSettings:undefined,Math.round(glass.width/glass.height*1000)]);
+    const shared=Boolean(previewMode && previewColors && testLight==='live' && (!video || video.readyState<2 || previewColors.framing===sharedFraming));
+    let target = { ...dark }, floorTarget = { ...dark },edgeTarget=uniformEdges(dark);
     if (video && video.readyState >= 2 && video.videoWidth && stage.classList.contains('has-signal')) {
       // A future cross-origin iframe cannot be sampled. Failing a read must
       // never stop the existing stream or repeatedly throw on every tick.
@@ -209,27 +216,30 @@ export function initRoomLighting() {
           const pixels = sampleCtx.getImageData(0, 0, 64, 36).data;
           lastScreenSample = target = frameColor(pixels, 64, 36);
           lastFloorSample = floorTarget = frameColor(pixels, 64, 36, 24, 36);
+          lastEdges=edgeTarget=edgeColors(pixels,64,36);
           reflectionReady = true; sampledVideo = video; lastTime = video.currentTime; lastFraming = framing;
         } catch { reflectionReady = false; blockedVideo = video; }
-      } else if (video !== blockedVideo) { target = lastScreenSample; floorTarget = lastFloorSample; }
+      } else if (video !== blockedVideo) { target = lastScreenSample; floorTarget = lastFloorSample;edgeTarget=lastEdges; }
       if (video === blockedVideo) target = floorTarget = { r: 210, g: 220, b: 230, strength: .1 };
     } else if (!stage.classList.contains('has-signal')) {
       reflectionReady = false;
       // The no-signal phosphor emits only a very weak neutral glow.
       target = floorTarget = { r: 210, g: 220, b: 230, strength: .06 };
+      edgeTarget=uniformEdges(target);
     }
-    if (previewColors && (!video || video.readyState < 2)) { target = previewColors.screen; floorTarget = previewColors.floor; }
+    if (shared && previewColors) { target = previewColors.screen; floorTarget = previewColors.floor;edgeTarget=previewColors.edges ?? uniformEdges(target); }
     let reflectionFrame = sample, mirrorReady = reflectionReady && Boolean(video && video.readyState >= 2 && stage.classList.contains('has-signal'));
     if (previewMode && testLight !== 'live') {
       const colors: Record<string, LightColor> = { red: { r: 255, g: 0, b: 0, strength: 1 }, blue: { r: 0, g: 80, b: 255, strength: 1 },
         white: { r: 255, g: 255, b: 255, strength: 1 }, dark: { ...dark } };
-      if (colors[testLight]) { target = floorTarget = colors[testLight]; if (testSampleCtx) { testSampleCtx.fillStyle = `rgb(${target.r},${target.g},${target.b})`; testSampleCtx.fillRect(0, 0, 64, 36); } reflectionFrame = testSample; mirrorReady = testLight !== 'dark'; }
+      if (colors[testLight]) { target = floorTarget = colors[testLight];edgeTarget=uniformEdges(target); if (testSampleCtx) { testSampleCtx.fillStyle = `rgb(${target.r},${target.g},${target.b})`; testSampleCtx.fillRect(0, 0, 64, 36); } reflectionFrame = testSample; mirrorReady = testLight !== 'dark'; }
     }
     const easing = reducedMotion.matches ? .08 : 1 - Math.exp(-125 / (mood.transition ?? 380));
-    screenColor = blendColor(screenColor, target, easing);
-    floorColor = blendColor(floorColor, floorTarget, easing);
+    screenColor = shared?target:blendColor(screenColor, target, easing);
+    floorColor = shared?floorTarget:blendColor(floorColor, floorTarget, easing);
+    for(const side of ['top','bottom','left','right'] as const) edges[side]=shared?edgeTarget[side]:blendColor(edges[side],edgeTarget[side],easing);
     if (!previewMode) document.querySelector<HTMLIFrameElement>('#editorPreview')?.contentWindow?.postMessage(
-      { type: 'room-video-light', screen: screenColor, floor: floorColor }, location.origin);
+      { type: 'room-video-light', screen: screenColor, floor: floorColor,edges,framing:sharedFraming }, location.origin);
     const tvGain = mood.tvGlow / 100;
     const paint = getPresentation()?.tvPaint;
     const finish = paint?.enabled ? paint.finish === 'gloss' ? 1.35 : paint.finish === 'satin' ? 1 : .7 : 1;
@@ -253,23 +263,32 @@ export function initRoomLighting() {
     const reach = (mood.reach ?? 100) / 100;
     const body=tvBounds ?? {x:gx,y:gy,width:gw,height:gh};
     const cx=body.x+body.width/2,cy=body.y+body.height/2;
-    wallWash(cx,cy,body.width*2.3*reach,body.height*2.5*reach,screenColor,.9*tvGain);
+    const detail=(mood.tvDetail ?? 70)/100,softness=mood.tvSoftness ?? 85;
+    wallWash(cx,cy,body.width*2.3*reach,body.height*2.5*reach,screenColor,.9*tvGain*(1-detail*.4));
+    // Overlapping feathered light fields retain local screen colors, never a
+    // circular halo or a fixed painted reflection. Size follows the TV body.
+    for(const [x,y,w,h,color] of [
+      [cx,body.y,body.width*1.9*reach,body.height*1.5*reach,edges.top],
+      [body.x,cy,body.width*1.25*reach,body.height*2*reach,edges.left],
+      [body.x+body.width,cy,body.width*1.25*reach,body.height*2*reach,edges.right],
+      [cx,body.y+body.height,body.width*1.9*reach,body.height*1.4*reach,edges.bottom],
+    ] as [number,number,number,number,LightColor][]) wallWash(x,y,w,h,color,tvGain*detail*.38);
     if(mood.backlight) {
       const l=mood.backlight,r=l.reach/100;
       wallWash(cx,cy,body.width*2.4*r,body.height*2.6*r,{r:parseInt(l.color.slice(1,3),16),g:parseInt(l.color.slice(3,5),16),b:parseInt(l.color.slice(5,7),16),strength:l.intensity/100});
     }
     // Narrow pools on the bezel make the screen's color visible on the TV
     // itself as well as the room. The live glass is cut out afterwards.
-    glow(gx + gw / 2, gy, gw * .62, Math.max(gh * .12, 8), screenColor, rimGain, 0, 60, true);
-    glow(gx, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain, 0, 60, true);
-    glow(gx + gw, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, screenColor, rimGain, 0, 60, true);
-    glow(gx + gw / 2, gy + gh, gw * .64, Math.max(gh * .17, 8), floorColor, rimGain, 0, 60, true);
+    glow(gx + gw / 2, gy, gw * .62, Math.max(gh * .12, 8), blendColor(screenColor,edges.top,detail), rimGain, 0, softness, true);
+    glow(gx, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, blendColor(screenColor,edges.left,detail), rimGain, 0, softness, true);
+    glow(gx + gw, gy + gh / 2, Math.max(gw * .12, 8), gh * .66, blendColor(screenColor,edges.right,detail), rimGain, 0, softness, true);
+    glow(gx + gw / 2, gy + gh, gw * .64, Math.max(gh * .17, 8), blendColor(floorColor,edges.bottom,detail), rimGain, 0, softness, true);
     // Project a wider pool below the glass: cabinet first, floor further away.
     const cabinetBox=supportElement(getPresentation())?.getBoundingClientRect(), floorPlane=photoFloor();
     const toScene=(r: {x:number;y:number;width:number;height:number})=>({x:(r.x-bounds.x)*scale,y:(r.y-bounds.y)*scale,width:r.width*scale,height:r.height*scale});
     const cabinetClip=stage.classList.contains('modular-room') && cabinetBox ? toScene(cabinetBox) : undefined;
     const floorClip=stage.classList.contains('modular-room') ? toScene(floorPlane) : undefined;
-    glow(gx + gw / 2, cabinetClip ? cabinetClip.y + cabinetClip.height*.35 : gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain * (mood.cabinet ?? 100) / 100,0,60,false,cabinetClip);
+    glow(gx + gw / 2, cabinetClip ? cabinetClip.y + cabinetClip.height*.35 : gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), blendColor(floorColor,edges.bottom,detail), tvGain * (mood.cabinet ?? 100) / 100,0,softness,false,cabinetClip);
     glow(gx + gw / 2, floorClip ? Math.max(floorClip.y,gy+gh) + gh*.4 : gy + gh*1.65, gw * .95 * reach, gh*.85*reach, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100,0,85,false,floorClip,furnitureMask);
     const power = mood.intensity / 100;
     if (['blue-night', 'classic-night', 'moonlight'].includes(mood.preset)) glow(width * .12, height * .25, width * .6, height * .7,
@@ -350,6 +369,7 @@ export function initRoomLighting() {
     // Each object controls how strongly room darkness and colored spill affect
     // its albedo. Contact/cast shadows stay on their own physical surfaces.
     for(const ctx of [shadowCtx,tintCtx]) {ctx.save();ctx.globalCompositeOperation='destination-out';ctx.drawImage(objectProtection,0,0);ctx.restore();}
+    for(const ctx of [reflectionCtx,floorReflectionCtx]) if(ctx) {ctx.save();ctx.globalCompositeOperation='destination-out';ctx.drawImage(reflectionMask,0,0);ctx.restore();}
     // Preserve the live picture and its native CRT treatment exactly.
     for (const ctx of [shadowCtx, tintCtx, reflectionCtx, floorReflectionCtx].filter((c): c is CanvasRenderingContext2D => Boolean(c))) {
       ctx.save(); ctx.globalCompositeOperation = 'destination-out';

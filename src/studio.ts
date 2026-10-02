@@ -13,6 +13,8 @@ import { tvModels } from '../tv-catalog.mjs';
 import { prepareRoom, builtinDecoration, roomPlacement } from './modular-rooms';
 import { compositionRestGroups } from '../room-compositions.mjs';
 import {defaultLightResponse} from './light-response';
+import {isSolidObject} from './object-finish';
+import {initObjectTabs,showObjectTab,syncObjectTabs} from './object-tabs';
 
 type Host = {
   draft(): Manifest; saved(): Manifest; item(): Decoration | undefined; key(): string; selected(): string[];
@@ -33,12 +35,15 @@ function objectPanel(inspect:boolean) {
   const browser=$('studioObjectBrowser'),inspector=$('studioObjectInspector');if(!browser || !inspector) return;
   if(inspect && !browser.hidden) objectBrowserScroll=$('studioObjectList').scrollTop;
   browser.hidden=inspect;inspector.hidden=!inspect;
+  const sidebar=document.querySelector('.editor-sidebar')!,scroll=document.querySelector<HTMLElement>('.studio-scroll')!,header=$('studioInspectorHeader');
+  sidebar.classList.toggle('has-object-inspector',inspect);header.hidden=!inspect;
+  if(inspect) scroll.before(header);else inspector.prepend(header);
   if(!inspect) requestAnimationFrame(()=>{$('studioObjectList').scrollTop=objectBrowserScroll;});
-  document.querySelector<HTMLElement>('.studio-scroll')!.scrollTop=0;
+  scroll.scrollTop=0;host?.resize();
 }
 export function focusStudioItem() {
   if(!host?.item()) return;
-  $('studioObjectsTab').click();objectPanel(true);$('studioObjectTitle').focus({preventScroll:true});
+  $('studioObjectsTab').click();objectPanel(true);showObjectTab('Appearance');$('studioObjectTitle').focus({preventScroll:true});
 }
 const zoomViews = ['home-landscape-16x9', 'home-landscape-4x3', 'home-portrait-16x9', 'home-portrait-4x3', 'home-window-16x9', 'home-window-4x3', 'arcade-landscape', 'arcade-portrait', 'arcade-window'];
 const zoomLabels = ['Horizontal · 16:9', 'Horizontal · 4:3', 'Vertical · 16:9', 'Vertical · 4:3', 'Ventana pequeña · 16:9', 'Ventana pequeña · 4:3', 'Arcade horizontal', 'Arcade vertical', 'Arcade en ventana'];
@@ -141,7 +146,7 @@ export function initStudio(h: Host) {
   // Keep nodes mounted so returning preserves list order and scroll.
   const browser=document.createElement('div');browser.id='studioObjectBrowser';
   const inspector=document.createElement('div');inspector.id='studioObjectInspector';inspector.hidden=true;
-  inspector.innerHTML='<div class="studio-inspector-header"><button id="studioBackToObjects" type="button">← Ver objetos</button><h3 id="studioObjectTitle" tabindex="-1">Editar objeto</h3><p id="studioObjectHint" class="studio-note"></p></div><div id="studioObjectIdentity" class="studio-fields"></div>';
+  inspector.innerHTML='<div id="studioInspectorHeader" class="studio-inspector-header"><button id="studioBackToObjects" type="button">← Ver objetos</button><h3 id="studioObjectTitle" tabindex="-1">Editar objeto</h3><p id="studioObjectHint" class="studio-note"></p></div><div id="studioObjectIdentity" class="studio-fields"></div>';
   const inspectorIds=['editorProperties','editorNudge','studioAppearance','studioMaterial','studioPerspective','studioResting'];
   for(const child of [...objects.children]) (inspectorIds.includes(child.id)?inspector:browser).append(child);
   objects.append(browser,inspector);
@@ -152,12 +157,16 @@ export function initStudio(h: Host) {
   const position=document.createElement('details');position.id='studioPosition';position.className='studio-section';position.innerHTML='<summary>Posición y tamaño</summary>';
   position.append(properties,$('editorNudge'));inspector.append(position,$('studioPerspective'),$('studioResting'));
   $('studioAppearance').querySelector('.studio-fields')!.insertAdjacentHTML('afterbegin',range('studioLightResponse','Cuánto afecta la luz del entorno',0,100)+'<p class="studio-note editor-wide">Baja este valor si se pierde detalle. El brillo, color y tono de abajo son ajustes propios del objeto.</p>');
+  $('studioAppearance').querySelector('.studio-fields')!.insertAdjacentHTML('afterbegin','<label class="studio-check editor-wide"><input id="studioObjectSolid" type="checkbox"/> Objeto sólido · sin transparencia</label><label>Color del objeto<input id="studioObjectTint" type="color"/></label>'+range('studioObjectTintStrength','Mezcla de color',0,100)+'<button id="studioObjectColorReset" type="button">Quitar mezcla de color</button>');
   $('studioBackToObjects').addEventListener('click',()=>objectPanel(false));
   $('studioDuplicateObject').addEventListener('click',()=>h.command('duplicate'));
   $('studioRemoveObject').addEventListener('click',()=>$('decorRemove').click());
-  $('studioEditObjectLight').addEventListener('click',()=>{$('studioLightsTab').click();$('studioLightFields').scrollIntoView({block:'start'});});
+  $('studioEditObjectLight').addEventListener('click',()=>showObjectTab('Light'));
   $('studioResting').removeAttribute('open');
   $('studioLightResponse').addEventListener('input',()=>{for(const p of placements()) p.lightResponse=Number($<HTMLInputElement>('studioLightResponse').value);h.change('light-response');});
+  $('studioObjectSolid').addEventListener('change',()=>{for(const p of placements()) {p.solid=$<HTMLInputElement>('studioObjectSolid').checked;if(p.solid) p.opacity=1;}h.change();});
+  for(const [id,key] of [['studioObjectTint','tint'],['studioObjectTintStrength','tintStrength']] as const) $(id).addEventListener('input',()=>{for(const p of placements()) {if(key==='tint') {p.tint=$<HTMLInputElement>(id).value;if(!p.tintStrength) p.tintStrength=35;}else p.tintStrength=Number($<HTMLInputElement>(id).value);}h.change('object-color');});
+  $('studioObjectColorReset').addEventListener('click',()=>{for(const p of placements()) {delete p.tint;delete p.tintStrength;}h.change();});
   // Move existing emission controls without replacing their listeners or IDs.
   lights.insertAdjacentHTML('beforeend', panel('studioLampTypes', 'Añadir lámpara', '<div class="studio-lamp-gallery">' + props.filter(p => p.category === 'lamp').map(p => `<button type="button" data-studio-lamp="${p.id}"><img src="${builtinUrl(p.id)}" alt=""/>${p.name}</button>`).join('') + '</div>', true));
   lights.append($('editorAddLight'));
@@ -167,6 +176,9 @@ export function initStudio(h: Host) {
   for (const id of ['decorEmitLight', 'decorLightColor', 'decorLightIntensity', 'decorLightRadius', 'decorLightX', 'decorLightY']) lightFields.append($(id).closest('label')!);
   lightFields.insertAdjacentHTML('beforeend', '<div class="studio-buttons" aria-label="Colores de lámpara">' + ['#ffca90','#fff2d2','#ff6aa3','#ff623c','#69b7ff','#ad7aff','#6aefc2'].map((c,i) => `<button type="button" data-studio-light-color="${c}">${['Ámbar','Blanco','Rosa','Rojo','Azul','Violeta','Verde'][i]}</button>`).join('') + '</div><label class="studio-check"><input type="checkbox" id="studioLavaMotion"/> Movimiento de lava</label>' + range('studioLavaSpeed','Velocidad de lava',.2,3,.1));
   lightFields.insertAdjacentHTML('beforeend', '<label>Forma<select id="studioLightShape"><option value="point">Puntual</option><option value="spot">Foco</option><option value="strip">Tira LED</option></select></label>' + range('studioLightAngle', 'Orientación', -180, 180) + range('studioLightSoftness', 'Suavidad', 0, 100) + range('studioKelvin', 'Temperatura (K)', 2000, 10000, 100) + '<div class="studio-buttons">' + buttons([['lightToggle', 'Encender / apagar']]) + '</div>');
+  initObjectTabs();
+  lights.insertAdjacentHTML('beforeend','<button id="studioSelectedLight" type="button">Editar luz del objeto seleccionado</button>');
+  $('studioSelectedLight').addEventListener('click',()=>{focusStudioItem();showObjectTab('Light');});
   environment.insertAdjacentHTML('beforeend', panel('studioLightingPresets', 'Noches preparadas', '<div class="studio-preset-grid">' + lightingPresets.map(p => `<button type="button" data-lighting-preset="${p.id}"><strong>${p.name}</strong><small>${p.description}</small></button>`).join('') + '</div><p class="studio-note">Cambia las luces y la oscuridad de esta vista. Conserva la TV, el encuadre y la decoración existente; no añade piezas.</p>', true));
   environment.append($('editorAmbient').closest('label')!, $('editorEnvironment'));
   environment.insertAdjacentHTML('beforeend', panel('studioBacklight', 'Luz suave detrás de la TV', '<label>Color<input id="studioBacklightColor" type="color"/></label>' + range('studioBacklightIntensity', 'Intensidad', 0, 100) + range('studioBacklightReach', 'Extensión', 50, 180) + range('studioShadowDepth', 'Profundidad de sombras', 0, 100) + '<label class="studio-check"><input id="studioPracticalLights" type="checkbox"/> Luz de lámparas y objetos</label><p class="studio-note">La luz sigue el tamaño y la posición de la TV. Las sombras ayudan a separar la pared, la TV y el suelo.</p>', true));
@@ -176,7 +188,7 @@ export function initStudio(h: Host) {
     '<label>Aplicar a<select id="studioZone"><option value="all">Todo el entorno</option><option value="wall">Pared</option><option value="cabinet">Mueble</option><option value="floor">Suelo</option><option value="tv">Carcasa de la TV</option><option value="figures">Figuras</option></select></label>' +
     range('studioExposure', 'Exposición', -60, 60) + range('studioContrast', 'Contraste', 50, 150) + range('studioSaturation', 'Saturación', 0, 150) + range('studioTemperature', 'Temperatura', -100, 100) + range('studioShadows', 'Profundidad de sombras', 0, 60) + range('studioInfluence', 'Influencia del ambiente', 0, 100) + '<div class="studio-buttons">' + buttons([['resetGrade', 'Restablecer superficie'], ['resetMood', 'Restablecer ambiente']]) + '</div>') +
     panel('studioReflections', 'Reflejos del vídeo · inmersivos', '<label class="studio-check"><input id="studioReflectionEnabled" type="checkbox"/> Reflejos en tiempo real</label>' + range('studioReflectionIntensity', 'Intensidad general', 0, 150) + range('studioReflectionTable', 'Reflejo en la mesa', 0, 200) + range('studioReflectionFloor', 'Reflejo en el suelo', 0, 200) + range('studioReflectionBlur', 'Desenfoque del reflejo', 0, 30) + range('studioReflectionReach', 'Largo del reflejo', 30, 180) + range('studioReflectionSpread', 'Ancho del reflejo', 50, 180) + range('studioReflectionOffset', 'Desplazamiento', -20, 30) + range('studioReflectionTexture', 'Textura de la madera', 0, 100) + '<div class="studio-buttons">' + buttons([['resetReflections', 'Restablecer reflejos']]) + '</div><p class="studio-note">Proyecta el vídeo visible sobre las superficies de la imagen. Solo aparece donde la mesa o el suelo están a la vista. Se guarda por vista.</p>') +
-    panel('studioBounce', 'Luz de la pantalla · avanzado', range('studioRim', 'Carcasa', 0, 200) + range('studioCabinet', 'Mueble', 0, 200) + range('studioFloor', 'Suelo', 0, 200) + range('studioReach', 'Alcance', 30, 180) + range('studioTransition', 'Transición (ms)', 150, 2000, 50) + '<label>Prueba de iluminación<select id="studioTest"><option value="live">Vídeo actual</option><option value="red">Rojo</option><option value="blue">Azul</option><option value="white">Blanco</option><option value="dark">Pantalla apagada</option></select></label><p class="studio-note">La prueba cambia solo la luz de esta vista previa.</p>') +
+    panel('studioBounce', 'Luz de la TV · acabado suave', range('studioTvDetail','Detalle de los colores del vídeo',0,100)+range('studioTvSoftness','Suavidad del brillo',0,100)+range('studioRim', 'Carcasa', 0, 200) + range('studioCabinet', 'Mueble', 0, 200) + range('studioFloor', 'Suelo', 0, 200) + range('studioReach', 'Alcance', 30, 180) + range('studioTransition', 'Transición (ms)', 150, 2000, 50) + '<label>Prueba de iluminación<select id="studioTest"><option value="live">Vídeo actual</option><option value="red">Rojo</option><option value="blue">Azul</option><option value="white">Blanco</option><option value="dark">Pantalla apagada</option></select></label><p class="studio-note">La luz sigue los colores de cada borde del vídeo, la carcasa y la mesa. La prueba cambia solo la luz de esta vista previa.</p>',true) +
     panel('studioNeon', 'Colores de neón', '<label>Color izquierdo<input id="studioAccent" type="color"/></label><label>Color derecho<input id="studioAccent2" type="color"/></label><p class="studio-note">Activa el ambiente Neón para ver estos colores.</p>') +
     panel('studioRooms', 'Mis ambientes y versiones', '<label>Nombre<input id="studioRoomName" maxlength="70" placeholder="Mi noche favorita"/></label><div class="studio-buttons">' + buttons([['saveRoom', 'Guardar ambiente'], ['loadRoom', 'Aplicar'], ['deleteRoom', 'Eliminar']]) + '</div><select id="studioProfile" aria-label="Ambientes guardados"></select><label>Versiones anteriores<select id="studioVersion"></select></label><div class="studio-buttons">' + buttons([['loadVersion', 'Restaurar versión']]) + '</div><p class="studio-note">Guarda esta vista para conservar tus ambientes y las tres versiones anteriores.</p>'));
   // Remove obsolete section headings after relocating their controls.
@@ -192,6 +204,8 @@ export function initStudio(h: Host) {
   for (const id of ['Objects', 'Lights', 'Mood', 'Scene']) {
     const tab = $(`studio${id}Tab`);
     tab.addEventListener('click', () => {
+      const inspecting=id==='Objects' && !$('studioObjectInspector').hidden;
+      sidebar.classList.toggle('has-object-inspector',inspecting);$('studioInspectorHeader').hidden=!inspecting;
       for (const other of ['Objects', 'Lights', 'Mood', 'Scene']) { $(`studio${other}`).hidden = other !== id; $(`studio${other}Tab`).setAttribute('aria-selected', String(other === id)); $(`studio${other}Tab`).tabIndex = other === id ? 0 : -1; }
       sidebar.classList.remove('is-collapsed'); $('studioCollapse').setAttribute('aria-expanded', 'true'); h.resize();
     });
@@ -260,6 +274,7 @@ export function initStudio(h: Host) {
   });
   $('studioPracticalLights').addEventListener('change', () => {mood().practicalLights = $<HTMLInputElement>('studioPracticalLights').checked; h.change();});
   $('studioShadowDepth').addEventListener('input', () => {mood().depth = Number($<HTMLInputElement>('studioShadowDepth').value); h.change('depth');});
+  for(const [id,key] of [['studioTvDetail','tvDetail'],['studioTvSoftness','tvSoftness']] as const) $(id).addEventListener('input',()=>{mood()[key]=Number($<HTMLInputElement>(id).value);h.change('tv-light-finish');});
   Object.entries(bounceFields).forEach(([id, key]) => $('studio' + id).addEventListener('input', () => { mood()[key] = Number($<HTMLInputElement>('studio' + id).value); h.change('bounce'); }));
   for (const [id, key] of [['studioLightShape', 'shape'], ['studioLightAngle', 'angle'], ['studioLightSoftness', 'softness']] as const) $(id).addEventListener('input', () => {
     for (const p of placements()) if (p.light) Object.assign(p.light, { [key]: key === 'shape' ? $<HTMLSelectElement>(id).value : Number($<HTMLInputElement>(id).value) }); h.change('light');
@@ -363,7 +378,7 @@ function command(cmd: string) {
   else if (cmd === 'copyPresentation') { const p = structuredClone(presentation()), keys = host.key().startsWith('home') ? ['home-landscape-16x9', 'home-landscape-4x3', 'home-portrait-16x9', 'home-portrait-4x3', 'home-window-16x9', 'home-window-4x3'] : ['arcade-landscape', 'arcade-portrait', 'arcade-window']; keys.forEach(key => (d.presentations ??= {})[key as keyof typeof d.presentations] = structuredClone(p)); host.status('Composición copiada. Revisa el encuadre de cada vista.'); }
   else if (cmd.startsWith('flip')) { ps.filter(p => !p.locked).forEach(p => { const t = p.transform ??= {}, key = cmd as 'flipX' | 'flipY'; t[key] = !t[key]; }); }
   else if (cmd === 'resetTransform') ps.filter(p => !p.locked).forEach(p => { delete p.transform; });
-  else if (cmd === 'copyStyle') { const p = ps.at(-1); if (p) { appearance = structuredClone({ brightness: p.brightness, saturation: p.saturation, hue: p.hue, shadow: p.shadow, lightResponse:p.lightResponse, opacity: p.opacity, contactShadow: p.contactShadow, crop: p.crop, material: p.material }); host.status('Acabado copiado. Selecciona otra decoración para pegarlo.'); } return; }
+  else if (cmd === 'copyStyle') { const p = ps.at(-1); if (p) { appearance = structuredClone({ brightness: p.brightness, saturation: p.saturation, hue: p.hue, shadow: p.shadow, lightResponse:p.lightResponse, solid:p.solid,tint:p.tint,tintStrength:p.tintStrength,opacity: p.opacity, contactShadow: p.contactShadow, crop: p.crop, material: p.material }); host.status('Acabado copiado. Selecciona otra decoración para pegarlo.'); } return; }
   else if (cmd === 'pasteStyle' && appearance) ps.forEach(p => Object.assign(p, structuredClone(appearance)));
   else if (cmd === 'selectAll') { d.items.filter(i => visibleInRoom(i, presentation()) && i.placements[host!.key() as keyof typeof i.placements]).forEach((i, n) => host!.select(i.id, n !== 0)); return; }
   else if (cmd === 'group') { if (ids.length < 2) return host.status('Selecciona al menos dos objetos.'); const group = crypto.randomUUID(); d.items.filter(i => ids.includes(i.id)).forEach(i => i.group = group); }
@@ -438,7 +453,14 @@ export function refreshStudio() {
   [0, 1, 2, 3].forEach(i => field('studioCrop' + i, p?.crop?.[i] ?? 0));
   $('studioAppearance').querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach(el => { el.disabled = !p; });
   field('studioLightResponse',p?.lightResponse ?? defaultLightResponse);
+  field('studioObjectSolid',Boolean(item && p && isSolidObject(item,p)));field('studioObjectTint',p?.tint ?? '#ffffff');field('studioObjectTintStrength',p?.tintStrength ?? 0);
+  $('decorOpacity').closest<HTMLElement>('label')!.hidden=Boolean(item && p && isSolidObject(item,p));
+  $<HTMLInputElement>('studioObjectSolid').disabled=!p || Boolean(item && isSolidFurniture(item));
+  $<HTMLButtonElement>('studioSelectedLight').disabled=!p;
+  field('studioTvDetail',scene?.mood?.tvDetail ?? 70);field('studioTvSoftness',scene?.mood?.tvSoftness ?? 85);
+  syncObjectTabs(Boolean(item && isSolidFurniture(item)));
   $('studioObjectTitle').textContent=item?`Editar: ${item.name}`:'Editar objeto';
+  $('studioObjectTitle').title=item?.name ?? '';
   $('studioObjectHint').textContent=host.selected().length>1?`${host.selected().length} objetos seleccionados · los ajustes de acabado se aplican a la selección.`:'Los cambios se guardan solo en esta vista.';
   $<HTMLButtonElement>('studioDuplicateObject').disabled=!item || item.kind==='viewer-slot';
   $<HTMLButtonElement>('studioRemoveObject').disabled=!item || item.kind==='viewer-slot';
