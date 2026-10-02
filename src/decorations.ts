@@ -1,6 +1,7 @@
 import { viewPresentation, viewMood, removeFromView, duplicateInView, saveView } from './view-state';
 import { MAX_SCENE_ITEMS, MAX_LIBRARY_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
 import { applyFurnitureMaterial } from './furniture-material';
+import {applyObjectFinish,isSolidObject} from './object-finish';
 import { isSolidFurniture } from './furniture-appearance';
 import {defaultLightResponse} from './light-response';
 import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type DecorationLight, type RoomMood } from './lighting';
@@ -36,6 +37,7 @@ export type Placement = {
   foreground?: boolean; anchor?: 'scene' | 'frame';
   behindTv?: boolean; locked?: boolean;
   brightness?: number; saturation?: number; hue?: number; shadow?: number; lightResponse?:number;
+  solid?:boolean; tint?:string; tintStrength?:number;
   transform?: Transform; contactShadow?: ContactShadow; crop?: number[];
   light?: Omit<DecorationLight, 'id'>;
   lava?: { motion?: boolean; speed?: number };
@@ -229,7 +231,7 @@ function position(box: HTMLDivElement, placement: Placement, sceneName: Scene, v
   box.style.left = `${bounds.left - room.left + bounds.width * placement.x / 100}px`;
   box.style.top = `${bounds.top - room.top + bounds.height * placement.y / 100}px`;
   box.style.width = `${bounds.width * placement.width / 100}px`;
-  box.style.opacity = box.dataset.furniture === 'true' ? '1' : String(placement.opacity);
+  box.style.opacity = box.dataset.solid === 'true' ? '1' : String(placement.opacity);
   box.style.zIndex = String(placement.z + (placement.foreground ? 100 : 0));
   box.style.transform = objectTransform(placement.rotation, placement.transform, placement.x, parseFloat(box.style.width), box.offsetHeight || parseFloat(box.style.width));
 }
@@ -266,6 +268,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     box.className = 'decoration-box';
     box.dataset.id = item.id;
     box.dataset.furniture = String(isSolidFurniture(item));
+    box.dataset.solid=String(isSolidObject(item,placement));
     box.dataset.lightResponse=String(placement.lightResponse ?? defaultLightResponse);
     if (item.kind === 'builtin') box.dataset.prop = item.asset;
     if (item.category === 'furniture' && (item.kind !== 'builtin' || props.find(p => p.id === item.asset)?.support)) box.dataset.support = 'true';
@@ -306,7 +309,8 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       image.addEventListener('load', () => { position(box, placement, sceneName, view); syncSupport(); if (sceneName === 'home') void applyPhotoLight(box,image); }, { once: true });
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
-      if (isSolidFurniture(item)) { if (placement.material) { box.dataset.material = placement.material.preset; box.dataset.roughness = String(placement.material.roughness ?? 65); } void applyFurnitureMaterial(box, image, item.asset, placement.material); }
+      if (isSolidFurniture(item)) { if (placement.material) { box.dataset.material = placement.material.preset; box.dataset.roughness = String(placement.material.roughness ?? 65); } void applyFurnitureMaterial(box, image, item.asset, placement.material).then(()=>applyObjectFinish(box,image,item,placement)); }
+      else void applyObjectFinish(box,image,item,placement);
       if (item.kind === 'builtin' && item.category === 'lamp') addLampAnimation(box, image, placement, item.asset === 'lava-lamp',roomMood?.practicalLights !== false);
     }
     if (placement.contactShadow?.opacity) {
@@ -354,7 +358,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       sizeOutline();
       attachDrag(outline, placement, sceneName, view, box);
     }
-    const opacity=isSolidFurniture(item) ? 1 : placement.opacity;
+    const opacity=isSolidObject(item,placement) ? 1 : placement.opacity;
     if (placement.light && opacity > 0 && placement.light.intensity > 0) {
       lights.push({ id: item.id, ...placement.light, behindTv:placement.behindTv, wallOnly:item.kind === 'light' && placement.behindTv === true, intensity: placement.light.intensity * opacity });
     }
@@ -855,9 +859,9 @@ function refreshFields() {
   editorProperties.querySelector<HTMLButtonElement>('[data-editor-command="center"]')!.disabled = placement.locked === true;
   editorProperties.querySelector<HTMLButtonElement>('[data-editor-command="duplicate"]')!.disabled = item?.kind === 'viewer-slot';
   decorRemove.hidden = item?.kind === 'viewer-slot';
-  inputs[4].disabled=isSolidFurniture(item!);
-  inputs[4].title=isSolidFurniture(item!) ? 'Los muebles se muestran sólidos.' : '';
-  [placement.x, placement.y, placement.width, placement.rotation, isSolidFurniture(item!) ? 100 : placement.opacity * 100, placement.z]
+  inputs[4].disabled=isSolidObject(item!,placement);
+  inputs[4].title=isSolidObject(item!,placement) ? 'Desactiva Objeto sólido para ajustar la transparencia.' : '';
+  [placement.x, placement.y, placement.width, placement.rotation, isSolidObject(item!,placement) ? 100 : placement.opacity * 100, placement.z]
     .forEach((value, index) => { inputs[index].value = String(Math.round(value * 10) / 10); });
   decorAnchor.value = placement.anchor || 'scene';
   [placement.brightness ?? 83, placement.saturation ?? 82, placement.hue ?? 0, placement.shadow ?? 80]
@@ -1237,7 +1241,7 @@ export function initDecorations() {
     placement.width = clamp(values[2], 1, 130);
     placement.rotation = clamp(values[3], -180, 180);
     shiftPeers(placement, selected!, placement.x - before.x, placement.y - before.y, placement.width / before.width, placement.rotation - before.rotation);
-    placement.opacity = isSolidFurniture(selectedItem()!) ? 1 : clamp(values[4] / 100, 0, 1);
+    placement.opacity = isSolidObject(selectedItem()!,placement) ? 1 : clamp(values[4] / 100, 0, 1);
     placement.z = clamp(values[5], 0, 99);
     placement.hidden = decorHidden.checked;
     placement.foreground = decorForeground.checked;
@@ -1376,7 +1380,7 @@ export function initDecorations() {
         if (placement) item.placements[activeKey()] = { ...placement };
       }
       refreshItemList();
-      if(selected && !event.data.additive) {focusStudioItem();if(item) status(`Editando ${item.name}. Ajusta su apariencia o abre Posición y tamaño.`);}
+      if(selected && !event.data.additive) {focusStudioItem();if(item) status(`Editando ${item.name}. Sus opciones están en las pestañas del objeto.`);}
     }
     if (event.data?.type === 'decor-change') {
       const item = draft.items.find((entry) => entry.id === event.data.id);

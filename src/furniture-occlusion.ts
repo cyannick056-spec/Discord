@@ -3,10 +3,10 @@ import {defaultLightResponse,lightResponse} from './light-response';
 // Reuse the rendered sprite alpha, including its crop and real leg openings.
 const masks=new WeakMap<CanvasRenderingContext2D,{key:string;sprites:(HTMLCanvasElement|HTMLImageElement)[]}>();
 const photoMasks=new WeakMap<HTMLImageElement,HTMLCanvasElement>();
-export function paintFurnitureOcclusion(ctx: CanvasRenderingContext2D, scene: DOMRect, scale: number, protection=false) {
-  const selector=protection ? '.decoration-box:not(.decor-depth-outline):not([data-prop=rug])' : '.decoration-box[data-furniture=true]:not(.decor-depth-outline):not([data-prop=rug])';
+export function paintFurnitureOcclusion(ctx: CanvasRenderingContext2D, scene: DOMRect, scale: number, protection:boolean|'foreground'=false) {
+  const selector=protection==='foreground' ? '.decoration-box:not([data-furniture=true]):not(.decor-depth-outline):not([data-prop=rug])' : protection ? '.decoration-box:not(.decor-depth-outline):not([data-prop=rug])' : '.decoration-box[data-furniture=true]:not(.decor-depth-outline):not([data-prop=rug])';
   const boxes=[...document.querySelectorAll<HTMLElement>(selector)];
-  const spriteFor=(b:HTMLElement)=>b.querySelector<HTMLCanvasElement>('.decoration-material') ?? (protection?b.querySelector<HTMLImageElement>('img.decoration'):null);
+  const spriteFor=(b:HTMLElement)=>b.querySelector<HTMLCanvasElement>('.decoration-material,.decoration-finish') ?? (protection?b.querySelector<HTMLImageElement>('img.decoration'):null);
   const sprites=boxes.map(spriteFor).filter((s):s is HTMLCanvasElement|HTMLImageElement=>Boolean(s));
   const cached=masks.get(ctx);
   const face=document.querySelector<HTMLElement>('.tv-face'),art=face?.getBoundingClientRect(),tvStyle=face?getComputedStyle(face):undefined;
@@ -25,7 +25,7 @@ export function paintFurnitureOcclusion(ctx: CanvasRenderingContext2D, scene: DO
     const matrix=new DOMMatrix(style.transform), w=box.offsetWidth, h=box.offsetHeight;
     const ox=(parent.x+parseFloat(box.style.left)+w/2-scene.x)*scale;
     const oy=(parent.y+parseFloat(box.style.top)+h/2-scene.y)*scale;
-    ctx.save();ctx.globalAlpha=protection?(1-lightResponse(Number(box.dataset.lightResponse ?? defaultLightResponse)))*Number(style.opacity):1;
+    ctx.save();ctx.globalAlpha=protection===true?(1-lightResponse(Number(box.dataset.lightResponse ?? defaultLightResponse)))*Number(style.opacity):Number(style.opacity);
     if(box.parentElement!.classList.contains('decorations-behind-tv')) {
       ctx.beginPath();ctx.rect(0,0,ctx.canvas.width,ctx.canvas.height);
       for(const r of tvRects) if(r.width>0 && r.height>0 && Object.values(r).every(Number.isFinite)) ctx.roundRect(r.x,r.y,r.width,r.height,Math.min(r.width,r.height)*.012);
