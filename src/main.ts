@@ -3,6 +3,7 @@ import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
 import { initDecorations, setDecorationViewers, requestAppClose } from './decorations';
 import { CloudflareViewer } from './cloudflare';
 import { initRoomLighting } from './lighting';
+import { YouTubeRoom } from './youtube';
 import './style.css';
 import './scenes.css';
 
@@ -62,6 +63,9 @@ let signalLostTimer: ReturnType<typeof setTimeout> | null = null;
 let activeVideoTrack: RemoteTrack | null = null;
 let activeVideoPublisherId: string | null = null;
 let activeVideoElement: HTMLVideoElement | null = null;
+let youtubeRoom:YouTubeRoom|null=null;
+let currentMediaSource:'switch'|'youtube'='switch';
+let streamEpoch=0;
 let lastDecodedFrameAt = 0;
 let videoStalled = false;
 const editorPreviewMode = new URLSearchParams(location.search).has('editorPreview');
@@ -153,6 +157,7 @@ function setVolume(value: number) {
   volumeButton.dataset.muted = String(volume === 0);
   volumeButton.title = `Volumen: ${volume}%`;
   audioMount.querySelectorAll('audio').forEach((element) => { element.volume = volume / 100; });
+  youtubeRoom?.setVolume(volume);
   try { localStorage.setItem('shis-volume', String(volume)); } catch { /* Session-only fallback. */ }
 }
 setVolume(volume);
@@ -367,7 +372,7 @@ async function initDiscord(clientId: string) {
   retryDiscordAuthorization = authenticateDiscord;
   viewerRetry.addEventListener('click', () => {
     void authenticateDiscord().then(() => {
-      if (discordAccessToken && config && !room && !cloudflareViewer) void connectViewer(config.defaultStream).catch(showConnectionError);
+      if (currentMediaSource==='switch' && discordAccessToken && config && !room && !cloudflareViewer) void connectViewer(config.defaultStream).catch(showConnectionError);
     });
   });
   let refreshInFlight = false;
@@ -413,6 +418,7 @@ function getLiveKitConnectUrl(serverUrl: string) {
 }
 
 function clearVideo() {
+  if(currentMediaSource==='youtube')return;
   activeVideoTrack?.detach().forEach((element) => element.remove());
   activeVideoTrack = null;
   activeVideoPublisherId = null;
@@ -422,6 +428,7 @@ function clearVideo() {
 }
 
 function attachTrack(track: RemoteTrack, publisherId: string) {
+  if(currentMediaSource==='youtube')return;
   const element = track.attach();
   element.autoplay = true;
 
@@ -465,6 +472,7 @@ function attachTrack(track: RemoteTrack, publisherId: string) {
 
 
 function attachCloudflareTrack(kind: 'video' | 'audio', mediaTrack: MediaStreamTrack) {
+  if(currentMediaSource==='youtube')return;
   if (kind === 'audio') {
     const element = document.createElement('audio');
     element.autoplay = true;
@@ -516,6 +524,8 @@ setInterval(() => {
 }, 2000);
 
 async function connectViewer(stream: string) {
+  if(currentMediaSource==='youtube')return;
+  const epoch=++streamEpoch;
   if (!discordAccessToken) throw new Error('Autoriza tu perfil en Discord para ver la transmisión');
   if (signalLostTimer) {
     clearTimeout(signalLostTimer);
@@ -526,20 +536,22 @@ async function connectViewer(stream: string) {
   setLive(false);
 
   if (room) {
-    await room.disconnect();
-    room = null;
+    const previousRoom=room;room=null;
+    await previousRoom.disconnect();
   }
 
+  if(epoch!==streamEpoch)return;
   if (config?.streamProvider === 'cloudflare') {
-    if (cloudflareViewer) cloudflareViewer.stop();
+    if (cloudflareViewer) {cloudflareViewer.stop();audioMount.replaceChildren();clearVideo();}
     roomText.textContent = `shis-${config.defaultStream}`;
     cloudflareViewer = new CloudflareViewer(
       () => discordAccessToken,
-      attachCloudflareTrack,
-      () => { audioMount.replaceChildren(); audioButton.hidden = true; clearVideo(); },
-      showConnectionError,
+      (kind,track) => {if(epoch===streamEpoch)attachCloudflareTrack(kind,track);},
+      () => { if(epoch!==streamEpoch || currentMediaSource==='youtube')return; audioMount.replaceChildren(); audioButton.hidden = true; clearVideo(); },
+      error => {if(epoch===streamEpoch)showConnectionError(error);},
     );
     await cloudflareViewer.start();
+    if(epoch!==streamEpoch)return;
     if (!activeVideoElement) setStatus('BUSCANDO SEÑAL…');
     return;
   }
@@ -548,6 +560,7 @@ async function connectViewer(stream: string) {
     headers: { Authorization: `Bearer ${discordAccessToken}` }, cache: 'no-store',
   });
   const body = await response.json().catch(() => ({}));
+  if(epoch!==streamEpoch)return;
   if (!response.ok) {
     if (response.status === 401) {
       discordAccessToken = '';
@@ -581,10 +594,12 @@ async function connectViewer(stream: string) {
 
   const connectUrl = getLiveKitConnectUrl(credentials.serverUrl);
   await nextRoom.connect(connectUrl, credentials.token, { autoSubscribe: true });
+  if(epoch!==streamEpoch){await nextRoom.disconnect();return;}
   if (videoMount.childElementCount === 0) setStatus('BUSCANDO SEÑAL…');
 }
 
 function showConnectionError(error: unknown) {
+  if(currentMediaSource==='youtube')return;
   console.error(error);
   setLive(false);
   setStatus(error instanceof Error && /Discord|actividad|perfil|autoriza/i.test(error.message) ?
@@ -596,7 +611,7 @@ async function boot() {
   try {
     config = await fetchJson<AppConfig>('/api/config');
     await initDiscord(config.discordClientId);
-    await connectViewer(config.defaultStream);
+    try { await youtubeRoom?.refresh(); } catch { await connectViewer(config.defaultStream); }
   } catch (error) {
     showConnectionError(error);
   }
@@ -646,6 +661,7 @@ exitButton.addEventListener('click', exitActivity);
 document.querySelector('#editorExit')!.addEventListener('click', exitActivity);
 
 audioButton.addEventListener('click', async () => {
+  if(currentMediaSource==='youtube'){youtubeRoom?.activate();audioButton.hidden=true;return;}
   const audioElements = [...audioMount.querySelectorAll('audio')];
   if (audioElements.length === 0) return;
   const results = await Promise.allSettled([
@@ -658,6 +674,7 @@ audioButton.addEventListener('click', async () => {
 
 retryButton.addEventListener('click', async () => {
   try {
+    if(currentMediaSource==='youtube'){await youtubeRoom?.retry();return;}
     if (!config) return await boot();
     if (!discordAccessToken && retryDiscordAuthorization) await retryDiscordAuthorization();
     if (discordAccessToken) await connectViewer(config.defaultStream);
@@ -668,4 +685,17 @@ retryButton.addEventListener('click', async () => {
 
 initRoomLighting();
 initDecorations();
+if(!editorPreviewMode)youtubeRoom=new YouTubeRoom(async source=>{
+  currentMediaSource=source;streamEpoch++;
+  stage.classList.toggle('youtube-source',source==='youtube');
+  if(signalLostTimer){clearTimeout(signalLostTimer);signalLostTimer=null;}
+  const oldRoom=room;room=null;cloudflareViewer?.stop();cloudflareViewer=null;
+  activeVideoTrack?.detach().forEach(el=>el.remove());activeVideoTrack=null;activeVideoPublisherId=null;activeVideoElement=null;
+  videoMount.replaceChildren();audioMount.replaceChildren();audioButton.hidden=true;retryButton.hidden=true;
+  document.querySelector<HTMLElement>('#mediaNotice')!.hidden=true;
+  setLive(source==='youtube');setStatus('');roomText.textContent='';
+  window.dispatchEvent(new Event('shis-media-layout-change'));
+  await oldRoom?.disconnect();
+  if(source==='switch' && config && discordAccessToken)await connectViewer(config.defaultStream);
+},()=>volume);
 if (!editorPreviewMode) boot();

@@ -5,12 +5,12 @@ import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type De
 import { objectTransform, gradeFilter, type Transform, type ContactShadow } from './studio-model';
 import { initStudio, refreshStudio, shapeAsset, rememberAssets } from './studio';
 import { clearLampAnimation, addLampAnimation } from './lamp-animation';
-import { applyTvSupport } from './scene-presentation';
+import { applyTvSupport, containYouTubePlayer } from './scene-presentation';
 import { applyPresentation, initVideoFraming } from './scene-presentation';
 import { cameraRect, type Presentation } from './presentation-model';
 import { sceneControls } from './scene-controls';
 import { straightCorners, validCorners } from './perspective';
-import { maskBehindTv } from './occlusion';
+import { maskBehindTv, protectPlayer } from './occlusion';
 import { EditorHistory } from './editor-history';
 import { builtinUrl, visibleInRoom, props } from '../room-catalog.mjs';
 import { restOnSurface } from './resting-placement';
@@ -360,10 +360,12 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     Object.assign(grid.style, { left: `${bounds.left - room.left}px`, top: `${bounds.top - room.top}px`, width: `${bounds.width}px`, height: `${bounds.height}px` });
     layer.append(grid);
   }
-  const syncSupport = () => { if (sceneName === 'home') { applyTvSupport();
+  const syncSupport = () => { if (sceneName === 'home') { applyTvSupport();containYouTubePlayer();
       for (const item of manifest.items) { const p = placementFor(item, sceneName, view, currentAspect()); if (!p || p.anchor !== 'frame') continue; for (const el of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (el.dataset.id === item.id) position(el, p, sceneName, view); }
       maskBehindTv(behind, layer, document.querySelector<HTMLElement>('.tv-face')!); } };
   syncSupport();
+  containYouTubePlayer();
+  protectPlayer(layer);
   setDecorationLights(lights);
   if (editable && (previewTool === 'tv' || previewTool === 'camera' || previewTool === 'screen') && view !== 'window') {
     const p = (manifest.presentations ??= {})[key(sceneName, view, currentAspect())] ??= {};
@@ -590,6 +592,7 @@ function sendPreview(group?: string, record = true) {
   updateHistoryButtons();
   refreshStudio();
   if (previewReady) preview.contentWindow?.postMessage({ type: 'decor-preview', manifest: compareSaved ? saved : draft, selected: compareSaved ? null : selected,
+    youtube:stage.classList.contains('youtube-source'),
     selectedIds: compareSaved ? [] : [...selection], testLight: previewTest,
     tool: compareSaved ? 'pan' : editorTool, grid: editorGrid.checked, snap: editorSnap.checked }, location.origin);
 }
@@ -792,6 +795,10 @@ function connectPreviewVideo() {
   const doc = preview.contentDocument, mount = doc?.querySelector('#videoMount'); if (!doc || !mount) return;
   const source = document.querySelector<HTMLVideoElement>('#videoMount video');
   let video = mount.querySelector<HTMLVideoElement>('video');
+  const youtube=stage.classList.contains('youtube-source');
+  doc.querySelector('#stage')!.classList.toggle('youtube-source',youtube);
+  if(youtube){if(video){video.srcObject=null;video.remove();}mount.textContent='YouTube · vista de decoración';doc.querySelector('#stage')!.classList.add('has-signal');doc.querySelector<HTMLElement>('#emptyState')!.style.display='none';previewVideoSource=null;previewFeed=null;return;}
+  if(mount.textContent==='YouTube · vista de decoración')mount.textContent='';
   if (!source) { if (video?.dataset.editorFeed) { video.srcObject = null; video.remove(); }
     doc.querySelector('#stage')!.classList.remove('has-signal'); doc.querySelector<HTMLElement>('#emptyState')!.style.display = '';
     doc.querySelector('#liveBadge')!.textContent = 'STANDBY'; doc.querySelector('#statusText')!.textContent = 'ESPERANDO SEÑAL';
@@ -992,6 +999,7 @@ export function initDecorations() {
       previewSnap = event.data.snap === true; previewGrid = event.data.grid === true;
       stage.classList.toggle('pan-tool', previewTool === 'pan' || spaceHeld);
       const manifest = event.data.manifest as Manifest;
+      stage.classList.toggle('youtube-source',event.data.youtube===true);
       ensureViewerSlots(manifest);
       render(manifest, scene(), currentView(), true);
     });
@@ -1089,6 +1097,7 @@ export function initDecorations() {
   decorName.addEventListener('change', () => history.endGroup());
   window.addEventListener('shis-scene-change', () => render(saved, scene(), currentView(), false));
   window.addEventListener('shis-aspect-change', () => render(saved, scene(), currentView(), false));
+  window.addEventListener('shis-media-layout-change', () => {render(saved,scene(),currentView(),false);sendPreview(undefined,false);});
 
   editorButton.addEventListener('click', async () => {
     await initialLoad;

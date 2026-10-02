@@ -10,6 +10,7 @@ export function projectRect(percent: Rect, art: Rect, scene: Rect): Rect {
 }
 
 export function maskBehindTv(behind: HTMLElement, layer: HTMLElement, face: HTMLElement) {
+  protectPlayer(layer);
   if (innerWidth <= 520 && innerHeight <= 360) {
     // In a call tile the TV fills the scene; everything behind it is hidden.
     behind.hidden = true;
@@ -28,4 +29,10 @@ export function maskBehindTv(behind: HTMLElement, layer: HTMLElement, face: HTML
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}"><defs><mask id="tv" maskUnits="userSpaceOnUse" x="0" y="0" width="${scene.width}" height="${scene.height}"><rect width="100%" height="100%" fill="white"/>${holes}</mask></defs><rect width="100%" height="100%" fill="white" mask="url(#tv)"/></svg>`;
   behind.style.maskImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
   behind.style.maskSize = '100% 100%';
+}
+export function protectPlayer(layer:HTMLElement){
+  if(!document.querySelector('#stage')?.classList.contains('youtube-source')){layer.style.removeProperty('mask-image');return;}
+  const scene=layer.getBoundingClientRect(),glass=document.querySelector('#player')!.getBoundingClientRect();
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}"><defs><mask id="glass"><rect width="100%" height="100%" fill="white"/><rect x="${glass.x-scene.x}" y="${glass.y-scene.y}" width="${glass.width}" height="${glass.height}" fill="black"/></mask></defs><rect width="100%" height="100%" fill="white" mask="url(#glass)"/></svg>`;
+  layer.style.maskImage=`url("data:image/svg+xml,${encodeURIComponent(svg)}")`;layer.style.maskSize='100% 100%';
 }

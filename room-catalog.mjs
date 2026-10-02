@@ -6,6 +6,12 @@ export const rooms = [
   { id: 'violet-den', name: 'Rincón violeta', description: 'Nicho malva, mueble oscuro y luz suave entre varias capas', furniture: 'cabinet-black', floorLine: .65 },
 ];
 export const props = [
+  { id: 'game-disc', name: 'Disco de aventura', category: 'game' },
+  { id: 'open-game-case', name: 'Caja de disco abierta', category: 'game' },
+  { id: 'cartridge-gray', name: 'Cartucho gris', category: 'game' },
+  { id: 'game-cases-stack', name: 'Discos apilados', category: 'game' },
+  { id: 'anime-figure', name: 'Figura anime con mando', category: 'figurine' },
+  { id: 'anime-poster', name: 'Póster anime con cinta', category: 'poster' },
   { id: 'floor-lamp', name: 'Lámpara de pie', category: 'lamp' },
   { id: 'linen-lamp', name: 'Lámpara de lino y nogal', category: 'lamp' },
   { id: 'linen-floor-lamp', name: 'Lámpara de pie de lino', category: 'lamp' },
