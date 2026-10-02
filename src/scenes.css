@@ -1292,3 +1292,17 @@
 .stage.flat-panel:not(.square-screen) .screen-wrap, .stage.flat-panel:not(.square-screen) .screen-wrap .player { border-radius:0.6% !important; }
 .stage.flat-panel .screen-wrap .player { box-shadow:none !important; }
 .stage.flat-panel .signal-sweep { display:none !important; }
+
+.studio-preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.studio-preset-grid button { text-align: left; padding: 12px; border: 1px solid #596877; border-radius: 10px; background: #222c3a; color: #edf0f6; }
+.studio-preset-grid small { display: block; margin-top: 6px; line-height: 1.45; color: #bdc9d5; }
+#closeDialog { width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); box-sizing: border-box; overflow: auto; border: 1px solid #566477; border-radius: 18px; padding: 24px; background: #17202e; color: #edf0f6; box-shadow: 0 24px 80px #0009; }
+#closeDialog::backdrop { background: #080c16b8; backdrop-filter: blur(5px); }
+#closeDialog h2 { margin: 0 0 14px; font-size: 21px; }
+#closeDialog p { line-height: 1.55; color: #c6cedb; }
+.close-actions { display: grid; gap: 10px; }
+.close-actions button { padding: 12px; border: 1px solid #64738a; border-radius: 10px; color: #f5f3ff; background: #2b3649; cursor: pointer; }
+#closeSave { background: #61558e; }
+.close-actions button:focus-visible { outline: 2px solid #d1c1ff; outline-offset: 3px; }
+.close-actions button:disabled { opacity: .5; cursor: wait; }
+.decor-light-bulb[hidden] { display: none; }

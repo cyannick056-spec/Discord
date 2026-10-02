@@ -1,6 +1,6 @@
 import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
-import { initDecorations, setDecorationViewers } from './decorations';
+import { initDecorations, setDecorationViewers, requestAppClose } from './decorations';
 import { CloudflareViewer } from './cloudflare';
 import { initRoomLighting } from './lighting';
 import './style.css';
@@ -260,6 +260,7 @@ async function initDiscord(clientId: string) {
   discordSdk = gateSession?.sdk ?? new DiscordSDK(clientId);
   await discordSdk.ready();
   exitButton.hidden = false;
+  document.querySelector<HTMLButtonElement>('#editorExit')!.hidden = false;
   type Participant = Types.GetActivityInstanceConnectedParticipantsResponse['participants'][number];
   const avatarUrl = (user: Participant) => user.avatar ?
     `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` :
@@ -640,7 +641,9 @@ document.addEventListener('keydown', (event) => {
     settingsButton.focus();
   }
 });
-exitButton.addEventListener('click', () => discordSdk?.close(RPCCloseCodes.CLOSE_NORMAL, 'Salió de Shis Stream'));
+const exitActivity = () => requestAppClose(() => discordSdk?.close(RPCCloseCodes.CLOSE_NORMAL, 'Salió de Shis Stream'));
+exitButton.addEventListener('click', exitActivity);
+document.querySelector('#editorExit')!.addEventListener('click', exitActivity);
 
 audioButton.addEventListener('click', async () => {
   const audioElements = [...audioMount.querySelectorAll('audio')];

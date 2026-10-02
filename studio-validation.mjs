@@ -45,9 +45,11 @@ function validGrade(g) {
 }
 export function validMood(m) {
   return object(m) && (m.daytime === undefined || ['morning', 'day', 'evening', 'night'].includes(m.daytime)) && ['neutral', 'blue-night', 'warm', 'classic-night', 'tv-only', 'moonlight', 'soft-night', 'neon'].includes(m.preset) &&
+    (m.practicalLights === undefined || typeof m.practicalLights === 'boolean') &&
     ['accent', 'accent2'].every(key => m[key] === undefined || (typeof m[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(m[key]))) &&
     finite(m.intensity, 0, 100) && finite(m.tvGlow, 0, 200) &&
-    optionalNumbers(m, { rim: [0, 200], cabinet: [0, 200], floor: [0, 200], reach: [30, 180], transition: [150, 2000] }) &&
+    optionalNumbers(m, { rim: [0, 200], cabinet: [0, 200], floor: [0, 200], reach: [30, 180], transition: [150, 2000], depth: [0, 100] }) &&
+    (m.backlight === undefined || (!!object(m.backlight) && typeof m.backlight.color === 'string' && /^#[a-fA-F0-9]{6}$/.test(m.backlight.color) && finite(m.backlight.intensity, 0, 100) && finite(m.backlight.reach, 50, 180))) &&
     (m.grade === undefined || validGrade(m.grade)) &&
     (m.zones === undefined || (object(m.zones) && Object.entries(m.zones).every(([zone, g]) => ['wall', 'cabinet', 'floor', 'tv', 'figures'].includes(zone) && validGrade(g))));
 }

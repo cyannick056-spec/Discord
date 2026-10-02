@@ -289,7 +289,8 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       const bulb = document.createElement('div');
       bulb.className = 'decor-light-bulb';
       bulb.style.setProperty('--bulb-color', placement.light?.color ?? '#555555');
-      bulb.classList.toggle('is-off', !placement.light || placement.light.intensity === 0);
+      bulb.classList.toggle('is-off', !placement.light || placement.light.intensity === 0 || roomMood?.practicalLights === false);
+      bulb.hidden = placement.behindTv === true && !(editable && selection.has(item.id));
       box.append(bulb);
     } else {
       const image = document.createElement('img');
@@ -349,7 +350,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       attachDrag(outline, placement, sceneName, view, box);
     }
     if (placement.light && placement.opacity > 0 && placement.light.intensity > 0) {
-      lights.push({ id: item.id, ...placement.light, intensity: placement.light.intensity * placement.opacity });
+      lights.push({ id: item.id, ...placement.light, behindTv:placement.behindTv, intensity: placement.light.intensity * placement.opacity });
     }
   }
   if (editable && previewGrid) {
@@ -895,7 +896,77 @@ async function loadDecorations() {
   } catch (error) { console.error('No se pudo cargar la decoración:', error); }
 }
 
+const closeDialog = document.querySelector<HTMLDialogElement>('#closeDialog')!;
+const closeSave = document.querySelector<HTMLButtonElement>('#closeSave')!;
+const closeDiscard = document.querySelector<HTMLButtonElement>('#closeDiscard')!;
+const closeCancel = document.querySelector<HTMLButtonElement>('#closeCancel')!;
+const closeStatus = document.querySelector<HTMLElement>('#closeStatus')!;
+let saving = false;
+let closeAction: (() => void | Promise<void>) | undefined;
+function hasUnsavedChanges() {
+  return !editor.hidden && !!editKey && JSON.stringify(draft) !== JSON.stringify(saved);
+}
+function closeEditor() {
+  draft = copyManifest(saved); history.reset(draft);
+  editor.hidden = true; stage.classList.remove('editing-decoration');
+  preview.src = 'about:blank'; previewReady = false;
+  render(saved, scene(), currentView(), false);
+}
+async function saveChanges(allViews: boolean): Promise<boolean> {
+  if (saving) return false;
+  rememberAssets();
+  const versions = [{ id: crypto.randomUUID(), name: new Date().toLocaleString('es'), room: {
+    items: structuredClone(saved.items), ambient: saved.ambient, mood: structuredClone(saved.mood), presentations: structuredClone(saved.presentations)
+  } }, ...(draft.versions ?? [])].slice(0, 3);
+  const submitted = allViews ? copyManifest(draft) : saveView(saved, draft, activeKey());
+  submitted.versions = versions;
+  saving = true; editorSave.disabled = true;
+  try {
+    status(allViews ? 'Guardando los cambios pendientes…' : 'Guardando esta vista…');
+    await editorRequest('/api/decorations', {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(submitted)});
+    saved = submitted; draft.versions = structuredClone(versions);
+    if(allViews) draft = copyManifest(saved);
+    refreshStudio(); render(saved, scene(), currentView(), false); updateHistoryButtons();
+    status(JSON.stringify(draft) === JSON.stringify(saved) ? 'Vista guardada. Las demás conservan su decoración.' : 'Vista guardada. Quedan cambios pendientes en el editor.');
+    return true;
+  } catch(error) {
+    const message=error instanceof Error ? error.message : 'No se pudo guardar';
+    status(message); closeStatus.textContent=message; return false;
+  } finally { saving=false; editorSave.disabled=false; }
+}
+function requestClose(app: boolean, action?: () => void | Promise<void>) {
+  if(saving || closeDialog.open) return;
+  const dirty=hasUnsavedChanges();
+  if(!app && !dirty) {closeEditor();return;}
+  closeAction=action;
+  document.querySelector('#closeTitle')!.textContent=app ? '¿Seguro que quieres cerrar la app?' : '¿Seguro que quieres cerrar el editor?';
+  document.querySelector('#closeDescription')!.textContent=dirty
+    ? 'Hay cambios sin guardar. Guardar y cerrar conserva los cambios pendientes de todas las vistas editadas. Descartar elimina solo esos cambios; conserva lo que ya guardaste.'
+    : 'Puedes volver a entrar cuando quieras. Tus ajustes guardados se conservarán.';
+  closeStatus.textContent='';closeSave.hidden=!dirty;closeDiscard.textContent=dirty?'Descartar y cerrar':'Cerrar';
+  closeDialog.showModal();closeCancel.focus();
+}
+export function requestAppClose(action: () => void | Promise<void>) { requestClose(true,action); }
+
 export function initDecorations() {
+  closeCancel.addEventListener('click', () => { if(!saving) closeDialog.close(); });
+  closeDialog.addEventListener('cancel', event => { if(saving) event.preventDefault(); });
+  const finishClose=async () => {
+    const action=closeAction;closeAction=undefined;
+    closeDialog.close();closeEditor();
+    try {await action?.();} catch(error) {status(error instanceof Error ? error.message : 'No se pudo cerrar la app');}
+  };
+  closeDiscard.addEventListener('click', () => {if(!saving) void finishClose();});
+  closeSave.addEventListener('click', async () => {
+    if(saving) return;
+    closeSave.disabled=closeDiscard.disabled=closeCancel.disabled=true;closeStatus.textContent='Guardando…';
+    const ok=await saveChanges(true);
+    closeSave.disabled=closeDiscard.disabled=closeCancel.disabled=false;
+    if(ok) await finishClose();
+  });
+  window.addEventListener('beforeunload', event => {
+    if(hasUnsavedChanges()) {event.preventDefault();event.returnValue='';}
+  });
   initVideoFraming();
   if (previewMode) {
     window.addEventListener('message', async event => {
@@ -976,7 +1047,7 @@ export function initDecorations() {
     history.endGroup();
   });
   document.addEventListener('keydown', event => {
-    if (editor.hidden || editorWorkspace.hidden) return;
+    if (editor.hidden || editorWorkspace.hidden || closeDialog.open) return;
     if (!editorMenu.hidden && (event.target as HTMLElement).closest('#editorMenu')) {
       if (event.key === 'Escape') { event.preventDefault(); editorMenu.hidden = true;
         preview.contentDocument?.querySelector<HTMLElement>('#stage')?.focus(); return; }
@@ -1025,15 +1096,7 @@ export function initDecorations() {
     if (editKey) openWorkspace();
     else editorKey.focus();
   });
-  editorClose.addEventListener('click', () => {
-    if (editKey && JSON.stringify(draft) !== JSON.stringify(saved) &&
-        !confirm('Hay cambios sin guardar. ¿Cerrar el editor?')) return;
-    editor.hidden = true;
-    stage.classList.remove('editing-decoration');
-    preview.src = 'about:blank';
-    previewReady = false;
-    render(saved, scene(), currentView(), false);
-  });
+  editorClose.addEventListener('click', () => requestClose(false));
   editorUnlock.addEventListener('click', async () => {
     editKey = editorKey.value;
     try {
@@ -1191,26 +1254,7 @@ export function initDecorations() {
     status(`Copiada a TV ${other}. Cambia el selector de tamaño para ajustarla antes de guardar.`);
   });
   decorRemove.addEventListener('click', () => editorCommand('remove'));
-  editorSave.addEventListener('click', async () => {
-    rememberAssets();
-    if (JSON.stringify(draft.items) !== JSON.stringify(saved.items) || JSON.stringify(draft.mood) !== JSON.stringify(saved.mood) || draft.ambient !== saved.ambient || JSON.stringify(draft.presentations) !== JSON.stringify(saved.presentations)) {
-      draft.versions = [{ id: crypto.randomUUID(), name: new Date().toLocaleString('es'), room: { items: structuredClone(saved.items), ambient: saved.ambient, mood: structuredClone(saved.mood), presentations: structuredClone(saved.presentations) } }, ...(draft.versions ?? [])].slice(0, 3);
-    }
-    const submitted = saveView(saved, draft, activeKey());
-    editorSave.disabled = true;
-    try {
-      status('Guardando esta vista…');
-      await editorRequest('/api/decorations', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(submitted),
-      });
-      saved = submitted;
-      refreshStudio();
-      render(saved, scene(), currentView(), false);
-      updateHistoryButtons();
-      status(JSON.stringify(draft) === JSON.stringify(saved) ? 'Vista guardada. Las demás conservan su decoración.' : 'Vista guardada. Quedan cambios pendientes en el editor.');
-    } catch (error) { status(error instanceof Error ? error.message : 'No se pudo guardar'); }
-    finally { editorSave.disabled = false; }
-  });
+  editorSave.addEventListener('click', () => { void saveChanges(false); });
   window.addEventListener('message', (event) => {
     if (event.origin !== location.origin || event.source !== preview.contentWindow) return;
     if (event.data?.type === 'decor-rested') {

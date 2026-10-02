@@ -25,6 +25,7 @@ test('lighting saves round-trip without losing legacy placements and reject inva
     const updated = structuredClone(legacy);
     updated.ambient = 62;
     updated.mood = { preset: 'blue-night', intensity: 65, tvGlow: 150 };
+    updated.presentations = { 'home-landscape-16x9': { ambient: 78, mood: {preset:'neutral',intensity:0,tvGlow:120,depth:42,practicalLights:false,backlight:{color:'#779fcd',intensity:32,reach:115}} } };
     updated.items[0].placements['home-landscape'].light = { color: '#ffcc88', intensity: 75, radius: 6, x: 50, y: 20 };
     updated.items[0].placements['home-landscape'].behindTv = true;
     updated.items[0].placements['home-landscape'].locked = true;
