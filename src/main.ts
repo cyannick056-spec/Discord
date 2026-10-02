@@ -486,7 +486,7 @@ async function connectViewer(stream: string) {
   );
   cloudflareViewer = viewer;
   await viewer.start();
-  if(epoch!==streamEpoch || currentMediaSource==='youtube') {
+  if(epoch!==streamEpoch) {
     viewer.stop();
     if (cloudflareViewer===viewer) cloudflareViewer=null;
     return;
