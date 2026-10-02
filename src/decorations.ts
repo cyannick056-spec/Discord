@@ -1,3 +1,4 @@
+import {beginSceneTransition,finishSceneTransition,sceneTransitionActive} from './scene-transition';
 import {canControlActivity,hostHeaders,unlockHost} from './activity-controls';
 import {refreshSpriteResolution} from './sprite-rendering';
 import { viewPresentation, viewMood, removeFromView, duplicateInView, saveView } from './view-state';
@@ -246,11 +247,19 @@ function ambientFilter(placement: Placement): string {
     `drop-shadow(0 2px 3px rgba(0,0,0,${(.9 * shadow).toFixed(2)}))`;
 }
 
+let renderedScene = '';
+let savedLoaded = previewMode;
 function render(manifest: Manifest, sceneName: Scene, view: View, editable: boolean) {
+  if(!editable && !savedLoaded) return;
+  const sceneKey = key(sceneName, view, currentAspect());
+  const nextScene = JSON.stringify([sceneKey, manifest.presentations?.[sceneKey]?.environment, manifest.presentations?.[sceneKey]?.background, manifest.presentations?.[sceneKey]?.tvModel]);
+  const transition = nextScene !== renderedScene || sceneTransitionActive() ? beginSceneTransition() : undefined;
+  renderedScene = nextScene;
+  const pending: Promise<unknown>[] = [];
   lastRender = { manifest, sceneName, view, editable };
   const presentation = manifest.presentations?.[key(sceneName, view, currentAspect())];
   const roomMood = presentation?.mood ?? manifest.mood;
-  applyPresentation(presentation, roomMood);
+  pending.push(applyPresentation(presentation));
   clearLampAnimation();
   layer.replaceChildren();
   const behind = document.createElement('div');
@@ -310,11 +319,11 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       image.alt = '';
       image.draggable = false;
       image.style.filter = `${ambientFilter(placement)} ${gradeFilter(roomMood, item.kind === 'builtin' ? item.asset === 'rug' ? 'floor' : item.category === 'furniture' ? 'cabinet' : 'figures' : 'figures',placement.lightResponse ?? defaultLightResponse)}`;
-      image.addEventListener('load', () => { position(box, placement, sceneName, view); syncSupport(); if (sceneName === 'home') void applyPhotoLight(box,image); }, { once: true });
+      pending.push(image.decode().then(() => { if(!box.isConnected) return; position(box, placement, sceneName, view); syncSupport(); if (sceneName === 'home') return applyPhotoLight(box,image); }));
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
-      if (isSolidFurniture(item)) { if (placement.material) { box.dataset.material = placement.material.preset; box.dataset.roughness = String(placement.material.roughness ?? 65); } void applyFurnitureMaterial(box, image, item.asset, placement.material).then(()=>applyObjectFinish(box,image,item,placement)); }
-      else void applyObjectFinish(box,image,item,placement);
+      if (isSolidFurniture(item)) { if (placement.material) { box.dataset.material = placement.material.preset; box.dataset.roughness = String(placement.material.roughness ?? 65); } pending.push(applyFurnitureMaterial(box, image, item.asset, placement.material).then(()=>applyObjectFinish(box,image,item,placement))); }
+      else pending.push(applyObjectFinish(box,image,item,placement));
       if (item.kind === 'builtin' && item.category === 'lamp') addLampAnimation(box, image, placement, item.asset === 'lava-lamp',roomMood?.practicalLights !== false);
     }
     if (placement.contactShadow?.opacity) {
@@ -383,12 +392,14 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
   setDecorationLights(lights);
   if (editable && (previewTool === 'tv' || previewTool === 'camera' || previewTool === 'screen') && view !== 'window') {
     const p = (manifest.presentations ??= {})[key(sceneName, view, currentAspect())] ??= {};
-    sceneControls(layer, p, roomMood, previewTool, () => {
+    sceneControls(layer, p, previewTool, () => {
       for (const item of manifest.items) { const placement = placementFor(item, sceneName, view, currentAspect()); if (!placement) continue;
         for (const el of layer.querySelectorAll<HTMLDivElement>('.decoration-box')) if (el.dataset.id === item.id) position(el, placement, sceneName, view); }
       syncSupport();
     }, () => previewPinching);
   }
+  if(transition !== undefined) void finishSceneTransition(transition,pending);
+  else void Promise.allSettled(pending);
 }
 
 function attachDrag(box: HTMLDivElement, placement: Placement, sceneName: Scene, view: View, linkedBox?: HTMLDivElement) {
@@ -917,7 +928,7 @@ async function loadDecorations() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const next=await response.json() as Manifest;
     ensureViewerSlots(next);
-    const changed=JSON.stringify(next)!==JSON.stringify(saved);saved=next;
+    const changed=JSON.stringify(next)!==JSON.stringify(saved);saved=next;savedLoaded=true;
     if (editor.hidden && (changed || !lastRender)) render(saved, scene(), currentView(), false);
   } catch (error) { console.error('No se pudo cargar la decoración:', error); }
 }

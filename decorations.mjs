@@ -5,7 +5,6 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { validMood, validMetadata, validStudioPlacement, validCollections, validPresentations } from './studio-validation.mjs';
-import { restoreOriginalRoom } from './original-room.mjs';
 import { rebuildRealRooms } from './real-room.mjs';
 import { roomIds, legacyRoomIds } from './room-catalog.mjs';
 
@@ -77,31 +76,13 @@ function validManifest(input) {
   });
 }
 
-export function installDecorations(app, { directory, editKey, restoreOriginal = false, rebuildRooms = false, hostAuthorized = () => false }) {
+export function installDecorations(app, { directory, editKey, rebuildRooms = false, hostAuthorized = () => false }) {
   const assetsDir = path.join(directory, 'assets');
   const manifestPath = path.join(directory, 'manifest.json');
   const blank = { items: [] };
 
-  // Apply the requested shared-room restoration once, with a full backup.
-  // Subsequent deployments and editor saves keep the user's newer choices.
-  const originalReady = restoreOriginal ? (async () => {
-    const marker = path.join(directory, 'original-room-restored-v1.json');
-    try { await readFile(marker); return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    const data = await readFile(manifestPath, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-    await mkdir(directory, { recursive: true });
-    const manifest = data === null ? structuredClone(blank) : JSON.parse(data);
-    if (!validManifest(manifest)) throw new Error('Cannot restore an invalid decoration manifest');
-    if (data !== null) {
-      await writeFile(path.join(directory, 'manifest-before-original-room-v1.json'), data, { flag: 'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
-    }
-    const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);
-    await writeFile(temporary, JSON.stringify(restoreOriginalRoom(manifest)));
-    await rename(temporary, manifestPath);
-    await writeFile(marker, JSON.stringify({ restoredAt: new Date().toISOString() }));
-    console.info(`Original photo room restored; ${manifest.items.length} decorations preserved`);
-  })().then(() => null, error => error) : Promise.resolve(null);
-  const ready = rebuildRooms ? originalReady.then(async error => {
-    if (error) throw error;
+  // Keep the current one-time migration and its backups for older installs.
+  const ready = rebuildRooms ? (async () => {
     const marker = path.join(directory, 'cozy-night-rebuilt-v2.json');
     try { await readFile(marker); return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const data = await readFile(manifestPath, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
@@ -114,7 +95,7 @@ export function installDecorations(app, { directory, editKey, restoreOriginal = 
     const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);
     await writeFile(temporary, JSON.stringify(manifest)); await rename(temporary, manifestPath);
     await writeFile(marker, JSON.stringify({ rebuiltAt: new Date().toISOString() }));
-  }).then(() => null, error => error) : originalReady;
+  })().then(() => null, error => error) : Promise.resolve(null);
   app.use('/api/decorations', async (_req, res, next) => {
     const error = await ready;
     if (error) { console.error('Room preparation failed:', error); return res.status(500).json({ error: 'No se pudo preparar el entorno' }); }

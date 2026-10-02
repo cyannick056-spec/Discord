@@ -80,7 +80,6 @@ export class YouTubeRoom {
   private dialog=document.querySelector<HTMLDialogElement>('#sourceDialog')!;
   private status=document.querySelector<HTMLElement>('#youtubeStatus')!;
   private notice=document.querySelector<HTMLElement>('#mediaNotice')!;
-  private stage=document.querySelector<HTMLElement>('#stage')!;
   private mount=document.querySelector<HTMLElement>('#videoMount')!;
   private url:string;
   constructor(private changeSource:(source:'switch'|'youtube')=>Promise<void>,private volume:()=>number,private openExternal:(url:string)=>Promise<void>) {

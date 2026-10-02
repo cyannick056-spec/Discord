@@ -1,14 +1,14 @@
+import {sceneImage} from './scene-images';
 import { projectTvShadow, type ShadowRect, type ShadowLight } from './tv-shadow-model';
 import type { SurfacePlane } from './support-surfaces';
 
-const images=new Map<string,HTMLImageElement>();
 let cached: {key:string;mask:HTMLCanvasElement} | undefined;
 // Reuse the photographed alpha and the same body crop as the displayed casing.
 // Fill the glass: it is transparent for video compositing, but physically solid.
 export function tvSilhouette(face: HTMLElement) {
   const s=getComputedStyle(face), n=(k:string)=>parseFloat(s.getPropertyValue('--'+k))/100;
   const url=/url\(["']?([^"')]+)["']?\)/.exec(s.getPropertyValue('--room-art'))?.[1];if(!url) return;
-  let image=images.get(url);if(!image){image=new Image();image.src=url;images.set(url,image);}
+  const image=sceneImage(url);
   if(!image.complete || !image.naturalWidth) return;
   const original=face.dataset.tvModel==='original';
   const photo=original ? [0,0,1,1] : ['x','y','w','h'].map(k=>n('photo-'+k));

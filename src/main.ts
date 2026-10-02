@@ -1,3 +1,4 @@
+import {beginSceneTransition} from './scene-transition';
 import {canControlActivity,initActivityControls,changeActivityControls} from './activity-controls';
 import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded-app-sdk';
 import { Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
@@ -79,6 +80,7 @@ try {
 if (editorPreviewMode) aspectMode = new URLSearchParams(location.search).get('aspect') === '4:3' ? '4:3' : '16:9';
 
 function setAspect(mode: AspectMode) {
+  if(aspectMode!==mode) beginSceneTransition();
   aspectMode = mode;
   tvScene.classList.toggle('aspect-4x3', mode === '4:3');
   aspectButton.textContent = mode;
@@ -96,6 +98,7 @@ try {
 if (editorPreviewMode) sceneMode = new URLSearchParams(location.search).get('scene') === 'arcade' ? 'arcade' : 'home';
 
 function setScene(mode: SceneMode) {
+  if(sceneMode!==mode) beginSceneTransition();
   sceneMode = mode;
   stage.classList.toggle('home-mode', mode === 'home');
   stage.classList.toggle('arcade-mode', mode === 'arcade');
