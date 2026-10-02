@@ -32,3 +32,12 @@ acciones de cada fila consultan el borrador actual, incluso después de cerrar
 y reabrir el editor. Los controles originales de luz, color, tono y sombra
 están en un panel abierto; la sombra de apoyo y el recorte se pueden desplegar
 dentro de ese panel. El catálogo queda plegado debajo de los ajustes.
+# Background light occlusion
+
+Wall/backlight washes and floor pools exclude the rendered furniture alpha. A
+floor boundary crossing the cabinet front must not create a bright horizontal
+band that looks like transparency. Cabinet illumination and its top reflection
+remain separate receiving passes; transparent leg openings still show the room.
+The mask follows crop, rotation, flips, skew and perspective, and is cached until
+the rendered furniture, placement or scene framing changes. Rugs remain floor
+receivers. No saved layouts or appearance controls are changed by this fix.

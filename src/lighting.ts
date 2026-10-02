@@ -8,6 +8,7 @@ import { supportPlane, supportElement, type SurfacePlane } from './support-surfa
 import { photoFloor } from './room-geometry';
 import { tvSilhouette, paintCastMask, paintTvContact, weightShadowByLight, clipSurface } from './tv-shadows';
 import { lightAt, type ShadowLight } from './tv-shadow-model';
+import { paintFurnitureOcclusion } from './furniture-occlusion';
 
 export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number; behindTv?: boolean; wallOnly?: boolean };
 let sources: DecorationLight[] = [];
@@ -38,6 +39,8 @@ export function initRoomLighting() {
   const wallShadowCtx=wallShadow.getContext('2d')!, contactCtx=contactShadow.getContext('2d')!;
   const castMask=document.createElement('canvas'),castCtx=castMask.getContext('2d')!;
   const occludedGlow=document.createElement('canvas'),occludedCtx=occludedGlow.getContext('2d')!;
+  const furnitureMask=document.createElement('canvas'),furnitureCtx=furnitureMask.getContext('2d')!;
+  const backgroundMask=document.createElement('canvas'),backgroundCtx=backgroundMask.getContext('2d')!;
   const sample = document.createElement('canvas');
   sample.width = 64; sample.height = 36;
   const testSample = document.createElement('canvas'); testSample.width = 64; testSample.height = 36;
@@ -76,8 +79,11 @@ export function initRoomLighting() {
     for(const [ctx,isTint] of [[shadowCtx!,false],[tintCtx!,true]] as const) {
       ctx.save(); ctx.beginPath(); ctx.rect(0,0,ctx.canvas.width,Math.max(0,wallBottom)); ctx.clip();
       if(tvBounds) {ctx.beginPath();ctx.rect(0,0,ctx.canvas.width,ctx.canvas.height);ctx.roundRect(tvBounds.x,tvBounds.y,tvBounds.width,tvBounds.height,4);ctx.clip('evenodd');}
+      occludedCtx.clearRect(0,0,occludedGlow.width,occludedGlow.height);
+      occludedCtx.drawImage(isTint?coloredWash:wash,x-w/2,y-h/2,w,h);
+      occludedCtx.globalCompositeOperation='destination-out';occludedCtx.drawImage(furnitureMask,0,0);occludedCtx.globalCompositeOperation='source-over';
       ctx.globalCompositeOperation=isTint?'source-over':'destination-out';
-      ctx.globalAlpha=Math.min(.9,power * (isTint ? .30 : .8));ctx.drawImage(isTint?coloredWash:wash,x-w/2,y-h/2,w,h);ctx.restore();
+      ctx.globalAlpha=Math.min(.9,power * (isTint ? .30 : .8));ctx.drawImage(occludedGlow,0,0);ctx.restore();
     }
   }
   let boundsForWash={y:0,scale:1};
@@ -153,8 +159,9 @@ export function initRoomLighting() {
     const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
     if (shade.width !== width || shade.height !== height) {
       shade.width = tint.width = grade.width = reflection.width = floorReflection.width = width; shade.height = tint.height = grade.height = reflection.height = floorReflection.height = height;
-      for(const canvas of [wallShadow,contactShadow,castMask,occludedGlow]) {canvas.width=width;canvas.height=height;}
+      for(const canvas of [wallShadow,contactShadow,castMask,occludedGlow,furnitureMask,backgroundMask]) {canvas.width=width;canvas.height=height;}
     }
+    paintFurnitureOcclusion(furnitureCtx,bounds,scale);
     reflectionCtx?.clearRect(0, 0, width, height);
     floorReflectionCtx?.clearRect(0, 0, width, height);
     shadowCtx.clearRect(0, 0, width, height);
@@ -262,7 +269,7 @@ export function initRoomLighting() {
     const cabinetClip=stage.classList.contains('modular-room') && cabinetBox ? toScene(cabinetBox) : undefined;
     const floorClip=stage.classList.contains('modular-room') ? toScene(floorPlane) : undefined;
     glow(gx + gw / 2, cabinetClip ? cabinetClip.y + cabinetClip.height*.35 : gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain * (mood.cabinet ?? 100) / 100,0,60,false,cabinetClip);
-    glow(gx + gw / 2, floorClip ? Math.max(floorClip.y,gy+gh) + gh*.4 : gy + gh*1.65, gw * .95 * reach, gh*.85*reach, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100,0,85,false,floorClip);
+    glow(gx + gw / 2, floorClip ? Math.max(floorClip.y,gy+gh) + gh*.4 : gy + gh*1.65, gw * .95 * reach, gh*.85*reach, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100,0,85,false,floorClip,furnitureMask);
     const power = mood.intensity / 100;
     if (['blue-night', 'classic-night', 'moonlight'].includes(mood.preset)) glow(width * .12, height * .25, width * .6, height * .7,
       { r: 100, g: 140, b: 210, strength: power * .09 });
@@ -319,15 +326,18 @@ export function initRoomLighting() {
       if(light.wallOnly) wallWash(x,y,radius*2,radius*1.5,color);
       else {
         const practical=box.querySelector('.lamp-animation') !== null && box.dataset.prop !== 'lava-lamp';
+        backgroundCtx.clearRect(0,0,width,height);backgroundCtx.drawImage(furnitureMask,0,0);
+        if(occlusion) backgroundCtx.drawImage(occlusion,0,0);
+        const wallOcclusion=practical ? backgroundMask : occlusion;
         const wallClip={x:0,y:0,width,height:Math.max(0,wallBottom)};
-        glow(x,y,radius,radius*(light.shape==='strip'?.16:light.shape==='spot'?.4:1),color,practical?.72:1,light.angle ?? 0,light.softness ?? 60,false,practical?wallClip:undefined,occlusion);
+        glow(x,y,radius,radius*(light.shape==='strip'?.16:light.shape==='spot'?.4:1),color,practical?.72:1,light.angle ?? 0,light.softness ?? 60,false,practical?wallClip:undefined,wallOcclusion);
         if(practical && (!light.shape || light.shape==='point')) {
           // Shade openings produce soft vertical lobes, rather than one flat
           // disc. Their origin, range and occlusion follow the editable lamp.
-          glow(x,y-radius*.16,radius*.38,radius*.6,color,.32,0,90,false,wallClip,occlusion);
-          glow(x,y+radius*.19,radius*.5,radius*.6,color,.38,0,90,false,wallClip,occlusion);
+          glow(x,y-radius*.16,radius*.38,radius*.6,color,.32,0,90,false,wallClip,wallOcclusion);
+          glow(x,y+radius*.19,radius*.5,radius*.6,color,.38,0,90,false,wallClip,wallOcclusion);
           const poolY=Math.max(wallBottom,y),floorPower=lightAt(source,x,poolY);
-          if(floorPower>.005) glow(x,poolY+radius*.08,radius*.62,radius*.23,{...color,strength:floorPower},.5,0,90,false,toScene(floorPlane));
+          if(floorPower>.005) glow(x,poolY+radius*.08,radius*.62,radius*.23,{...color,strength:floorPower},.5,0,90,false,toScene(floorPlane),furnitureMask);
           if(plane) {
             const surface={...toScene(plane),quad:plane.quad?.map(([px,py])=>[(px-bounds.x)*scale,(py-bounds.y)*scale] as [number,number])};
             glow(x,y,radius,radius,color,.24,0,90,false,surface);
