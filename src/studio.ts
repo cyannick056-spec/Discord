@@ -1,7 +1,8 @@
 import { duplicateInView } from './view-state';
 import { applyLightingPreset, lightingPresets } from './lighting-presets';
 import type { PlacementKey } from './decorations';
-import { materials, MAX_SCENE_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
+import { materials, furnitureColors, MAX_SCENE_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
+import { isSolidFurniture } from './furniture-appearance';
 import type { Decoration, Manifest, Placement, RoomSnapshot } from './decorations';
 import { perspectiveAngles, type Grade, type Mood, type Daytime, type Transform, type Zone } from './studio-model';
 import { type Presentation, type TvPaint, type Reflection } from './presentation-model';
@@ -24,6 +25,7 @@ type Host = {
 };
 let host: Host | undefined;
 let listSignature = '';
+let librarySignature = '';
 let appearance: Partial<Placement> | undefined;
 const zoomViews = ['home-landscape-16x9', 'home-landscape-4x3', 'home-portrait-16x9', 'home-portrait-4x3', 'home-window-16x9', 'home-window-4x3', 'arcade-landscape', 'arcade-portrait', 'arcade-window'];
 const zoomLabels = ['Horizontal · 16:9', 'Horizontal · 4:3', 'Vertical · 16:9', 'Vertical · 4:3', 'Ventana pequeña · 16:9', 'Ventana pequeña · 4:3', 'Arcade horizontal', 'Arcade vertical', 'Arcade en ventana'];
@@ -110,16 +112,19 @@ export function initStudio(h: Host) {
     range('studioSkewX', 'Deformación horizontal', -45, 45) + range('studioSkewY', 'Deformación vertical', -45, 45) +
     range('studioScaleX', 'Estirar ancho', .25, 2.5, .05) + range('studioScaleY', 'Estirar alto', .25, 2.5, .05) +
     '<div class="studio-buttons">' + buttons([['flipX', 'Voltear ↔'], ['flipY', 'Voltear ↕'], ['warpTool', 'Editar las 4 esquinas'], ['resetCorners', 'Restablecer esquinas'], ['resetTransform', 'Restablecer']]) + '</div><details><summary>Coordenadas de las esquinas</summary><div class="studio-corner-fields">' + [0, 1, 2, 3].map(i => `<label>${['Superior izquierda', 'Superior derecha', 'Inferior derecha', 'Inferior izquierda'][i]}<span><input id="studioCorner${i}X" type="number" min="-60" max="160" step="1" aria-label="Esquina ${i + 1} X"/><input id="studioCorner${i}Y" type="number" min="-60" max="160" step="1" aria-label="Esquina ${i + 1} Y"/></span></label>`).join('') + '</div></details>') +
-    panel('studioMaterial', 'Material del mueble', '<label>Material<select id="studioMaterialPreset">' + materials.map(m => `<option value="${m.id}">${m.name}</option>`).join('') + '</select></label><label>Aplicar a<select id="studioMaterialScope"><option value="top">Solo superficie de apoyo</option><option value="all">Mueble completo</option></select></label><label>Color del material<input id="studioMaterialColor" type="color"/></label>' + range('studioMaterialStrength', 'Intensidad del material', 0, 100) + range('studioMaterialScale', 'Tamaño de la textura', .25, 4, .05) + range('studioMaterialRoughness', 'Acabado mate / rugosidad', 0, 100) + '<p class="studio-note">La textura respeta la silueta de la fotografía. En muebles sin tapa separada se aplica al objeto entero; rugosidad baja produce un reflejo más marcado.</p>') +
-    panel('studioAppearance', 'Acabado, recorte y sombra de apoyo',
+    panel('studioMaterial', 'Material del mueble', '<label>Material<select id="studioMaterialPreset">' + materials.map(m => `<option value="${m.id}">${m.name}</option>`).join('') + '</select></label><label>Aplicar a<select id="studioMaterialScope"><option value="top">Solo superficie de apoyo</option><option value="all">Mueble completo</option></select></label><label>Color del material<input id="studioMaterialColor" type="color"/></label><div id="studioFurnitureColors" class="studio-color-palette" aria-label="Colores de muebles">' + furnitureColors.map(c=>`<button type="button" data-furniture-color="${c.color}" aria-pressed="false"><span style="background:${c.color}" aria-hidden="true"></span>${c.name}</button>`).join('') + '</div>' + range('studioMaterialStrength', 'Intensidad del material', 0, 100) + range('studioMaterialScale', 'Tamaño de la textura', .25, 4, .05) + range('studioMaterialRoughness', 'Acabado mate / rugosidad', 0, 100) + '<p class="studio-note">Los muebles se muestran sólidos. El material conserva la silueta y los huecos entre las patas; rugosidad baja produce un reflejo más marcado.</p>') +
+    panel('studioAppearance', 'Color, tono y sombra', '<details class="studio-section editor-wide"><summary>Sombra de apoyo y recorte</summary><div class="studio-fields">' +
       range('studioContactOpacity', 'Sombra de apoyo', 0, 100) + range('studioContactBlur', 'Suavidad de sombra', 0, 25) + range('studioContactWidth', 'Ancho de sombra', 20, 160) +
       range('studioContactX', 'Desplazar sombra X', -50, 50) + range('studioContactY', 'Desplazar sombra Y', -40, 40) +
       [0, 1, 2, 3].map((i) => range(`studioCrop${i}`, `Recorte ${['arriba', 'derecha', 'abajo', 'izquierda'][i]}`, 0, 45)).join('') +
-      '<div class="studio-buttons">' + buttons([['copyStyle', 'Copiar acabado'], ['pasteStyle', 'Pegar acabado']]) + '</div>') +
+      '<div class="studio-buttons">' + buttons([['copyStyle', 'Copiar acabado'], ['pasteStyle', 'Pegar acabado']]) + '</div></div></details>', true) +
     panel('studioGroups', 'Selección, grupos y alineación', '<p class="studio-note">Shift / Ctrl + clic suma objetos. En móvil usa la casilla junto a cada objeto. Alt + clic elige un miembro del grupo.</p><output id="studioSelectionCount"></output><div class="studio-buttons">' + buttons([['selectAll', 'Seleccionar todos'], ['group', 'Agrupar'], ['ungroup', 'Desagrupar'], ['alignX', 'Alinear X'], ['alignY', 'Alinear Y'], ['distributeX', 'Distribuir X'], ['distributeY', 'Distribuir Y']]) + '</div>') +
     panel('studioLibrary', 'Mi biblioteca', '<p class="studio-note">Reutiliza tus imágenes o empieza con estas piezas.</p><div id="studioLibraryList" class="studio-gallery"></div>'));
   const appearanceFields = ['decorBrightness', 'decorSaturation', 'decorHue', 'decorShadow'];
-  appearanceFields.forEach(id => $('studioAppearance').querySelector('.studio-fields')!.prepend($(id).closest('label')!));
+  for(const id of [...appearanceFields].reverse()) $('studioAppearance').querySelector('.studio-fields')!.prepend($(id).closest('label')!);
+  properties.before($('studioAppearance'));
+  objects.append($('studioFurnitureTypes'));
+  $('studioFurnitureTypes').removeAttribute('open');
   // Move existing emission controls without replacing their listeners or IDs.
   lights.insertAdjacentHTML('beforeend', panel('studioLampTypes', 'Añadir lámpara', '<div class="studio-lamp-gallery">' + props.filter(p => p.category === 'lamp').map(p => `<button type="button" data-studio-lamp="${p.id}"><img src="${builtinUrl(p.id)}" alt=""/>${p.name}</button>`).join('') + '</div>', true));
   lights.append($('editorAddLight'));
@@ -128,9 +133,9 @@ export function initStudio(h: Host) {
   for (const id of ['decorEmitLight', 'decorLightColor', 'decorLightIntensity', 'decorLightRadius', 'decorLightX', 'decorLightY']) lightFields.append($(id).closest('label')!);
   lightFields.insertAdjacentHTML('beforeend', '<div class="studio-buttons" aria-label="Colores de lámpara">' + ['#ffca90','#fff2d2','#ff6aa3','#ff623c','#69b7ff','#ad7aff','#6aefc2'].map((c,i) => `<button type="button" data-studio-light-color="${c}">${['Ámbar','Blanco','Rosa','Rojo','Azul','Violeta','Verde'][i]}</button>`).join('') + '</div><label class="studio-check"><input type="checkbox" id="studioLavaMotion"/> Movimiento de lava</label>' + range('studioLavaSpeed','Velocidad de lava',.2,3,.1));
   lightFields.insertAdjacentHTML('beforeend', '<label>Forma<select id="studioLightShape"><option value="point">Puntual</option><option value="spot">Foco</option><option value="strip">Tira LED</option></select></label>' + range('studioLightAngle', 'Orientación', -180, 180) + range('studioLightSoftness', 'Suavidad', 0, 100) + range('studioKelvin', 'Temperatura (K)', 2000, 10000, 100) + '<div class="studio-buttons">' + buttons([['lightToggle', 'Encender / apagar']]) + '</div>');
-  environment.insertAdjacentHTML('beforeend', panel('studioLightingPresets', 'Noches preparadas', '<div class="studio-preset-grid">' + lightingPresets.map(p => `<button type="button" data-lighting-preset="${p.id}"><strong>${p.name}</strong><small>${p.description}</small></button>`).join('') + '</div><p class="studio-note">Aplica solo la iluminación de esta vista. Conserva tus figuras, TV y encuadre.</p>', true));
+  environment.insertAdjacentHTML('beforeend', panel('studioLightingPresets', 'Noches preparadas', '<div class="studio-preset-grid">' + lightingPresets.map(p => `<button type="button" data-lighting-preset="${p.id}"><strong>${p.name}</strong><small>${p.description}</small></button>`).join('') + '</div><p class="studio-note">Cambia las luces y la oscuridad de esta vista. Conserva la TV, el encuadre y la decoración existente; no añade piezas.</p>', true));
   environment.append($('editorAmbient').closest('label')!, $('editorEnvironment'));
-  environment.insertAdjacentHTML('beforeend', panel('studioBacklight', 'Luz suave detrás de la TV', '<label>Color<input id="studioBacklightColor" type="color"/></label>' + range('studioBacklightIntensity', 'Intensidad', 0, 100) + range('studioBacklightReach', 'Extensión', 50, 180) + range('studioDepth', 'Profundidad de sombras', 0, 100) + '<label class="studio-check"><input id="studioPracticalLights" type="checkbox"/> Luz de lámparas y objetos</label><p class="studio-note">La luz sigue el tamaño y la posición de la TV. Las sombras ayudan a separar la pared, la TV y el suelo.</p>', true));
+  environment.insertAdjacentHTML('beforeend', panel('studioBacklight', 'Luz suave detrás de la TV', '<label>Color<input id="studioBacklightColor" type="color"/></label>' + range('studioBacklightIntensity', 'Intensidad', 0, 100) + range('studioBacklightReach', 'Extensión', 50, 180) + range('studioShadowDepth', 'Profundidad de sombras', 0, 100) + '<label class="studio-check"><input id="studioPracticalLights" type="checkbox"/> Luz de lámparas y objetos</label><p class="studio-note">La luz sigue el tamaño y la posición de la TV. Las sombras ayudan a separar la pared, la TV y el suelo.</p>', true));
   const presets: [string, string][] = [['neutral', 'Original / neutro'], ['classic-night', 'Noche clásica'], ['tv-only', 'Solo la TV'], ['moonlight', 'Luz de luna'], ['warm', 'Noche acogedora'], ['soft-night', 'Noche suave'], ['blue-night', 'Noche azul sutil'], ['neon', 'Neón']];
   $<HTMLSelectElement>('editorMood').replaceChildren(...presets.map(([value, name]) => new Option(name, value)));
   environment.insertAdjacentHTML('beforeend', panel('studioGrade', 'Color por superficie · avanzado',
@@ -214,7 +219,7 @@ export function initStudio(h: Host) {
     Object.assign(light, {[key]: key === 'color' ? $<HTMLInputElement>(id).value : Number($<HTMLInputElement>(id).value)}); h.change('backlight');
   });
   $('studioPracticalLights').addEventListener('change', () => {mood().practicalLights = $<HTMLInputElement>('studioPracticalLights').checked; h.change();});
-  $('studioDepth').addEventListener('input', () => {mood().depth = Number($<HTMLInputElement>('studioDepth').value); h.change('depth');});
+  $('studioShadowDepth').addEventListener('input', () => {mood().depth = Number($<HTMLInputElement>('studioShadowDepth').value); h.change('depth');});
   Object.entries(bounceFields).forEach(([id, key]) => $('studio' + id).addEventListener('input', () => { mood()[key] = Number($<HTMLInputElement>('studio' + id).value); h.change('bounce'); }));
   for (const [id, key] of [['studioLightShape', 'shape'], ['studioLightAngle', 'angle'], ['studioLightSoftness', 'softness']] as const) $(id).addEventListener('input', () => {
     for (const p of placements()) if (p.light) Object.assign(p.light, { [key]: key === 'shape' ? $<HTMLSelectElement>(id).value : Number($<HTMLInputElement>(id).value) }); h.change('light');
@@ -253,10 +258,19 @@ export function initStudio(h: Host) {
   $('studioRoomGallery').addEventListener('click', e => { const button = (e.target as HTMLElement).closest<HTMLElement>('[data-studio-room]'); if (button) chooseRoom(button.dataset.studioRoom as RoomId); });
   $('studioTvModel').addEventListener('change', () => { const p = presentation(); p.tvModel = $<HTMLSelectElement>('studioTvModel').value as Presentation['tvModel']; delete p.screen; p.tvSupport = tvModels.find(t => t.id === p.tvModel)?.floor ? 'floor' : p.environment ? 'cabinet' : 'free'; h.change(); });
   matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => refreshStudio());
-  const materialPlacements = () => h.draft().items.filter(i => h.selected().includes(i.id) && i.category === 'furniture').flatMap(i => { const p = i.placements[h.key() as keyof typeof i.placements]; return p && !p.locked ? [p] : []; });
-  $('studioMaterialPreset').addEventListener('change', () => { const preset = $<HTMLSelectElement>('studioMaterialPreset').value as FurnitureMaterial['preset']; const info = materials.find(m => m.id === preset)!; for (const p of materialPlacements()) { if (preset === 'original') delete p.material; else p.material = { ...p.material, preset, color: info.tint, scope: p.material?.scope ?? (props.find(prop => prop.id === h.item()?.asset)?.support ? 'top' : 'all'), roughness: info.finish === 'metal' ? 30 : info.finish === 'matte' ? 90 : 65 }; } h.change(); });
+  const materialPlacements = () => h.draft().items.filter(i => h.selected().includes(i.id) && isSolidFurniture(i)).flatMap(i => { const p = i.placements[h.key() as keyof typeof i.placements]; return p && !p.locked ? [p] : []; });
+  const paintFurniture=(color:string)=>{
+    for(const p of materialPlacements()) p.material={preset:'white',scope:'all',...(p.material?.preset !== 'original' ? p.material : {}),color};
+    h.change('material-color');
+  };
+  $('studioMaterialPreset').addEventListener('change', () => { const preset = $<HTMLSelectElement>('studioMaterialPreset').value as FurnitureMaterial['preset']; const info = materials.find(m => m.id === preset)!; for (const p of materialPlacements()) { if (preset === 'original') delete p.material; else p.material = { ...p.material, preset, color: info.tint, scope: p.material?.scope ?? 'all', roughness: info.finish === 'metal' ? 30 : info.finish === 'matte' ? 90 : 65 }; } h.change(); });
+  $('studioFurnitureColors').addEventListener('click', event=>{
+    const color=(event.target as HTMLElement).closest<HTMLElement>('[data-furniture-color]')?.dataset.furnitureColor;
+    if(!color) return;
+    paintFurniture(color);
+  });
   $('studioMaterialScope').addEventListener('change', () => { for (const p of materialPlacements()) if (p.material) p.material.scope = $<HTMLSelectElement>('studioMaterialScope').value as 'top' | 'all'; h.change(); });
-  $('studioMaterialColor').addEventListener('input', () => { for (const p of materialPlacements()) if (p.material) p.material.color = $<HTMLInputElement>('studioMaterialColor').value; h.change('material-color'); });
+  $('studioMaterialColor').addEventListener('input', () => paintFurniture($<HTMLInputElement>('studioMaterialColor').value));
   for (const [id, key] of [['Strength','strength'],['Scale','scale'],['Roughness','roughness']] as const) $('studioMaterial' + id).addEventListener('input', () => { for (const p of materialPlacements()) if (p.material) p.material[key] = Number($<HTMLInputElement>('studioMaterial' + id).value); h.change('material-' + key); });
   $('studioFurnitureTypes').addEventListener('click', e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-studio-prop]')?.dataset.studioProp; if (!id) return; const item = builtinDecoration(id); item.placements[h.key() as keyof typeof item.placements] = roomPlacement(id, h.key().includes('portrait')); h.create(item); });
   $('studioSupportStyle').addEventListener('change', () => { const asset = $<HTMLSelectElement>('studioSupportStyle').value, info = props.find(p => p.id === asset)!, found = supportItem(); if (found?.kind === 'builtin') { const replacement = duplicateInView(found, h.key() as import('./decorations').PlacementKey); replacement.asset = asset; replacement.name = info.name; replacement.category = 'furniture'; found.placements[h.key() as keyof typeof found.placements]!.hidden = true; const p = presentation(); p.tvSupport = 'cabinet'; p.supportId = replacement.id; h.create(replacement); } else { const item = builtinDecoration(asset); item.placements[h.key() as keyof typeof item.placements] = roomPlacement(asset, h.key().includes('portrait')); const p = presentation(); p.tvSupport = 'cabinet'; p.supportId = item.id; h.create(item); } });
@@ -387,10 +401,11 @@ export function refreshStudio() {
   field('studioLavaMotion', p?.lava?.motion ?? true); field('studioLavaSpeed', p?.lava?.speed ?? 1);
   $<HTMLInputElement>('studioLavaMotion').disabled = item?.asset !== 'lava-lamp'; $<HTMLInputElement>('studioLavaSpeed').disabled = item?.asset !== 'lava-lamp';
   const material = p?.material;
-  field('studioMaterialPreset', material?.preset ?? 'original'); field('studioMaterialScope', material?.scope ?? (props.find(prop => prop.id === item?.asset)?.support ? 'top' : 'all'));
+  field('studioMaterialPreset', material?.preset ?? 'original'); field('studioMaterialScope', material?.scope ?? (material && props.find(prop=>prop.id===item?.asset)?.support ? 'top' : 'all'));
   field('studioMaterialColor', material?.color ?? materials.find(m => m.id === material?.preset)?.tint ?? '#ffffff');
   field('studioMaterialStrength', material?.strength ?? 85); field('studioMaterialScale', material?.scale ?? 1); field('studioMaterialRoughness', material?.roughness ?? 65);
-  $('studioMaterial').querySelectorAll<HTMLInputElement | HTMLSelectElement>('input,select').forEach(el => el.disabled = !p || p.locked === true || item?.category !== 'furniture' || (el.id !== 'studioMaterialPreset' && !material));
+  $('studioMaterial').querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input,select,button').forEach(el => el.disabled = !p || p.locked === true || !item || !isSolidFurniture(item) || (!el.dataset.furnitureColor && !['studioMaterialPreset','studioMaterialColor'].includes(el.id) && !material));
+  $('studioFurnitureColors').querySelectorAll<HTMLButtonElement>('button').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.furnitureColor===material?.color)));
   field('studioObjectCategory', item?.category ?? (item?.kind === 'light' ? 'lamp' : 'figurine'));
   field('studioLightShape', p?.light?.shape ?? 'point'); field('studioLightAngle', p?.light?.angle ?? 0); field('studioLightSoftness', p?.light?.softness ?? 60);
   field('studioKelvin', p?.light?.kelvin ?? 4000);
@@ -398,7 +413,7 @@ export function refreshStudio() {
   $('studioSelectionCount').textContent = `${host.selected().length} objetos seleccionados`;
   const m = scene?.mood ?? d.mood, zone = $<HTMLSelectElement>('studioZone').value;
   field('studioBacklightColor', m?.backlight?.color ?? '#9e86dd'); field('studioBacklightIntensity', m?.backlight?.intensity ?? 0);
-  field('studioBacklightReach', m?.backlight?.reach ?? 115); field('studioDepth', m?.depth ?? 0); field('studioPracticalLights', m?.practicalLights !== false);
+  field('studioBacklightReach', m?.backlight?.reach ?? 115); field('studioShadowDepth', m?.depth ?? 0); field('studioPracticalLights', m?.practicalLights !== false);
   const g = zone === 'all' ? m?.grade : m?.zones?.[zone as Zone];
   for (const [key, value] of Object.entries({ Exposure: g?.exposure ?? 0, Contrast: g?.contrast ?? 100, Saturation: g?.saturation ?? 100, Temperature: g?.temperature ?? 0, Shadows: g?.shadows ?? 0, Influence: g?.influence ?? (zone === 'tv' ? 30 : 100) })) field('studio' + key, value);
   for (const [key, value] of Object.entries({ Rim: m?.rim ?? 100, Cabinet: m?.cabinet ?? 100, Floor: m?.floor ?? 100, Reach: m?.reach ?? 100, Transition: m?.transition ?? 380 })) field('studio' + key, value);
@@ -409,23 +424,45 @@ export function refreshStudio() {
   }
   const query = $<HTMLInputElement>('studioSearch').value.toLocaleLowerCase(), category = $<HTMLSelectElement>('studioCategory').value;
   $('studioFurnitureTypes').querySelectorAll<HTMLButtonElement>('[data-studio-prop]').forEach(button => { button.hidden = (!button.textContent?.toLocaleLowerCase().includes(query)) || (category !== 'all' && category !== button.dataset.category); });
-  const signature = JSON.stringify([scene?.environment, d.items.map(i => [i.id, i.name, i.asset, i.kind, i.shape, i.category, i.favorite, i.group, i.placements[host!.key() as keyof typeof i.placements]?.hidden, i.placements[host!.key() as keyof typeof i.placements]?.locked]), d.library, host.selected(), query, category]);
-  if (signature === listSignature) return; listSignature = signature;
-  const list = $('studioObjectList'); list.replaceChildren();
-  const visible = d.items.filter(i => visibleInRoom(i, scene) && (!query || i.name.toLocaleLowerCase().includes(query)) && (category === 'all' || category === 'favorite' ? category !== 'favorite' || i.favorite : (i.category ?? (i.kind === 'light' ? 'lamp' : 'figurine')) === category));
-  visible.sort((a, b) => Number(host!.selected().includes(b.id)) - Number(host!.selected().includes(a.id)));
-  for (const entry of visible) {
-    const row = document.createElement('div'); row.className = 'studio-object-row'; row.classList.toggle('is-selected', host.selected().includes(entry.id));
-    const check = document.createElement('input'); check.type = 'checkbox'; check.checked = host.selected().includes(entry.id); check.setAttribute('aria-label', `Añadir ${entry.name} a selección`); check.addEventListener('change', () => host!.select(entry.id, true));
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'studio-object-select';
-    const image = document.createElement('img'); image.alt = ''; image.src = entry.kind === 'shape' ? shapeAsset(entry.shape) : entry.kind === 'builtin' ? builtinUrl(entry.asset) : entry.asset ? host.asset(`/api/decorations/assets/${encodeURIComponent(entry.asset)}`) : shapeAsset(entry.kind === 'light' ? 'star' : 'robot');
-    const text = document.createElement('span'); text.textContent = entry.name; button.append(image, text); button.addEventListener('click', e => host!.select(entry.id, e.shiftKey || e.ctrlKey || e.metaKey)); row.append(check, button);
-    const placement = entry.placements[host.key() as keyof typeof entry.placements];
-    for (const [action, label, on] of [['favorite', 'Favorito', entry.favorite], ['hidden', 'Ocultar', placement?.hidden], ['locked', 'Bloquear', placement?.locked]] as const) {
-      const actionButton = document.createElement('button'); actionButton.type = 'button'; actionButton.title = label; actionButton.setAttribute('aria-label', `${label}: ${entry.name}`); actionButton.setAttribute('aria-pressed', String(Boolean(on))); actionButton.textContent = action === 'favorite' ? on ? '★' : '☆' : action === 'hidden' ? on ? '◌' : '◉' : on ? '▣' : '□';
-      actionButton.addEventListener('click', () => { if (action === 'favorite') entry.favorite = !entry.favorite; else if (placement) placement[action] = !placement[action]; host!.change(); }); row.append(actionButton);
-    } list.append(row);
+  const list = $('studioObjectList'), selectedIds=new Set(host.selected()), entries=new Map(d.items.map(i=>[i.id,i]));
+  // Selection changes only the existing row state. Do not move selected rows
+  // to the top or recreate thumbnails and lose the user's scroll position.
+  for(const row of list.querySelectorAll<HTMLElement>('.studio-object-row')) {
+    const selected=selectedIds.has(row.dataset.id!);row.classList.toggle('is-selected',selected);
+    row.querySelector<HTMLInputElement>('input')!.checked=selected;
+    const entry=entries.get(row.dataset.id!);if(!entry)continue;
+    const p=entry.placements[host.key() as keyof typeof entry.placements];
+    for(const button of row.querySelectorAll<HTMLButtonElement>('[data-row-action]')) {
+      const action=button.dataset.rowAction!, on=Boolean(action==='favorite'?entry.favorite:action==='hidden'?p?.hidden:p?.locked);
+      const pressed=String(on), icon=action==='favorite'?(on?'★':'☆'):action==='hidden'?(on?'◌':'◉'):(on?'▣':'□');
+      if(button.getAttribute('aria-pressed')!==pressed) button.setAttribute('aria-pressed',pressed);
+      if(button.textContent!==icon) button.textContent=icon;
+    }
   }
+  const visible = d.items.filter(i => visibleInRoom(i, scene) && (!query || i.name.toLocaleLowerCase().includes(query)) && (category === 'all' || category === 'favorite' ? category !== 'favorite' || i.favorite : (i.category ?? (i.kind === 'light' ? 'lamp' : 'figurine')) === category));
+  const signature = JSON.stringify([host.key(), visible.map(i=>[i.id,i.name,i.asset,i.kind,i.shape,i.category]), query, category]);
+  if(signature !== listSignature) {
+    listSignature=signature;const scroll=list.scrollTop;list.replaceChildren();
+    for (const entry of visible) {
+      const row = document.createElement('div'); row.className = 'studio-object-row';row.dataset.id=entry.id; row.classList.toggle('is-selected', selectedIds.has(entry.id));
+      const check = document.createElement('input'); check.type = 'checkbox'; check.checked = host.selected().includes(entry.id); check.setAttribute('aria-label', `Añadir ${entry.name} a selección`); check.addEventListener('change', () => host!.select(entry.id, true));
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'studio-object-select';
+      const image = document.createElement('img'); image.alt = ''; image.src = entry.kind === 'shape' ? shapeAsset(entry.shape) : entry.kind === 'builtin' ? builtinUrl(entry.asset) : entry.asset ? host.asset(`/api/decorations/assets/${encodeURIComponent(entry.asset)}`) : shapeAsset(entry.kind === 'light' ? 'star' : 'robot');
+      const text = document.createElement('span'); text.textContent = entry.name; button.append(image, text); button.addEventListener('click', e => host!.select(entry.id, e.shiftKey || e.ctrlKey || e.metaKey)); row.append(check, button);
+      const placement = entry.placements[host.key() as keyof typeof entry.placements];
+      for (const [action, label, on] of [['favorite', 'Favorito', entry.favorite], ['hidden', 'Ocultar', placement?.hidden], ['locked', 'Bloquear', placement?.locked]] as const) {
+        const actionButton = document.createElement('button'); actionButton.type = 'button';actionButton.dataset.rowAction=action; actionButton.title = label; actionButton.setAttribute('aria-label', `${label}: ${entry.name}`); actionButton.setAttribute('aria-pressed', String(Boolean(on))); actionButton.textContent = action === 'favorite' ? on ? '★' : '☆' : action === 'hidden' ? on ? '◌' : '◉' : on ? '▣' : '□';
+        actionButton.addEventListener('click', () => {
+          const current=host!.draft().items.find(i=>i.id===entry.id);if(!current)return;
+          const p=current.placements[host!.key() as keyof typeof current.placements];
+          if(action==='favorite') current.favorite=!current.favorite;else if(p) p[action]=!p[action];host!.change();
+        }); row.append(actionButton);
+      } list.append(row);
+    }
+    list.scrollTop=scroll;
+  }
+  const nextLibrarySignature=JSON.stringify([d.library,d.items.map(i=>[i.id,i.asset,i.kind,i.shape,i.name,i.category,i.favorite]),query,category]);
+  if(nextLibrarySignature===librarySignature)return;librarySignature=nextLibrarySignature;
   const gallery = $('studioLibraryList'); gallery.replaceChildren();
   const library: Omit<Decoration, 'placements'>[] = [...props.map(p => ({ id: p.id, asset: p.id, name: p.name, category: p.category, kind: 'builtin' as const })), ...Object.keys(names).map(shape => ({ id: shape, name: names[shape], asset: '', kind: 'shape' as const, shape, category: shape === 'frame' || shape === 'poster' ? shape : 'figurine' })), ...(d.library ?? []), ...d.items.filter(i => i.kind !== 'light' && i.kind !== 'viewer-slot')];
   const seen = new Set<string>();
