@@ -303,7 +303,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
       if (item.category === 'furniture') { if (placement.material) { box.dataset.material = placement.material.preset; box.dataset.roughness = String(placement.material.roughness ?? 65); } void applyFurnitureMaterial(box, image, item.asset, placement.material); }
-      if (item.kind === 'builtin' && item.category === 'lamp') addLampAnimation(box, image, placement, item.asset === 'lava-lamp');
+      if (item.kind === 'builtin' && item.category === 'lamp') addLampAnimation(box, image, placement, item.asset === 'lava-lamp',roomMood?.practicalLights !== false);
     }
     if (placement.contactShadow?.opacity) {
       const shadow = document.createElement('span'); shadow.className = 'decor-contact-shadow';
