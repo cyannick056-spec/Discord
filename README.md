@@ -1,104 +1,77 @@
-# SHIS Stream — Discord Activity and native relay
+# SHIS Stream — Discord Activity
 
-Watch a Nintendo Switch stream together inside a Discord Activity. The current sender is a customized SysDVR sysmodule on the Switch; the Android APK in [`Shis-Stream`](https://github.com/cyannick056-spec/Shis-Stream) is an older alternative.
+SHIS Stream is a private-use Discord Activity for watching a Nintendo Switch stream together inside a voice call. The current production path uses a customized SysDVR sender on the Switch, a small Railway relay, Cloudflare Realtime SFU and the Discord Activity UI.
 
 ## Current architecture
 
 ```text
-Nintendo Switch (Atmosphère + SysDVR SHIS Direct)
-  -> Railway TCP proxy
-  -> native SHIS relay (Go, this repo's relay/)
-  -> LiveKit Cloud
-  -> Discord Activity (this repo's src/)
-  -> viewers in Discord
+Nintendo Switch
+  └─ SysDVR SHIS Direct (H.264 video + PCM audio)
+       ↓ TCP
+Railway native relay
+       ↓ authenticated signaling/media publish
+Cloudflare Realtime SFU
+       ↓
+Discord Activity
+       ↓
+Viewers in the same Activity
 ```
 
-SysDVR captures H.264 video and PCM audio, then sends both to the relay over TCP. The relay authenticates the sender with `SHIS/1 <stream> <stream_key>`, publishes the media to LiveKit, and the Activity subscribes to it. The Node server (`server.mjs`) serves the Activity, issues short-lived viewer tokens, and stores shared decorations; it does not carry the video stream. The legacy `/api/publisher-token` endpoint remains for the older Android sender.
+The Switch never needs Discord or Cloudflare credentials. It only knows the TCP relay endpoint, stream name and a private stream key. The relay authenticates that sender and publishes the media through Cloudflare Realtime SFU. The Activity authorizes viewers with Discord and subscribes them to the current publication.
 
-The Switch build, configuration file and installation instructions live in [`Shis-Stream/sysdvr-shis`](https://github.com/cyannick056-spec/Shis-Stream/tree/main/sysdvr-shis).
+The customized Switch sender lives in [`cyannick056-spec/Shis-Stream`](https://github.com/cyannick056-spec/Shis-Stream).
+
+## Main features
+
+- Nintendo Switch video and game audio inside a Discord Activity.
+- Casa/CRT and Arcade presentation modes.
+- Shared TV format, scene and effects controlled by the host.
+- Local volume and exit controls for spectators.
+- Decoration/editor system with movable figures, furniture, lights and viewer avatar slots.
+- Separate saved layouts for scene, orientation and TV aspect.
+- Runtime room lighting and TV-color spill driven by the live Switch image.
+- Compact Discord tiles use the full rectangular viewport and hide room/editor clutter.
+- The editor keeps drafts locally until the host explicitly saves the current view.
+- Shared decorations are stored on a persistent Railway volume.
+
+## Host access
+
+Only the host can change shared scene state such as TV format, effects, playback source and saved decorations.
+
+Host access is activated from the Activity using the configured editor key. The key is stored only in the server environment (`DECORATION_EDIT_KEY`) and must never be committed to this repository. Authorized host sessions are signed and scoped to the current Activity instance.
+
+Spectators keep independent volume and can leave the Activity without changing the shared scene.
 
 ## Configuration
 
-Copy `.env.example` to `.env` for local Activity development. Never commit real keys.
+Copy `.env.example` to `.env` for local development. Never commit real credentials.
 
-Activity server (`server.mjs`):
+Current Activity/server variables:
 
-- `DISCORD_CLIENT_ID`: public Discord application ID.
-- `DISCORD_CLIENT_SECRET`: required to authorize viewers; keep it server-side.
-- `LIVEKIT_URL`: LiveKit Cloud `wss://...` URL.
-- `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`: server-only LiveKit credentials.
-- `DEFAULT_STREAM`: stream name, normally `cris`.
-- `DECORATION_DATA_DIR`: persistent writable directory (Railway volume: `/data/decorations`).
-- `DECORATION_EDIT_KEY`: optional editor password; if unset, the server uses `STREAM_KEY`.
-- `STREAM_KEY`: still used by the legacy publisher-token endpoint and as the optional editor password fallback.
+- `DISCORD_CLIENT_ID` — Discord application/client ID.
+- `DISCORD_CLIENT_SECRET` — Discord OAuth client secret; server-side only.
+- `STREAM_PROVIDER=cloudflare` — current production transport.
+- `CLOUDFLARE_SFU_APP_ID` — Cloudflare Realtime SFU application ID.
+- `CLOUDFLARE_SFU_APP_SECRET` — Cloudflare Realtime SFU secret; server-side only.
+- `STREAM_KEY` — private key shared with the Switch relay path.
+- `DECORATION_EDIT_KEY` — separate host/editor password.
+- `DECORATION_DATA_DIR` — persistent decoration storage directory.
+- `DEFAULT_STREAM` — logical stream name.
+- `PORT` — Activity HTTP port.
 
-Native relay (`relay/`), deployed separately from the Activity:
+Relay variables:
 
-- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`: LiveKit credentials, available only to the relay and Activity server.
-- `STREAM_KEY`: shared secret matching `stream_key` in the Switch's `/config/sysdvr/shis.ini`.
-- `PORT` (or `RELAY_PORT`): TCP listen port; expose it through the Railway TCP proxy.
-- `DEFAULT_STREAM`: optional fallback stream name.
+- `STREAM_PROVIDER=cloudflare`
+- `SHIS_ACTIVITY_URL` — HTTPS origin of the Activity server used for authenticated Cloudflare signaling.
+- `STREAM_KEY` — must match the Switch configuration.
+- `DEFAULT_STREAM` — logical stream name.
+- `PORT` / `RELAY_PORT` — relay listen port exposed through Railway TCP proxy.
 
-Set the Switch's `relay_host` and `relay_port` to the TCP proxy endpoint, and keep `stream_key` private. They are **not** the HTTPS address or port of the Activity server. The `stream` value must match the Activity's chosen stream; rooms are named `shis-<stream>`.
+Cloudflare credentials remain on the Activity backend. They are not stored on the Switch and are not exposed to viewers.
 
-## Cloudflare migration preview
+## Local development
 
-The code can switch the transport with `STREAM_PROVIDER=cloudflare` on **both** the Activity and native relay. LiveKit remains the default until a live test succeeds. This is **Cloudflare Realtime SFU**, not RealtimeKit or Cloudflare Stream.
-
-1. In [Cloudflare Realtime > Serverless SFU](https://dash.cloudflare.com/?to=/:account/realtime/sfu), create an SFU app. Add its `CLOUDFLARE_SFU_APP_ID` and `CLOUDFLARE_SFU_APP_SECRET` **only** to the Activity server's environment.
-2. Set `SHIS_ACTIVITY_URL` on the relay to the Activity HTTPS origin (without a trailing slash). The relay authenticates its SFU signaling with the existing `STREAM_KEY`. Leave `STREAM_PROVIDER=livekit` on both services until test time.
-3. With the Switch off and Activity closed, set `STREAM_PROVIDER=cloudflare` on both services and deploy. Start the Switch and verify video, game audio, signal-loss behavior and mobile Discord playback. Keep LiveKit credentials available so both services can switch back together.
-4. Keep both services on Railway and compare their actual usage with Cloudflare Realtime egress during the test. The existing Railway volume continues to hold decorations.
-
-The Activity verifies each viewer through Discord before creating a Cloudflare SFU session. The SFU secret stays on the Activity backend. A short relay heartbeat lets viewers find the current Switch publication and removes it after the stream stops. The Cloudflare path is new and requires a live test with an SFU account before replacing the production transport.
-
-## Decorations
-
-Only the host can change the shared TV format, scene, effects or media source. Spectators have local volume and exit controls. To activate host access, hold the TV screen for about a second (or press **Ctrl + Shift + H**) and enter the existing editor password. Host access is remembered for six hours in this Activity instance; **Ajustes → Decorar** then opens the editor. Host credentials are signed, scoped to the Activity instance, and checked by the server for format, playback and decoration changes.
-
-In the Activity, open **Ajustes → Decorar** after activating host access. Upload PNG, JPG, WebP or GIF images (up to 2 MB). Drag an image to move it; use its corner handle to resize and its round handle to rotate. Hold Shift while dragging for finer motion. Numeric position, size, rotation, opacity and layer controls remain available, alongside light, saturation, hue and shadow sliders that help the art match the room.
-
-New decorations are anchored to the TV glass (or arcade cabinet/screen) so their position follows it across different window sizes. Choose **Escena completa** for art meant to stay with the whole background. The editor stores separate placements for Casa in TV 16:9 and 4:3, each in horizontal, vertical and compact window views; Arcade has its own three views. Select **Tamaño TV** to see and edit the correct composition. Older Casa placements remain available in both sizes until you open each size in the editor; then a separate copy is made for that size. Older scene-based placements are anchored to the screen when opened. Check each size and save it. You can copy a placement to other views or the other TV size before fine-tuning. **Guardar esta vista** makes the arrangement visible to viewers.
-
-The editor also includes five fixed viewer avatar slots without built-in pedestals; add your own bases or other artwork as separate decorations. Icon and PNG layers follow their saved **Capa** number equally. For any selected item, **Mostrar delante de otras figuras** moves that item to the foreground in the current composition; untick it to return to normal layering. Position and style each avatar slot in every composition just like a decoration. Inside Discord, the first five connected participants occupy the slots in the order observed by the Activity; a slot disappears when no participant occupies it. The editor shows numbered placeholders, including outside Discord. People watching in a normal browser are not counted as Discord participants.
-
-Add `DISCORD_CLIENT_SECRET` to the Activity service's server environment (from its Discord Developer Portal OAuth2 page). Under OAuth2 → Redirects, also add `https://127.0.0.1` and save; Discord requires a redirect even though its Embedded App SDK returns to the Activity itself. Keep the secret out of source control and the browser. The Activity exchanges a short-lived authorization code on the server and requests only `identify` for the current viewer's profile. The TV shows the Activity instance roster, updated by Discord's participant event and a five-second refresh; someone who remains in the voice call after leaving the Activity no longer occupies a slot. Ajustes shows the viewer count and, if access fails, the Discord error code and a retry button.
-
-### Room lighting
-
-The editor supports a right-click action menu, double-click renaming, four proportional resize handles, position locking, duplication, layer order, centering, a 5% grid with optional snapping, and undo/redo (up to 80 gestures). Wheel over a figure resizes it; Alt + wheel rotates; Ctrl/Command + wheel zooms. Middle-button drag, Space + drag or **Mano** pans a zoomed preview. Arrows move, Shift makes larger keyboard steps and Alt makes fine steps. Ctrl/Command + D duplicates, Delete removes, L locks, H hides, Ctrl/Command + Z undoes, Ctrl/Command + Shift + Z or Y redoes, and Ctrl/Command + S saves. Text fields retain their normal editing shortcuts. Viewer slots cannot be duplicated or removed. Changes remain a local draft until **Guardar esta vista**; the persistent footer reports unsaved changes.
-
-The studio groups its controls in **Objetos**, **Luces**, **Ambiente** and **Escena**, with a collapsible mobile sheet and **Solo escena** for a larger preview. **Antes / después** compares the draft with the saved room. A searchable thumbnail list includes visibility, lock, category and favorite controls. **Mi biblioteca** reuses uploaded assets, including removed objects, and includes four starter pieces. Shift/Ctrl/Command + click or the list checkboxes select multiple objects; groups move together, support alignment/distribution and respect locked positions. Geometry tools apply to the selection, while the name and existing basic appearance controls edit the primary object.
-
-**Escena** saves a separate composition for each scene, view and TV aspect. The complete room presets combine matte photographic architecture with separate furniture and runtime lighting, while uploaded backgrounds remain available. Camera pan/zoom moves the composition; TV pan/scale moves its cutout without replacing or dragging the background; screen X/Y and width/height independently adjust the playback aperture; video pan/zoom adjusts its content. TV, screen and camera tools support dragging, corner resize and wheel zoom with gesture undo. Preview zoom is temporary and distinct from these saved settings. Room presets and previous versions include compositions. Saved framing remains stored for full scene views. Compact playback uses the complete square-edged viewport rather than saved screen offsets or sizes.
-
-When a parent WebRTC video is available, the editor preview reuses the same MediaStream tracks with muted audio and no additional SFU connection. Source replacement/metadata and signal state update the preview. Older browsers may fall back to preview lighting without video. Frame-color sampling uses the visible crop, including changes on paused frames, so video framing and environment colors agree. Room photograph grading is cached until its geometry or settings change.
-
-**Perspectiva y transformación** offers manual X/Y tilt, skew, independent scaling and flips. It also includes front/left/right/above/below/isometric presets, automatic side-wall/ceiling/shelf projection, adjustable perspective depth and a four-corner homography with direct corner handles or numeric coordinates. Crossed or collapsed quads are rejected. It cannot reveal unseen sides of a 2D image. **Ajustar automáticamente** projects a 2D image onto a chosen wall, cabinet or floor plane; it uses a heuristic based on surface and position, not scene recognition. Turning automatic mode off retains its current angles for manual adjustment. Contact shadows and four-sided image cropping are optional. Perspective transforms also move a lamp's emission origin.
-
-**Filtro del entorno** offers Original/Neutro, **Noche clásica**, **Solo la TV**, **Luz de luna**, **Noche acogedora**, **Noche suave**, subtle **Noche azul** and customizable **Neón**. The grade canvas redraws the neutral room photograph beneath decorations, with exposure, contrast, saturation, temperature, shadow depth and influence for the wall, cabinet, floor, TV casing and figures. Localized lights replace the old flat blue wash. **Luz TV** scales stream-driven illumination from 0–200%, with independent casing/cabinet/floor gains, reach and transition time. The video aperture is cut out of all three grade/lighting canvases, preserving the video and CRT treatment. Red/blue/white/off lighting tests affect only the editor preview. Grid, snapping, comparison, lighting tests and tool choice are editor-only controls.
-
-Save up to six named room arrangements in **Mis ambientes y versiones**, then **Guardar esta vista** to persist them. Each room stores its items, ambient level and lighting settings without nested archives. The three previous shared room versions can be restored into a reversible draft before saving. Lamps support point, spotlight and LED-strip shapes, orientation, softness, color temperature and an on/off control. Illumination and contact shadows are 2D approximations.
-
-For Casa, select **Detrás de la TV** on a decoration to hide the part covered by the physical TV body and feet. Its layer/foreground settings continue to order it relative to other figures at the same depth. Artwork and shadows are clipped at the scene edges, including when rotated or moved outside the scene. In the editor, a selected hidden figure keeps an outline with a central move handle so it remains adjustable. Depth saves separately for each view and TV aspect; old decorations stay in front until enabled. In a compact call tile the video fills the scene and room decorations and lighting layers stay hidden.
-
-The four neutral CRT backdrops have no fixed lamp, poster or colored light reflections. The room is moderately dim by default. In **Decorar**, **Ambiente** controls its base brightness (25–100%) and is saved for everyone along with the decorations.
-
-Upload a lamp image, select it and enable **Emitir luz**. Set its color, intensity and reach; **Origen luz X/Y** positions the light at the bulb inside the image. Rotation moves this origin with the image. **Añadir luz** creates a simple light point without uploading artwork. Lights follow the same per-scene, per-view and per-aspect placement/copy/hide controls as other decorations. Hidden or fully transparent sources do not emit light. The original image brightness/color/shadow adjustments still apply.
-
-The TV casts smoothly changing color onto its bezel, cabinet and floor, sampled locally from the decoded stream at 32×18 pixels, eight times per second. Black frames emit no light; loss of signal returns to the weak neutral static glow. This adds no SFU traffic or server work. The lighting layers leave the live picture untouched and are omitted in the smallest Discord tiles. This is simulated 2D illumination, with no geometry-based cast shadows. Cross-origin iframe video (such as a future YouTube player) cannot supply these pixel samples.
-
-Assets: `public/crt-room-neutral-{wide,4x3,portrait-wide,portrait-4x3}.webp`, edited with the built-in image generator from the matching original backdrops. Prompt: preserve the exact CRT/screen/cabinet geometry; remove lamp, plant, fixed picture and colored reflections; use a plain neutral wall and matte materials under flat, moderately dim ambient light. The prior assets remain available for rollback.
-
-### Viewer access
-
-The public URL rejects ordinary direct visits with a small HTTP 403 response. Launches with Discord's frame parameters first receive a lightweight entry page, which uses the Embedded App SDK handshake and authorization. The full scene and decoration API need a signed, six-hour entry ticket created by the server after the Discord Activity completes its OAuth code exchange. On expiry, reloading the Activity obtains a new ticket. The server issues LiveKit viewer tokens only after checking the Discord bearer token with Discord's OAuth2 authorization endpoint and confirming that it belongs to this application with the `identify` scope. Requests without this authorization cannot enter the video room. LiveKit tokens are valid for two minutes to establish a connection and only grant access to the configured stream; an established connection can continue after the token expires. If Discord authorization fails or the secret is missing, viewing is unavailable until access is restored.
-
-Discord OAuth verifies identity and app authorization, **not ongoing membership in a specific Activity instance**. The lightweight entry page and bundled static files still have public URLs, and hosting a public HTTPS endpoint still incurs a small amount of traffic for rejected requests. The GitHub repository is public as well. A previously issued LiveKit token may remain usable until it expires, and an existing connection is removed when the client disconnects.
-
-The editor password stays in page memory only. Viewers can see decorations without it; upload and save require the password. Mount persistent storage in production so images survive redeployments.
-
-## Local Activity development
+Requires Node.js 20 or newer.
 
 ```bash
 npm install
@@ -106,58 +79,38 @@ npm run build
 npm start
 ```
 
-For Vite hot reload, run the API in one terminal with `npm run dev:server` and Vite in another with `npm run dev`.
+For Vite hot reload:
 
-## Discord and LiveKit setup
+```bash
+npm run dev:server
+npm run dev
+```
 
-1. Create an application in the Discord Developer Portal, enable Activities, and map `/` to the HTTPS URL of this Activity.
-2. Set `DISCORD_CLIENT_ID` on the Activity server.
-3. Configure LiveKit credentials on both the Activity server and the native relay.
-4. Configure the Switch with the relay TCP proxy host, port, stream name and shared `STREAM_KEY` as described in the other repository.
-5. Launch the Activity in a Discord test server and start SysDVR on the Switch.
+The production service runs on Railway. The Activity uses an HTTPS endpoint and a persistent volume for shared decoration data; the native relay is a separate Railway service with a TCP proxy.
 
-Viewer tokens cannot publish. Keep LiveKit API secrets and the stream key out of the browser and the repository.
+## Switch sender
 
-## Deployment
+The active sender is **SysDVR SHIS Direct v0.6**. Build/install instructions and Switch-side source live in:
 
-The current deployment uses Railway: a Node service for the Activity (`npm install && npm run build`, then `node server.mjs`) and a separate Go service built from `relay/Dockerfile` for the native TCP relay. The Activity has an HTTPS endpoint and a persistent volume for decorations; the relay needs a TCP proxy. `render.yaml` is an older alternative for hosting the Activity, not the current deployment.
+- [`cyannick056-spec/Shis-Stream`](https://github.com/cyannick056-spec/Shis-Stream)
+- [`sysdvr-shis/`](https://github.com/cyannick056-spec/Shis-Stream/tree/main/sysdvr-shis)
 
-The built-in environment is **Rincón nocturno**, a windowless petrol-blue and lavender room with a matte walnut floor. The TV, cabinet, plant, mushroom lamp and lavender light are independent editable pieces. Rain rendering and retired background plates have been removed. The warm lamp and lavender fill are runtime lights; reflected video is sampled from the live stream only.
+The Switch configuration uses the relay TCP proxy host/port, a stream name and a private `stream_key`. Real endpoints and secrets are intentionally not stored in either public repository.
 
-**Guardar esta vista** commits only the selected scene/view/TV-aspect placement and presentation. Adding, duplicating, removing, moving or recoloring a piece in one view leaves the others alone. Mood, ambient brightness, video reflection and framing are per-view. Other unsaved view edits remain in the editor until saved independently. Explicit copy actions remain available.
+## Legacy compatibility
 
-First startup migrates shared scenes and saved snapshots once, with `manifest-before-cozy-night-v2.json` and `cozy-night-rebuilt-v2.json`. Personal uploads remain available, initially hidden in home views, and subsequent restarts preserve edits. Older clients cannot overwrite the new room with a retired scene.
+Some LiveKit compatibility code remains in the project as an older transport/fallback path, and the server still contains legacy token endpoints used by previous sender experiments. They are not the current production path.
 
-Backgrounds: `public/rooms/cozy-night-{wide,portrait}.webp`; generated using the built-in image generation tool. See `docs/cozy-night-assets.md` for the prompt.
+Older Android and standalone Switch-forwarder experiments are kept in the companion repository for reference only. New work should target SysDVR SHIS Direct + Railway relay + Cloudflare Realtime SFU.
 
-**Color de la TV · avanzado** recolors the photograph by body, screen bezel and lower control panel, with palette shortcuts, blend strength, hue, saturation, exposure, contrast and matte/satin/gloss response to live rim lighting. Painting is confined to the casing, and the actual video aperture is removed from the grade canvas. **Reflejos del vídeo · inmersivos** projects the visible live video onto the tabletop and visible floor with widening perspective strips, blur, distance fade and wood texture modulation. Controls include enabled, intensity, separate surface gains, blur, reach, spread, offset and texture, saved per view and included in profiles/undo. No-signal/off video has no projected reflection. Sampling remains local at 8 Hz, using a 64×36 buffer; no new media connection or upload is involved.
+## Security notes
 
+- Do not commit Discord secrets, Cloudflare secrets, stream keys or editor passwords.
+- Ordinary direct visits to the production Activity are rejected; viewer entry is authorized through Discord.
+- Viewer authorization does not grant publishing rights.
+- Shared state writes are host-authorized on the server.
+- Public repository source code is not a substitute for keeping deployment secrets private.
 
-### Complete night compositions
+## Project status
 
-In **Escena → Presets completos · profundidad nocturna**, choose **Madrugada clásica**, **Noche de nogal** or **Rincón violeta**. These prepare a whole composition: architectural backdrop, supported CRT, eight editable furniture/decor pieces, practical lamps, contact shadows, camera framing and lighting. Each has horizontal and vertical arrangements. The wide and compact views share the horizontal composition. All TV aspects have independent saved placements.
-
-Applying a preset affects the selected Casa view only, preserves personal decoration records and hides other built-in room kits in that view. Reapplying reuses its pieces and resets its framing and placements; undo restores the preceding composition. It does not migrate existing saved rooms or automatically publish a draft. **Guardar esta vista** publishes the selected view. Props rest on their actual photographed support surfaces; lamps and live TV reflections remain computed at runtime. Backdrops contain no windows, rain or painted screen reflections. See `docs/room-composition-assets.md` for asset provenance and generation prompts.
-
-### Soft night lighting and closing
-
-In **Ambiente → Noches preparadas**, choose Madrugada azul, Lavanda suave, Ámbar acogedor or Cine · solo pantalla. Each preset changes lighting only in the selected view, preserving TV model, size, camera, video reflections and figures. The old starter lavender bulb is hidden only in that view; the new backlight follows the measured TV body. Backlight color, intensity, reach, shadow depth and practical lamp illumination remain editable. Cine disables practical light emission without deleting lamps or their settings.
-
-Both ambient backlight and live video bounce use a feathered rectangular wall wash clipped out of the TV body and below the photographic wall/floor boundary. Floor light scales with the measured screen dimensions. Live color continues to sample the visible video at eight updates per second; dark video fades its own light and reflections. Vignetting and soft TV/contact shadows are computed at runtime; no fixed TV reflection was added to the assets.
-
-Closing the editor with unsaved changes, or using **Salir** / **Salir de la app** inside Discord, opens a confirmation. **Guardar y cerrar** persists all pending edited views before closing; the regular save button still saves only the selected view. **Descartar y cerrar** discards the local draft and preserves already saved data. Cancellation returns to the editor. A failed save leaves the confirmation and draft open for retry. Browser navigation/tab closure uses its native unsaved-change warning, since custom asynchronous save buttons are available through the app's own close controls.
-
-
-### TV shadows and practical light occlusion
-
-TV shadows now reuse the current casing photograph's alpha/crop, with the glass filled as an opaque physical surface. Practical lamps project that silhouette away from their transformed emission origins, with matching elliptical range, rotation, intensity and diffuse falloff. Their wall illumination is occluded by the projected mask. Behind-TV bulb accents illuminate the wall directly; a lamp's decorative layer order does not turn it into a backlight.
-
-Contact shadow uses a narrow base silhouette with a firm contact band and soft footprint clipped to the actual support quad, or the floor when explicitly floor-supported. Free TVs have no support contact. Live TV light and backlight gently fill shadow contrast; video pixels are preserved. The wall shadow stays beneath the TV and decorations, and contact stays on the tabletop. These are runtime photographic 2.5D projections, with estimated casing-to-wall separation; there is no 3D scene geometry or ray tracing. Low-resolution cached silhouettes and reusable canvases retain the existing eight-Hz lighting loop; shadows follow framing and model changes without changing saved layouts.
-
-Live video framing detects dark encoded borders and slightly asymmetric game output automatically, even when an older saved room used manual framing. Manual framing remains available in the editor preview. Unchanged decoration refreshes preserve mounted objects; roster changes update avatar slots in place.
-
-## Compact editor and full viewport
-
-The editor fills the Activity viewport with square outer and preview-panel edges. When the editor is open in a compact viewport, show only a centered glowing **Modo edición** status. Hide the editing controls and dialogs visually until the viewport grows, while retaining the open editor, selected view, fields and unsaved draft. Respect reduced-motion preferences. Normal phone portrait retains the editor controls.
-
-Compact means height at most 360 px, width at most 520 px with height at most 400 px, or width at most 360 px with height at most 520 px. CSS and `src/viewport.ts` use the same limits. Compact home and arcade playback has no side rails or curved corners, ignores saved aperture offsets/sizes, and hides Activity controls. Saved scene settings remain unchanged.
+This repository is the active Discord Activity and backend for SHIS Stream. Public documentation describes the current supported setup; implementation history and one-off development/debugging notes are intentionally kept out of the main README.
