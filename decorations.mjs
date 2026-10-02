@@ -37,6 +37,7 @@ function validManifest(input) {
   if (input.mood !== undefined && !validMood(input.mood)) return false;
   if (!validCollections(input, validManifest)) return false;
   if (!validPresentations(input.presentations, views)) return false;
+  if (input.startup !== undefined && input.startup !== null && !validPresentations({ startup: input.startup }, new Set(['startup']))) return false;
   const ids = new Set();
   let decorations = 0;
   let builtins = 0;
@@ -177,7 +178,8 @@ export function installDecorations(app, { directory, editKey, rebuildRooms = fal
         ...(req.body.library !== undefined ? { library: req.body.library } : {}),
         ...(req.body.profiles !== undefined ? { profiles: req.body.profiles } : {}),
         ...(req.body.versions !== undefined ? { versions: req.body.versions } : {}),
-        ...(req.body.presentations !== undefined ? { presentations: req.body.presentations } : {}) }));
+        ...(req.body.presentations !== undefined ? { presentations: req.body.presentations } : {}),
+        ...(req.body.startup !== undefined && req.body.startup !== null ? { startup: req.body.startup } : {}) }));
       await rename(temporary, manifestPath);
       res.set('Cache-Control', 'no-store').json({ ok: true });
     } catch (error) {
