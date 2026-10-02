@@ -1,5 +1,6 @@
 import { getPresentation } from './scene-presentation';
 import { rooms } from '../room-catalog.mjs';
+import {objectLightGain,defaultLightResponse} from './light-response';
 // Full rendered photographic rectangle, including object-fit cover crops and
 // camera transforms. Floor effects must begin on the wood, never on the wall.
 export function roomPhotoRect() {
@@ -28,7 +29,7 @@ export async function applyPhotoLight(box: HTMLElement, sprite: HTMLImageElement
     const room=roomPhotoRect(), b=box.getBoundingClientRect();
     const x=Math.max(0,Math.min(127,Math.round((b.x+b.width*.5-room.x)/room.width*127))), y=Math.max(0,Math.min(127,Math.round((b.y+b.height*.55-room.y)/room.height*127)));
     const i=(y*128+x)*4, luminance=map.data[i]*.2126+map.data[i+1]*.7152+map.data[i+2]*.0722;
-    const gain=Math.min(1.05,Math.max(.22,Math.sqrt(luminance/145)));
+    const gain=objectLightGain(Math.min(1.05,Math.max(.22,Math.sqrt(luminance/145))),Number(box.dataset.lightResponse ?? defaultLightResponse));
     sprite.style.filter=baseFilter+` brightness(${gain})`;box.dataset.lightGain=String(gain);
     box.querySelectorAll<HTMLCanvasElement>('.decoration-material').forEach(c=>c.style.filter=sprite.style.filter);
   } catch { /* Leave the original object if a light map is unavailable. */ }

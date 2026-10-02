@@ -22,6 +22,7 @@ export function validPresentations(settings, views) {
     (p.tvSupport === undefined || ['free', 'cabinet', 'floor'].includes(p.tvSupport)) &&
     (p.supportId === undefined || uuid(p.supportId)) &&
     (p.video?.fit === undefined || ['cover', 'contain'].includes(p.video.fit)) &&
+    (p.video?.auto === undefined || typeof p.video.auto === 'boolean') &&
     (p.tvModel === undefined || tvIds.has(p.tvModel)) &&
     (p.style === undefined || ['original', 'classic', 'minimal', 'wood', 'brick', 'custom'].includes(p.style)) &&
     ['wall', 'cabinet', 'floor'].every(key => p[key] === undefined || (typeof p[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p[key]))) &&
@@ -54,6 +55,7 @@ export function validMood(m) {
     (m.zones === undefined || (object(m.zones) && Object.entries(m.zones).every(([zone, g]) => ['wall', 'cabinet', 'floor', 'tv', 'figures'].includes(zone) && validGrade(g))));
 }
 export function validStudioPlacement(p) {
+  if(p.lightResponse!==undefined && !finite(p.lightResponse,0,100)) return false;
   const t = p.transform;
   return (p.material === undefined || (object(p.material) && materialIds.has(p.material.preset) && (p.material.scope === undefined || ['top','all'].includes(p.material.scope)) && (p.material.color === undefined || /^#[a-fA-F0-9]{6}$/.test(p.material.color)) && optionalNumbers(p.material, { strength: [0,100], scale: [.25,4], roughness: [0,100] }))) &&
     (p.lava === undefined || (object(p.lava) && (p.lava.motion === undefined || typeof p.lava.motion === 'boolean') && optionalNumbers(p.lava, { speed: [.2, 3] }))) &&

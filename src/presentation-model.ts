@@ -1,7 +1,7 @@
 import type { RoomId } from '../room-catalog.mjs';
 import type { Mood } from './studio-model';
 export type Framing = { x?: number; y?: number; zoom?: number };
-export type VideoFraming = Framing & { fit?: 'cover' | 'contain' };
+export type VideoFraming = Framing & { fit?: 'cover' | 'contain'; auto?:boolean };
 export type ScreenAdjustment = { rounded?: boolean; x?: number; y?: number; width?: number; height?: number };
 export type TvPaint = { enabled?: boolean; body?: string; bezel?: string; panel?: string; strength?: number; hue?: number; saturation?: number; exposure?: number; contrast?: number; finish?: 'matte' | 'satin' | 'gloss' };
 export type Reflection = { enabled?: boolean; intensity?: number; table?: number; floor?: number; blur?: number; reach?: number; spread?: number; offset?: number; texture?: number };
@@ -32,7 +32,12 @@ export function resolvedCamera(p?: Presentation) {
 }
 // Source crop reflects object-fit:cover and the extra video framing. Sampling
 // this crop makes the room light follow the part of the video actually shown.
-export function videoCrop(vw: number, vh: number, sw: number, sh: number, framing?: VideoFraming, fit = 'cover') {
+export function videoCrop(vw: number, vh: number, sw: number, sh: number, framing?: VideoFraming, fit = 'cover', active?: {x:number;y:number;width:number;height:number}) {
+  if(active) {
+    const width=vw*active.width,height=vh*active.height,base=Math.max(sw/width,sh/height);
+    const cw=Math.min(width,sw/base),ch=Math.min(height,sh/base);
+    return {x:vw*active.x+(width-cw)/2,y:vh*active.y+(height-ch)/2,width:cw,height:ch};
+  }
   fit = framing?.fit ?? fit;
   const z = framing?.fit === 'contain' ? 1 : framing?.zoom ?? 1.035;
   const base = (fit === 'contain' ? Math.min(sw / vw, sh / vh) : Math.max(sw / vw, sh / vh)) * z;

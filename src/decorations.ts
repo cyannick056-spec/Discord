@@ -2,9 +2,10 @@ import { viewPresentation, viewMood, removeFromView, duplicateInView, saveView }
 import { MAX_SCENE_ITEMS, MAX_LIBRARY_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
 import { applyFurnitureMaterial } from './furniture-material';
 import { isSolidFurniture } from './furniture-appearance';
+import {defaultLightResponse} from './light-response';
 import { setDecorationLights, setRoomAmbient, setRoomMood, setTestLight, type DecorationLight, type RoomMood } from './lighting';
 import { objectTransform, gradeFilter, type Transform, type ContactShadow } from './studio-model';
-import { initStudio, refreshStudio, shapeAsset, rememberAssets } from './studio';
+import { initStudio, refreshStudio, focusStudioItem, shapeAsset, rememberAssets } from './studio';
 import { clearLampAnimation, addLampAnimation } from './lamp-animation';
 import { applyTvSupport, containYouTubePlayer } from './scene-presentation';
 import { applyPresentation, initVideoFraming } from './scene-presentation';
@@ -34,7 +35,7 @@ export type Placement = {
   x: number; y: number; width: number; rotation: number; opacity: number; z: number; hidden: boolean;
   foreground?: boolean; anchor?: 'scene' | 'frame';
   behindTv?: boolean; locked?: boolean;
-  brightness?: number; saturation?: number; hue?: number; shadow?: number;
+  brightness?: number; saturation?: number; hue?: number; shadow?: number; lightResponse?:number;
   transform?: Transform; contactShadow?: ContactShadow; crop?: number[];
   light?: Omit<DecorationLight, 'id'>;
   lava?: { motion?: boolean; speed?: number };
@@ -265,6 +266,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
     box.className = 'decoration-box';
     box.dataset.id = item.id;
     box.dataset.furniture = String(isSolidFurniture(item));
+    box.dataset.lightResponse=String(placement.lightResponse ?? defaultLightResponse);
     if (item.kind === 'builtin') box.dataset.prop = item.asset;
     if (item.category === 'furniture' && (item.kind !== 'builtin' || props.find(p => p.id === item.asset)?.support)) box.dataset.support = 'true';
     box.classList.toggle('is-locked', placement.locked === true);
@@ -300,7 +302,7 @@ function render(manifest: Manifest, sceneName: Scene, view: View, editable: bool
       image.src = item.kind === 'shape' ? shapeAsset(item.shape) : item.kind === 'builtin' ? builtinUrl(item.asset) : authorizedUrl(`/api/decorations/assets/${encodeURIComponent(item.asset)}`);
       image.alt = '';
       image.draggable = false;
-      image.style.filter = `${ambientFilter(placement)} ${gradeFilter(roomMood, item.kind === 'builtin' ? item.asset === 'rug' ? 'floor' : item.category === 'furniture' ? 'cabinet' : 'figures' : 'figures')}`;
+      image.style.filter = `${ambientFilter(placement)} ${gradeFilter(roomMood, item.kind === 'builtin' ? item.asset === 'rug' ? 'floor' : item.category === 'furniture' ? 'cabinet' : 'figures' : 'figures',placement.lightResponse ?? defaultLightResponse)}`;
       image.addEventListener('load', () => { position(box, placement, sceneName, view); syncSupport(); if (sceneName === 'home') void applyPhotoLight(box,image); }, { once: true });
       if (placement.crop) image.style.clipPath = `inset(${placement.crop.map(v => `${v}%`).join(' ')})`;
       box.append(image);
@@ -885,6 +887,8 @@ function selectItem(id: string) {
     if (!item.placements[activeKey()]!.anchor && previewReady) convertAnchor(item.placements[activeKey()]!, 'frame');
   }
   refreshItemList();
+  focusStudioItem();
+  if(item) status(`Editando ${item.name}. Ajusta su apariencia o abre Posición y tamaño.`);
   sendPreview();
 }
 
@@ -1372,6 +1376,7 @@ export function initDecorations() {
         if (placement) item.placements[activeKey()] = { ...placement };
       }
       refreshItemList();
+      if(selected && !event.data.additive) {focusStudioItem();if(item) status(`Editando ${item.name}. Ajusta su apariencia o abre Posición y tamaño.`);}
     }
     if (event.data?.type === 'decor-change') {
       const item = draft.items.find((entry) => entry.id === event.data.id);
