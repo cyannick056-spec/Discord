@@ -3,7 +3,19 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import {parseYouTubeLink,playbackPosition,validatePlayback} from '../youtube-model.mjs';
 import {installPlayback} from '../playback.mjs';
-import {youtubeBase,youtubeScriptUrl,isDiscordOrigin,isYouTubeScriptResponse} from '../youtube-network.mjs';
+import {youtubeBase,youtubeScriptUrl,youtubeEmbedUrl,youtubeResourceUrl,isDiscordOrigin,isYouTubeScriptResponse} from '../youtube-network.mjs';
+test('existing YouTube iframe URLs preserve playback parameters while message origin remains a bare origin',()=>{
+ const host='https://1553964489517568082.discordsays.com';
+ const url=new URL(youtubeEmbedUrl(host+'/',{videoId:'dQw4w9WgXcQ',position:90.9,playing:true}));
+ assert.equal(url.pathname,'/youtube/embed/dQw4w9WgXcQ');assert.equal(url.origin,host);
+ assert.equal(url.searchParams.get('origin'),host);assert.equal(url.searchParams.get('enablejsapi'),'1');assert.equal(url.searchParams.get('start'),'90');assert.equal(url.searchParams.get('autoplay'),'1');
+ const list=new URL(youtubeEmbedUrl(host+'/.proxy/',{playlistId:'PL1234567890',index:2}));
+ assert.equal(list.pathname,'/.proxy/youtube/embed/videoseries');assert.equal(list.searchParams.get('list'),'PL1234567890');assert.equal(list.searchParams.get('index'),'2');
+ assert.equal(new URL(youtubeEmbedUrl('http://localhost:5173/',{videoId:'dQw4w9WgXcQ'})).origin,'https://www.youtube.com');
+ assert.equal(youtubeResourceUrl(host+'/', '/s/player/main.js'),host+'/s/player/main.js');
+ assert.equal(youtubeResourceUrl(host+'/.proxy/', '/s/player/main.js'),host+'/.proxy/s/player/main.js');
+ assert.throws(()=>youtubeResourceUrl(host+'/', '/api/config'));
+});
 test('YouTube uses the configured Discord route for scripts and iframe host; rejects HTML masquerading as a loader',()=>{
  const discord='https://1553964489517568082.discordsays.com/?instance_id=123';
  assert.equal(youtubeScriptUrl(discord),'https://1553964489517568082.discordsays.com/youtube/iframe_api');

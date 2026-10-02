@@ -1,11 +1,30 @@
 import {parseYouTubeLink,playbackPosition,type PlaybackState} from '../youtube-model.mjs';
 import {patchUrlMappings} from '@discord/embedded-app-sdk';
-import {isDiscordOrigin,youtubeMapping,youtubeBase,youtubeScriptUrl,isYouTubeScriptResponse} from '../youtube-network.mjs';
+import {isDiscordOrigin,youtubeMapping,youtubeBase,youtubeScriptUrl,youtubeEmbedUrl,youtubeResourceUrl,isYouTubeScriptResponse} from '../youtube-network.mjs';
 type YTPlayer = {destroy():void;playVideo():void;pauseVideo():void;seekTo(t:number,allow:boolean):void;setVolume(n:number):void;unMute():void;getPlayerState():number;getCurrentTime():number;getVideoData():{video_id?:string};getPlaylistIndex():number;nextVideo():void;loadVideoById(value:{videoId:string;startSeconds:number}):void;loadPlaylist(value:{list:string;listType:string;index:number;startSeconds:number}):void};
-type YTConstructor = new (mount:HTMLElement,options:{host:string;videoId?:string;width:string;height:string;playerVars:Record<string,string|number>;events:Record<string,(event:{data:number;target:YTPlayer})=>void>})=>YTPlayer;
+type YTConstructor = new (mount:HTMLElement,options:{videoId?:string;width:string;height:string;playerVars:Record<string,string|number>;events:Record<string,(event:{data:number;target:YTPlayer})=>void>})=>YTPlayer;
 declare global {interface Window {YT?:{Player:YTConstructor};onYouTubeIframeAPIReady?:()=>void}}
 let apiPromise:Promise<YTConstructor>|null=null;
 let remappingInstalled=false;
+let embedAccessPromise:Promise<void>|null=null;
+function checkEmbedAccess(selection:{videoId?:string;playlistId?:string}) {
+  if(!isDiscordOrigin(location.href))return Promise.resolve();
+  if(embedAccessPromise)return embedAccessPromise;
+  embedAccessPromise=(async()=>{
+    const url=youtubeEmbedUrl(location.href,selection);
+    const response=await fetch(url,{cache:'no-store',referrerPolicy:'origin',signal:AbortSignal.timeout(10000)});
+    if(!response.ok || !response.headers.get('Content-Type')?.includes('text/html'))throw new Error('La ruta de YouTube no entregó la página del reproductor.');
+    const document=new DOMParser().parseFromString(await response.text(),'text/html');
+    const paths=[...new Set(Array.from(document.querySelectorAll<HTMLScriptElement>('script[src]'),node=>new URL(node.getAttribute('src')!,url).pathname).filter(path=>path.startsWith('/s/')))];
+    if(!paths.length)throw new Error('La ruta de YouTube entregó una página sin el programa del reproductor.');
+    await Promise.all(paths.map(async path=>{
+      const asset=await fetch(youtubeResourceUrl(location.href,path),{cache:'no-store',referrerPolicy:'origin',signal:AbortSignal.timeout(10000)});
+      const valid=isYouTubeScriptResponse(asset.status,asset.headers.get('Content-Type') || '');
+      await asset.body?.cancel();
+      if(!valid)throw new Error('YouTube no pudo acceder a sus archivos internos (ruta /s). Puedes seguir usando Switch.');
+    }));
+  })().catch(error=>{embedAccessPromise=null;throw error;});return embedAccessPromise;
+}
 function loadApi() {
   if(window.YT?.Player)return Promise.resolve(window.YT.Player);
   if(apiPromise)return apiPromise;
@@ -15,7 +34,7 @@ function loadApi() {
       // Probe the exact mapped asset before loading it. A missing mapping can
       // return the Activity's HTML entry page, even with an HTTP 200 response.
       let response:Response;
-      try{response=await fetch(src,{cache:'no-store',signal:AbortSignal.timeout(10000)});}
+      try{response=await fetch(src,{cache:'no-store',referrerPolicy:'origin',signal:AbortSignal.timeout(10000)});}
       catch{throw new Error('No se pudo comprobar el acceso de esta actividad a YouTube.');}
       if(!isYouTubeScriptResponse(response.status,response.headers.get('Content-Type') || ''))throw new Error('La ruta de YouTube no entregó el reproductor. Revisa su configuración en Discord; puedes seguir usando Switch.');
       if(!remappingInstalled){
@@ -24,7 +43,7 @@ function loadApi() {
       }
     }
     return new Promise<YTConstructor>((resolve,reject)=>{
-      const script=document.createElement('script');script.src=src;script.referrerPolicy='strict-origin-when-cross-origin';
+      const script=document.createElement('script');script.src=src;script.referrerPolicy='origin';
       let finished=false;
       const finish=(error?:Error)=>{if(finished)return;finished=true;clearTimeout(timer);if(error){script.remove();reject(error);}else resolve(window.YT!.Player);};
       const timer=setTimeout(()=>finish(new Error('El programa del reproductor de YouTube no terminó de cargar. Reintenta o vuelve a Switch.')),15000);
@@ -63,7 +82,7 @@ export class YouTubeRoom {
     document.querySelector('#youtubeForm')!.addEventListener('submit',event=>{
       event.preventDefault();void this.select().catch(e=>this.message(e.message));
     });
-    document.querySelector('#switchSource')!.addEventListener('click',()=>{void this.publish({source:'switch',videoId:'',playlistId:'',position:0,playing:false}).then(()=>this.dialog.close()).catch(e=>this.message(e.message));});
+    document.querySelector('#switchSource')!.addEventListener('click',()=>{this.selectionGeneration++;void this.publish({source:'switch',videoId:'',playlistId:'',position:0,playing:false}).then(()=>{this.notice.hidden=true;this.message('Switch seleccionado. Puedes volver a probar YouTube.');this.dialog.close();}).catch(e=>this.message(e.message));});
     document.querySelector('#youtubePlay')!.addEventListener('click',()=>this.toggle());
     document.querySelector('#youtubeNext')!.addEventListener('click',()=>{if(this.ready && this.state?.playlistId)this.player?.nextVideo();});
     document.querySelector('#youtubeRetry')!.addEventListener('click',()=>{void this.retry().catch(e=>this.message(e.message,true));});
@@ -91,7 +110,7 @@ export class YouTubeRoom {
     const generation=++this.selectionGeneration,button=document.querySelector<HTMLButtonElement>('#youtubeForm button')!;
     button.disabled=true;this.message('Comprobando acceso a YouTube…');
     try{
-      await loadApi();if(generation!==this.selectionGeneration || !this.dialog.open)return;
+      await loadApi();await checkEmbedAccess(selection);if(generation!==this.selectionGeneration || !this.dialog.open)return;
       await this.refresh();if(generation!==this.selectionGeneration || !this.dialog.open)return;
       this.failedRevision=null;await this.publish({...selection,source:'youtube',playing:true});this.dialog.close();
     }finally{button.disabled=false;}
@@ -115,6 +134,7 @@ export class YouTubeRoom {
     const old=this.state;this.state=next;
     if(old?.source!==next.source){
       this.generation++;this.ready=false;this.player?.destroy();this.player=null;
+      this.notice.hidden=true;this.status.textContent=next.source==='switch'?'Switch seleccionado. Puedes volver a probar YouTube.':'Preparando YouTube…';
       await this.changeSource(next.source);
       document.querySelector('#sourceButton')!.textContent=`Fuente: ${next.source==='youtube'?'YouTube':'Switch'}`;
     }
@@ -144,10 +164,17 @@ export class YouTubeRoom {
   private async createPlayer(initial:PlaybackState){
     if(this.tooSmall()){this.message('Amplía la actividad para ver YouTube.',true);return;}
     const generation=++this.generation;
-    const Player=await loadApi();if(generation!==this.generation || !this.isYouTube())return;
-    const target=document.createElement('div');this.mount.replaceChildren(target);
+    const Player=await loadApi();await checkEmbedAccess(initial);if(generation!==this.generation || !this.isYouTube())return;
+    const target=document.createElement('iframe');
+    target.src=youtubeEmbedUrl(location.href,{...initial,position:playbackPosition(initial,Date.now()+this.clockOffset)});
+    target.title='YouTube';target.width='100%';target.height='100%';target.allowFullscreen=true;
+    target.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';target.referrerPolicy='origin';
+    this.mount.replaceChildren(target);
     this.quietUntil=performance.now()+2500;
-    this.player=new Player(target,{host:youtubeBase(location.href),width:'100%',height:'100%',videoId:initial.videoId || undefined,
+    // With an existing iframe the official API infers the message origin from
+    // its src. Passing the mapped base as `host` includes /youtube and causes
+    // the API to reject every MessageEvent.origin, which contains no path.
+    this.player=new Player(target,{width:'100%',height:'100%',videoId:initial.videoId || undefined,
       playerVars:{enablejsapi:1,origin:location.origin,playsinline:1,controls:1,autoplay:initial.playing?1:0,start:Math.floor(playbackPosition(initial,Date.now()+this.clockOffset)),...(initial.playlistId?{listType:'playlist',list:initial.playlistId}: {})},
       events:{onReady:event=>{
         if(generation!==this.generation)return;this.ready=true;this.player=event.target;event.target.setVolume(this.volume());
@@ -155,8 +182,8 @@ export class YouTubeRoom {
         if(initial.playlistId && !initial.videoId)event.target.loadPlaylist({list:initial.playlistId,listType:'playlist',index:initial.index ?? 0,startSeconds:initial.position});
         void this.apply(this.state!);
       },onStateChange:event=>{if(generation===this.generation && [1,2,0].includes(event.data))this.capture(true);},
-      onAutoplayBlocked:()=>this.message('Pulsa reproducir en YouTube para activar el vídeo y su audio.',true),
-      onError:event=>{const reasons:Record<number,string>={2:'Enlace inválido.',5:'No se pudo reproducir este vídeo.',100:'Este vídeo es privado o ya no está disponible.',101:'El autor no permite reproducir este vídeo aquí.',150:'El autor no permite reproducir este vídeo aquí.',153:'YouTube no reconoció esta actividad como reproductor.'};this.message(reasons[event.data] || 'No se pudo abrir YouTube. Prueba otro vídeo.',true);},
+      onAutoplayBlocked:()=>{if(generation===this.generation)this.message('Pulsa reproducir en YouTube para activar el vídeo y su audio.',true);},
+      onError:event=>{if(generation!==this.generation)return;const reasons:Record<number,string>={2:'Enlace inválido.',5:'No se pudo reproducir este vídeo.',100:'Este vídeo es privado o ya no está disponible.',101:'El autor no permite reproducir este vídeo aquí.',150:'El autor no permite reproducir este vídeo aquí.',153:'YouTube no reconoció esta actividad como reproductor.'};this.message(reasons[event.data] || 'No se pudo abrir YouTube. Prueba otro vídeo.',true);},
     }});
     setTimeout(()=>{if(generation===this.generation && !this.ready)this.failPlayer('La ventana de YouTube no respondió. Reintenta o vuelve a Switch.');},15000);
   }

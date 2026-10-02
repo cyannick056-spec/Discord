@@ -6,7 +6,7 @@ The Source control accepts YouTube video, shorts, live and playlist links. It us
 
 The YouTube player keeps a viewport of at least 200×200 pixels. Runtime TV size/aperture adjustments preserve saved geometry and keep its controls on screen. CRT overlays, on-screen displays and decoration over the player aperture are removed while using YouTube. Very small call tiles hold local playback until expanded. The editor displays a static layout preview to avoid a second audible player.
 
-The page and iframe API use `strict-origin-when-cross-origin` referrer policy. Private, removed, embed-disabled, identity and autoplay errors receive a readable message. Failed loading keeps the Return to Switch control available.
+The page and iframe API use `origin` referrer policy. This provides a nonempty application identity without sending the signed Activity ticket in a same-origin proxy request's referrer. Private, removed, embed-disabled, identity and autoplay errors receive a readable message. Failed loading keeps the Return to Switch control available.
 
 ## Environment verification
 
@@ -28,10 +28,16 @@ Live probe on 2026-10-02: the external YouTube API script failed to load in the 
 
 The initial integration loaded `https://www.youtube.com/iframe_api` directly. A user subsequently observed the loader error inside Discord, before any video iframe was created. The correction uses a mapped route for the loader, the dynamic widget script and the embed host when running on a Discord Activity origin. Ordinary browser development keeps the official YouTube host.
 
-In the Discord Developer Portal, open this application's **Activities → URL Mappings**. Add prefix `/youtube` with target `www.youtube.com` (no scheme). Put the more specific mapping above the existing `/` mapping and preserve all existing entries. The SDK remaps only DOM resources for this YouTube target; stream networking is left intact. Requests use the `/.proxy` base when present in the current Activity document URL.
+In the Discord Developer Portal, open this application's **Activities → URL Mappings**. Add `/youtube` with target `www.youtube.com` and `/s` with target `www.youtube.com/s` (no scheme). Put both mappings above the existing `/` mapping and preserve all existing entries, especially `/api`. YouTube's native embed requests its bootstrap scripts and styles from root-relative `/s/...` paths; a parent document's MutationObserver does not remap resources inside that child document. The SDK remaps only parent DOM resources for the YouTube target; stream networking is left intact. Requests use the `/.proxy` base when present in the current Activity document URL.
 
-The app probes the mapped loader, checking both HTTP status and JavaScript content type before changing the shared source. A missing mapping can return the application's entry HTML rather than JavaScript. Failed attempts leave Switch selected, provide an explicit error and do not keep retrying every poll. A selected source that fails initialization waits for a changed selection or **Reintentar YouTube**.
+The app probes the mapped loader and native embed's bootstrap script paths, checking HTTP status and content type before changing the shared source. A missing mapping can return the application's entry HTML rather than JavaScript. Failed attempts leave Switch selected, provide an explicit error and do not keep retrying every poll. A selected source that fails initialization waits for a changed selection or **Reintentar YouTube**.
 
 Browser route fixtures with a same-origin-only CSP verify HTML/404 preflight failures without a shared source change, mapped loader/widget/iframe URLs, no repeated initialization after failure, explicit retry recovery and cancellation when the source dialog closes. Long error notices do not intercept the source controls on mobile. These fixtures use simulated YouTube responses; they do not exercise actual video playback.
 
 This mapping is necessary for this loader correction. It does not prove that the embedded YouTube page, its internal network requests, browser identity requirements and media playback all work through the Discord proxy. The portal configuration is outside this repository, and real playback must be tested in the signed-in Discord client after it is configured. Do not call the route fixture a successful real YouTube playback test.
+
+## Native API message origin correction
+
+The user reached the iframe-ready timeout after configuring `/youtube`. The previous constructor supplied the full mapped base (including `/youtube`) as `host`. The official widget API checks incoming `MessageEvent.origin` against that host string; message origins contain no path. Thus even a ready child could never pass that check. The correction constructs an existing native iframe with the mapped embed URL and documented URL parameters, then lets the official API infer the bare message origin from its src. Returning to Switch clears both the old status and notice, and old autoplay/error callbacks cannot restore them.
+
+A browser regression using an unmodified official widget script fetched on 2026-10-02 reproduces dropped ready messages with the old host and accepts the same child's ready messages with an existing iframe. The child messages and playback are simulated. It also verifies missing `/s` resources preserve Switch, explicit retry, cancellation and notice cleanup. This proves the origin correction, not successful real YouTube media playback through Discord; other internal API/media requests and identity checks remain unverified.
