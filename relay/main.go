@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/subtle"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,15 +12,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
-	msdk "github.com/livekit/media-sdk"
-	livekit "github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
-	lksdk "github.com/livekit/server-sdk-go/v2"
-	lkmedia "github.com/livekit/server-sdk-go/v2/pkg/media"
-	"github.com/pion/rtcp"
-	"github.com/pion/webrtc/v4"
-	pionmedia "github.com/pion/webrtc/v4/pkg/media"
 )
 
 const (
@@ -127,7 +117,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer ln.Close()
-	log.Printf("SHIS native relay listening on :%s", port)
+	log.Printf("SHIS Cloudflare relay listening on :%s", port)
 
 	for {
 		conn, err := ln.Accept()
@@ -164,302 +154,8 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
-	if strings.EqualFold(os.Getenv("STREAM_PROVIDER"), "cloudflare") {
-		publishCloudflare(id, conn, reader)
-		return
-	}
-
-	roomName := "shis-" + stream
-	identity := fmt.Sprintf("native-switch-%d-%d", time.Now().Unix(), id)
-	room, err := lksdk.ConnectToRoom(
-		env("LIVEKIT_URL"),
-		lksdk.ConnectInfo{
-			APIKey:              env("LIVEKIT_API_KEY"),
-			APISecret:           env("LIVEKIT_API_SECRET"),
-			RoomName:            roomName,
-			ParticipantIdentity: identity,
-			ParticipantName:     "Switch de Cris",
-		},
-		lksdk.NewRoomCallback(),
-		lksdk.WithAutoSubscribe(false),
-		lksdk.WithRetransmitBufferSize(8192),
-	)
-	if err != nil {
-		_, _ = io.WriteString(conn, "ERR livekit\n")
-		log.Printf("[%d] livekit connect: %v", id, err)
-		return
-	}
-	defer room.Disconnect()
-
-	var waitForIDR atomic.Bool
-	waitForIDR.Store(true)
-
-	videoTrack, err := lksdk.NewLocalSampleTrack(
-		webrtc.RTPCodecCapability{
-			MimeType:    webrtc.MimeTypeH264,
-			ClockRate:   90000,
-			SDPFmtpLine: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=640c1f",
-		},
-		lksdk.WithRTCPHandler(func(packet rtcp.Packet) {
-			switch p := packet.(type) {
-			case *rtcp.PictureLossIndication:
-				// SysDVR owns the encoder; this relay cannot request an earlier IDR.
-				// A viewer PLI must not stall the publisher (and other viewers) by
-				// suppressing every dependent frame until the next periodic keyframe.
-				log.Printf("[%d] RTCP PLI: awaiting source keyframe without pausing publisher", id)
-			case *rtcp.FullIntraRequest:
-				log.Printf("[%d] RTCP FIR: awaiting source keyframe without pausing publisher", id)
-			case *rtcp.TransportLayerNack:
-				if len(p.Nacks) != 0 {
-					log.Printf("[%d] RTCP NACK: %d lost packet group(s), retransmit buffer active", id, len(p.Nacks))
-				}
-			}
-		}),
-	)
-	if err != nil {
-		log.Printf("[%d] video track: %v", id, err)
-		return
-	}
-	defer videoTrack.Close()
-
-	if _, err = room.LocalParticipant.PublishTrack(videoTrack, &lksdk.TrackPublicationOptions{
-		Name:        "screen",
-		Source:      livekit.TrackSource_SCREEN_SHARE,
-		VideoWidth:  1280,
-		VideoHeight: 720,
-	}); err != nil {
-		log.Printf("[%d] publish video: %v", id, err)
-		return
-	}
-
-	audioTrack, err := lkmedia.NewPCMLocalTrack(48000, 1, logger.GetLogger())
-	if err != nil {
-		log.Printf("[%d] audio track: %v", id, err)
-		return
-	}
-	defer func() {
-		audioTrack.ClearQueue()
-		_ = audioTrack.Close()
-	}()
-	if _, err = room.LocalParticipant.PublishTrack(audioTrack, &lksdk.TrackPublicationOptions{
-		Name:   "game-audio",
-		Source: livekit.TrackSource_MICROPHONE,
-	}); err != nil {
-		log.Printf("[%d] publish audio: %v", id, err)
-		return
-	}
-
-	if _, err = io.WriteString(conn, "OK\n"); err != nil {
-		return
-	}
-	_ = conn.SetDeadline(time.Time{})
-	log.Printf("[%d] publishing to %s (smooth %dfps, jitter buffer %d frames, RTP retransmit 8192)", id, roomName, videoFPS, videoJitterFrames)
-
-	videoCh := make(chan videoFrame, videoQueueDepth)
-	audioCh := make(chan audioFrame, audioQueueDepth)
-	done := make(chan struct{})
-	workerErr := make(chan error, 2)
-	defer close(done)
-
-	go runVideoPacer(id, videoTrack, videoCh, done, &waitForIDR, workerErr)
-	go runAudioPacer(id, audioTrack, audioCh, done, workerErr)
-
-	var previousVideoTS uint64
-	var videoPackets uint64
-
-	for {
-		select {
-		case werr := <-workerErr:
-			log.Printf("[%d] media worker: %v", id, werr)
-			return
-		default:
-		}
-
-		// A powered-off Switch can leave a half-open TCP connection. Stop
-		// publishing its last frame when no media packets arrive.
-		if err := conn.SetReadDeadline(time.Now().Add(senderIdleTimeout)); err != nil {
-			log.Printf("[%d] sender deadline: %v", id, err)
-			return
-		}
-		h, err := readFrameHeader(reader)
-		if err != nil {
-			var netErr net.Error
-			if errors.As(err, &netErr) && netErr.Timeout() {
-				log.Printf("[%d] sender idle for %s; ending stream", id, senderIdleTimeout)
-			} else if !errors.Is(err, io.EOF) {
-				log.Printf("[%d] frame header: %v", id, err)
-			}
-			return
-		}
-		payload := make([]byte, h.PayloadLen)
-		if _, err = io.ReadFull(reader, payload); err != nil {
-			log.Printf("[%d] frame payload: %v", id, err)
-			return
-		}
-
-		switch h.Kind {
-		case kindVideo:
-			var deltaUS uint64
-			if previousVideoTS != 0 && h.TimestampUS > previousVideoTS {
-				deltaUS = h.TimestampUS - previousVideoTS
-			}
-			previousVideoTS = h.TimestampUS
-
-			videoPackets++
-			isIDR := h.Flags&1 != 0
-			if videoPackets <= 8 || videoPackets%300 == 0 {
-				log.Printf("[%d] video #%d ts_us=%d delta_us=%d bytes=%d idr=%t nal=%d", id, videoPackets, h.TimestampUS, deltaUS, len(payload), isIDR, firstH264NALType(payload))
-			}
-
-			// Do not force an IDR for short source-side gaps. SysDVR can occasionally
-			// skip one or a few timestamps while the decoder remains perfectly usable.
-			// PLI/FIR remains the authority for real decoder loss; only log very large
-			// source gaps so we can diagnose them without creating our own stutters.
-			if deltaUS > videoDiscontinuityUS {
-				log.Printf("[%d] large source video gap: delta_us=%d (letting decoder/PLI decide recovery)", id, deltaUS)
-			}
-
-			accessUnit, hasVCL := normalizeH264AccessUnit(payload, isIDR)
-			if !hasVCL {
-				continue
-			}
-
-			if waitForIDR.Load() && !isIDR {
-				continue
-			}
-
-			frame := videoFrame{data: accessUnit, timestampUS: h.TimestampUS, idr: isIDR}
-			select {
-			case videoCh <- frame:
-			default:
-				waitForIDR.Store(true)
-				drainVideoQueue(videoCh)
-				if isIDR {
-					select {
-					case videoCh <- frame:
-					default:
-					}
-				}
-				log.Printf("[%d] video jitter queue overflow: resyncing on IDR", id)
-			}
-
-		case kindAudio:
-			mono, err := stereoPCM16ToMono(payload)
-			if err != nil {
-				log.Printf("[%d] bad PCM packet: %v", id, err)
-				continue
-			}
-			select {
-			case audioCh <- audioFrame{pcm: mono, timestampUS: h.TimestampUS}:
-			default:
-				log.Printf("[%d] audio queue overflow: dropping one PCM packet", id)
-			}
-		default:
-			log.Printf("[%d] unknown frame kind %d", id, h.Kind)
-		}
-	}
-}
-
-func runVideoPacer(id uint64, track *lksdk.LocalSampleTrack, in <-chan videoFrame, done <-chan struct{}, waitForIDR *atomic.Bool, errs chan<- error) {
-	ticker := time.NewTicker(videoFrameDuration)
-	defer ticker.Stop()
-
-	queue := make([]videoFrame, 0, 24)
-	started := false
-	var sent uint64
-
-	for {
-		select {
-		case <-done:
-			return
-		case frame := <-in:
-			queue = append(queue, frame)
-		case <-ticker.C:
-			if !started {
-				if len(queue) < videoJitterFrames {
-					continue
-				}
-				started = true
-				log.Printf("[%d] video pacer primed with %d frames (~%s)", id, videoJitterFrames, videoBufferDelay)
-			}
-
-			if waitForIDR.Load() {
-				idx := -1
-				for i := range queue {
-					if queue[i].idr {
-						idx = i
-						break
-					}
-				}
-				if idx < 0 {
-					queue = queue[:0]
-					continue
-				}
-				queue = queue[idx:]
-			}
-
-			if len(queue) == 0 {
-				// Keep the pacer clock running. Re-priming the full 200 ms buffer after
-				// every tiny underrun caused the visible periodic hitches we were seeing.
-				continue
-			}
-
-			frame := queue[0]
-			queue = queue[1:]
-			if waitForIDR.Load() && !frame.idr {
-				continue
-			}
-			if frame.idr {
-				waitForIDR.Store(false)
-			}
-
-			if err := track.WriteSample(pionmedia.Sample{Data: frame.data, Duration: videoFrameDuration}, nil); err != nil {
-				reportWorkerErr(errs, fmt.Errorf("video write: %w", err))
-				return
-			}
-			sent++
-			if sent%900 == 0 {
-				log.Printf("[%d] video pacer sent %d frames, buffered=%d", id, sent, len(queue))
-			}
-		}
-	}
-}
-
-func runAudioPacer(id uint64, track *lkmedia.PCMLocalTrack, in <-chan audioFrame, done <-chan struct{}, errs chan<- error) {
-	var baseTimestamp uint64
-	var baseWall time.Time
-
-	for {
-		select {
-		case <-done:
-			return
-		case frame := <-in:
-			if baseTimestamp == 0 {
-				baseTimestamp = frame.timestampUS
-				baseWall = time.Now().Add(videoBufferDelay)
-			}
-
-			if frame.timestampUS >= baseTimestamp {
-				target := baseWall.Add(time.Duration(frame.timestampUS-baseTimestamp) * time.Microsecond)
-				if delay := time.Until(target); delay > 0 {
-					timer := time.NewTimer(delay)
-					select {
-					case <-done:
-						if !timer.Stop() {
-							<-timer.C
-						}
-						return
-					case <-timer.C:
-					}
-				}
-			}
-
-			if err := track.WriteSample(msdk.PCM16Sample(frame.pcm)); err != nil {
-				reportWorkerErr(errs, fmt.Errorf("audio write: %w", err))
-				return
-			}
-		}
-	}
+	log.Printf("[%d] authenticated stream %s; using Cloudflare SFU", id, stream)
+	publishCloudflare(id, conn, reader)
 }
 
 func reportWorkerErr(ch chan<- error, err error) {
@@ -528,24 +224,6 @@ func normalizeH264AccessUnit(data []byte, isIDR bool) ([]byte, bool) {
 	}
 
 	return out, true
-}
-
-func firstH264NALType(data []byte) int {
-	for i := 0; i+3 < len(data); i++ {
-		if data[i] != 0 || data[i+1] != 0 {
-			continue
-		}
-		if data[i+2] == 1 && i+3 < len(data) {
-			return int(data[i+3] & 0x1f)
-		}
-		if data[i+2] == 0 && i+4 < len(data) && data[i+3] == 1 {
-			return int(data[i+4] & 0x1f)
-		}
-	}
-	if len(data) != 0 {
-		return int(data[0] & 0x1f)
-	}
-	return -1
 }
 
 func readFrameHeader(r io.Reader) (frameHeader, error) {
