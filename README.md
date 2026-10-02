@@ -34,8 +34,11 @@ El emisor de Nintendo Switch está en [`cyannick056-spec/Shis-Stream`](https://g
 - Controles compartidos reservados al host.
 - Volumen local y salida independientes para espectadores.
 - Editor para posición, tamaño, capas, encuadre, iluminación y materiales.
-- Fondos fotográficos de escena que **solo cambian el entorno**: no crean, borran, sustituyen ni mueven objetos.
+- Fondos de escena que **solo cambian el entorno**: no crean, borran, sustituyen ni mueven objetos.
 - La TV, los muebles, las imágenes/figuritas personales, el filtro, las luces y el encuadre se conservan al cambiar de fondo.
+- Escena predeterminada configurable: guarda el fondo, el filtro/ambiente y la lluvia para el siguiente inicio sin alterar TV, muebles, figuritas ni posiciones.
+- Lluvia animada como capa independiente del fondo, activable desde el editor.
+- Fondos actuales: rincón nocturno, madrugada clásica, noche de nogal, rincón violeta, ventana nocturna, balcón nocturno, callejón/basurero, cuarto azul frío, cuarto rosa/violeta, loft industrial, bosque abierto y sala de mañana.
 - Catálogo integrado limitado a **muebles y superficies de apoyo**.
 - Imágenes y figuritas personales añadidas por el usuario desde el editor.
 - Ajustes independientes para vista horizontal, vertical y ventana pequeña.
@@ -123,7 +126,7 @@ Railway construye el relay con `relay/Dockerfile`.
 - `activity-controls.mjs` — estado compartido host/espectadores.
 - `decorations.mjs` — almacenamiento y validación de escenas.
 - `relay/` — relay TCP/WebRTC.
-- `public/` — fondos, muebles, televisores y páginas públicas.
+- `public/rooms/` — fondos y muebles integrados de las escenas actuales.
 - `tests/` — pruebas del comportamiento actual.
 
 ## Seguridad
