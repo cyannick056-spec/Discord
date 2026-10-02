@@ -1,23 +1,14 @@
-// Public, allowlisted photographic assets; never resolve user-supplied paths.
+// Fondos fotográficos disponibles. Cambiar de fondo no debe crear, borrar ni mover objetos.
 export const rooms = [
-  { id: 'cozy-night', name: 'Rincón nocturno', description: 'Azul petróleo, lavanda y una lámpara cálida', furniture: 'cabinet' },
-  { id: 'midnight-den', name: 'Madrugada clásica', description: 'CRT azul, lino cálido, nogal y un rincón con profundidad', furniture: 'cabinet', floorLine: .66 },
-  { id: 'walnut-den', name: 'Noche de nogal', description: 'Paneles de madera, lámpara de pie y una composición íntima', furniture: 'cabinet', floorLine: .66 },
-  { id: 'violet-den', name: 'Rincón violeta', description: 'Nicho malva, mueble oscuro y luz suave entre varias capas', furniture: 'cabinet-black', floorLine: .65 },
+  { id: 'cozy-night', name: 'Rincón nocturno', description: 'Azul petróleo, lavanda y luz suave' },
+  { id: 'midnight-den', name: 'Madrugada clásica', description: 'Pared azul oscura y profundidad nocturna' },
+  { id: 'walnut-den', name: 'Noche de nogal', description: 'Paneles de madera y ambiente cálido' },
+  { id: 'violet-den', name: 'Rincón violeta', description: 'Nicho malva y ambiente suave' },
 ];
+
+// Catálogo integrado actual: únicamente muebles y superficies de apoyo.
+// Las figuritas e imágenes personales se añaden mediante el editor y nunca se sustituyen al cambiar de fondo.
 export const props = [
-  { id: 'game-disc', name: 'Disco de aventura', category: 'game' },
-  { id: 'open-game-case', name: 'Caja de disco abierta', category: 'game' },
-  { id: 'cartridge-gray', name: 'Cartucho gris', category: 'game' },
-  { id: 'game-cases-stack', name: 'Discos apilados', category: 'game' },
-  { id: 'anime-figure', name: 'Figura anime con mando', category: 'figurine' },
-  { id: 'anime-poster', name: 'Póster anime con cinta', category: 'poster' },
-  { id: 'floor-lamp', name: 'Lámpara de pie', category: 'lamp' },
-  { id: 'linen-lamp', name: 'Lámpara de lino y nogal', category: 'lamp' },
-  { id: 'linen-floor-lamp', name: 'Lámpara de pie de lino', category: 'lamp' },
-  { id: 'mushroom-lamp', name: 'Lámpara de hongo', category: 'lamp' },
-  { id: 'desk-lamp', name: 'Lámpara articulada', category: 'lamp' },
-  { id: 'lava-lamp', name: 'Lámpara de lava animada', category: 'lamp' },
   { id: 'cabinet', name: 'Mueble de TV', category: 'furniture', support: { corners: [[6.6,18],[93.4,18],[98.4,28],[1.6,28]], material: 'wood' } },
   { id: 'cabinet-black', name: 'Mueble negro', category: 'furniture', support: { corners: [[5.1,26],[94.9,26],[99.2,37],[.8,37]], material: 'matte' } },
   { id: 'gaming-desk', name: 'Escritorio', category: 'furniture', support: { corners: [[9.6,16.6],[90.4,16.6],[98.9,34.4],[1.1,34.4]], material: 'wood' } },
@@ -27,30 +18,48 @@ export const props = [
   { id: 'sofa', name: 'Sofá', category: 'furniture' },
   { id: 'bed', name: 'Cama', category: 'furniture' },
   { id: 'shelf', name: 'Repisa de juegos', category: 'furniture' },
-  { id: 'lamp', name: 'Lámpara de mesa', category: 'lamp' },
   { id: 'rug', name: 'Alfombra', category: 'furniture' },
-  { id: 'console', name: 'Consola retro', category: 'game' },
-  { id: 'controller', name: 'Mando retro', category: 'game' },
-  { id: 'games', name: 'Cajas de videojuegos', category: 'game' },
-  { id: 'poster', name: 'Póster de aventura', category: 'poster' },
-  { id: 'handheld-purple', name: 'Portátil morada', category: 'game' },
-  { id: 'console-cube', name: 'Consola cúbica', category: 'game' },
-  { id: 'arcade-stick', name: 'Mando arcade', category: 'game' },
-  { id: 'headphones', name: 'Audífonos con base', category: 'game' },
-  { id: 'keyboard-retro', name: 'Teclado retro', category: 'game' },
-  { id: 'plant-small', name: 'Planta en maceta', category: 'figurine' },
-  { id: 'succulent', name: 'Suculenta', category: 'figurine' },
-  { id: 'figure-knight', name: 'Figura caballero', category: 'figurine' },
-  { id: 'figure-dragon', name: 'Figura dragoncito', category: 'figurine' },
-  { id: 'wall-clock', name: 'Reloj de pared', category: 'frame' },
   { id: 'beanbag', name: 'Puff de tela', category: 'furniture' },
   { id: 'side-table', name: 'Mesa auxiliar', category: 'furniture', support: { corners: [[11.5,17],[88.5,17],[98.3,43.8],[1.7,43.8]], material: 'wood' } },
 ];
+
 export const roomIds = new Set(rooms.map(r => r.id));
-// Accepted only for loading/migrating older shared saves, never shown as rooms.
+// Solo se aceptan para leer datos antiguos durante la migración; nunca se muestran como fondos actuales.
 export const legacyRoomIds = new Set(['morning', 'night', 'bedroom', 'retro', 'rain', 'rain-close', 'japanese', 'cabin', 'city']);
 export const propIds = new Set(props.map(p => p.id));
 export function builtinUrl(id) { return propIds.has(id) ? `/rooms/props/${id}.webp` : ''; }
-export function visibleInRoom(item, presentation) {
-  return !item.roomKit || item.roomKit === presentation?.environment || (roomIds.has(item.roomKit) && roomIds.has(presentation?.environment));
+
+// Los objetos pertenecen a la vista, no al fondo. Cambiar de escenario debe conservarlos todos.
+export function visibleInRoom() { return true; }
+
+// Studio se construye dinámicamente. Ajusta las etiquetas al modelo actual sin acoplar la lógica del editor al catálogo.
+function installCurrentCatalogLabels() {
+  if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+  const apply = () => {
+    const scene = document.getElementById('studioBackground');
+    const catalog = document.getElementById('studioFurnitureTypes');
+    if (scene) {
+      const summary = scene.querySelector('summary');
+      if (summary) summary.textContent = 'Fondos de escena';
+      const notes = scene.querySelectorAll('.studio-note');
+      if (notes[0]) notes[0].textContent = 'Cambiar el fondo conserva la TV, los muebles, tus figuritas, el filtro, las luces y el encuadre de esta vista.';
+      if (notes[1]) notes[1].textContent = 'Los fondos solo cambian la imagen del entorno. Todo lo demás se edita por separado.';
+    }
+    if (catalog) {
+      const summary = catalog.querySelector('summary');
+      if (summary) summary.textContent = 'Catálogo · muebles';
+      const note = catalog.querySelector('.studio-note');
+      if (note) note.textContent = 'Añade muebles y superficies de apoyo. Tus imágenes y figuritas personales se conservan aparte.';
+    }
+    const lamps = document.getElementById('studioLampTypes');
+    if (lamps) lamps.hidden = true;
+    return Boolean(scene && catalog);
+  };
+  const start = () => {
+    const observer = new MutationObserver(() => { if (apply()) observer.disconnect(); });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    if (apply()) observer.disconnect();
+  };
+  if (document.documentElement) start(); else addEventListener('DOMContentLoaded', start, { once: true });
 }
+installCurrentCatalogLabels();

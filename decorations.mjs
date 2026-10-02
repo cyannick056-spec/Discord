@@ -5,7 +5,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import { validMood, validMetadata, validStudioPlacement, validCollections, validPresentations } from './studio-validation.mjs';
-import { rebuildRealRooms } from './real-room.mjs';
+import { rebuildRealRooms, cleanupBuiltinDecorations } from './real-room.mjs';
 import { roomIds, legacyRoomIds } from './room-catalog.mjs';
 
 const views = new Set([
@@ -81,20 +81,27 @@ export function installDecorations(app, { directory, editKey, rebuildRooms = fal
   const manifestPath = path.join(directory, 'manifest.json');
   const blank = { items: [] };
 
-  // Keep the current one-time migration and its backups for older installs.
+  // Migración única del modelo actual: conserva todo lo personal y deja solo muebles integrados.
+  // Se guarda una copia exacta del manifiesto antes de tocarlo.
   const ready = rebuildRooms ? (async () => {
-    const marker = path.join(directory, 'cozy-night-rebuilt-v2.json');
+    const marker = path.join(directory, 'furniture-only-v1.json');
     try { await readFile(marker); return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const data = await readFile(manifestPath, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-    const manifest = data === null ? structuredClone(blank) : JSON.parse(data);
-    if (!validManifest(manifest)) throw new Error('Cannot replace an invalid shared scene');
     await mkdir(directory, { recursive: true });
-    if (data !== null) await writeFile(path.join(directory, 'manifest-before-cozy-night-v2.json'), data, { flag: 'wx' }).catch(error => { if (error.code !== 'EEXIST') throw error; });
+    if (data === null) {
+      await writeFile(marker, JSON.stringify({ migratedAt: new Date().toISOString(), empty: true }));
+      return;
+    }
+    const manifest = JSON.parse(data);
+    cleanupBuiltinDecorations(manifest);
     rebuildRealRooms(manifest);
-    if (!validManifest(manifest)) throw new Error('Replacement scene failed validation');
+    if (!validManifest(manifest)) throw new Error('Furniture-only scene migration failed validation');
+    await writeFile(path.join(directory, 'manifest-before-furniture-only-v1.json'), data, { flag: 'wx' })
+      .catch(error => { if (error.code !== 'EEXIST') throw error; });
     const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);
-    await writeFile(temporary, JSON.stringify(manifest)); await rename(temporary, manifestPath);
-    await writeFile(marker, JSON.stringify({ rebuiltAt: new Date().toISOString() }));
+    await writeFile(temporary, JSON.stringify(manifest));
+    await rename(temporary, manifestPath);
+    await writeFile(marker, JSON.stringify({ migratedAt: new Date().toISOString() }));
   })().then(() => null, error => error) : Promise.resolve(null);
   app.use('/api/decorations', async (_req, res, next) => {
     const error = await ready;
