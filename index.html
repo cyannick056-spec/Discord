@@ -100,7 +100,7 @@
         <section id="decorEditor" class="decor-editor" role="dialog" aria-modal="true" aria-label="Editor de decoración" hidden>
           <header class="editor-header">
             <strong>Decorar Shis Stream</strong>
-            <div class="editor-history"><button id="editorUndo" type="button" disabled title="Ctrl + Z">Deshacer</button><button id="editorRedo" type="button" disabled title="Ctrl + Shift + Z">Rehacer</button><button id="editorClose" type="button" aria-label="Cerrar editor">×</button></div>
+            <div class="editor-history"><button id="editorUndo" type="button" disabled title="Ctrl + Z">Deshacer</button><button id="editorRedo" type="button" disabled title="Ctrl + Shift + Z">Rehacer</button><button id="editorExit" type="button" hidden>Salir de la app</button><button id="editorClose" type="button" aria-label="Cerrar editor">×</button></div>
           </header>
           <div id="editorAuth" class="editor-auth">
             <p>Introduce tu clave de edición para cambiar la decoración compartida.</p>
@@ -184,6 +184,16 @@
             </div>
           </div>
         </section>
+        <dialog id="closeDialog" aria-labelledby="closeTitle" aria-describedby="closeDescription">
+          <h2 id="closeTitle">¿Seguro que quieres cerrar?</h2>
+          <p id="closeDescription"></p>
+          <p id="closeStatus" role="status"></p>
+          <div class="close-actions">
+            <button id="closeSave" type="button">Guardar y cerrar</button>
+            <button id="closeDiscard" type="button">Descartar y cerrar</button>
+            <button id="closeCancel" type="button" autofocus>Seguir aquí</button>
+          </div>
+        </dialog>
         <div id="audioMount" aria-hidden="true"></div>
       </main>
     </div>

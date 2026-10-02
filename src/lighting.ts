@@ -7,7 +7,7 @@ import { frameColor, blendColor, type LightColor } from './light-color';
 import { supportPlane, supportElement } from './support-surfaces';
 import { photoFloor } from './room-geometry';
 
-export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number };
+export type DecorationLight = { id: string; color: string; intensity: number; radius: number; x?: number; y?: number; shape?: 'point' | 'spot' | 'strip'; angle?: number; softness?: number; kelvin?: number; behindTv?: boolean };
 let sources: DecorationLight[] = [];
 let ambient = 62;
 export type RoomMood = Mood;
@@ -48,6 +48,31 @@ export function initRoomLighting() {
   const previewMode = new URLSearchParams(location.search).has('editorPreview');
   let previewColors: { screen: LightColor; floor: LightColor } | null = null;
   let tvBounds: { x: number; y: number; width: number; height: number } | undefined;
+  // A separable, feathered rectangular wash avoids a visible circular bulb.
+  // The small alpha mask is reused for ambient and live screen light.
+  const wash = document.createElement('canvas'); wash.width = wash.height = 128;
+  const washCtx = wash.getContext('2d')!;
+  const stops = [[0,0],[.12,.12],[.28,.58],[.5,1],[.72,.58],[.88,.12],[1,0]];
+  const horizontal = washCtx.createLinearGradient(0,0,128,0), vertical = washCtx.createLinearGradient(0,0,0,128);
+  for (const [at,alpha] of stops) {horizontal.addColorStop(at,`rgba(255,255,255,${alpha})`); vertical.addColorStop(at,`rgba(255,255,255,${alpha})`);}
+  washCtx.fillStyle=horizontal; washCtx.fillRect(0,0,128,128); washCtx.globalCompositeOperation='destination-in';
+  washCtx.fillStyle=vertical; washCtx.fillRect(0,0,128,128); washCtx.globalCompositeOperation='source-over';
+  const coloredWash = document.createElement('canvas'); coloredWash.width=coloredWash.height=128;
+  const coloredCtx = coloredWash.getContext('2d')!;
+  function wallWash(x:number,y:number,w:number,h:number,color:LightColor,gain=1) {
+    const power=Math.min(2,color.strength*gain); if(power<.005 || w<=0 || h<=0) return;
+    coloredCtx.clearRect(0,0,128,128); coloredCtx.drawImage(wash,0,0);
+    coloredCtx.globalCompositeOperation='source-in'; coloredCtx.fillStyle=`rgb(${Math.round(color.r)},${Math.round(color.g)},${Math.round(color.b)})`;
+    coloredCtx.fillRect(0,0,128,128); coloredCtx.globalCompositeOperation='source-over';
+    const floor=photoFloor(), wallBottom=stage.classList.contains('home-mode') ? (floor.y-boundsForWash.y)*boundsForWash.scale : shade.height;
+    for(const [ctx,isTint] of [[shadowCtx!,false],[tintCtx!,true]] as const) {
+      ctx.save(); ctx.beginPath(); ctx.rect(0,0,ctx.canvas.width,Math.max(0,wallBottom)); ctx.clip();
+      if(tvBounds) {ctx.beginPath();ctx.rect(0,0,ctx.canvas.width,ctx.canvas.height);ctx.roundRect(tvBounds.x,tvBounds.y,tvBounds.width,tvBounds.height,4);ctx.clip('evenodd');}
+      ctx.globalCompositeOperation=isTint?'source-over':'destination-out';
+      ctx.globalAlpha=Math.min(.9,power * (isTint ? .30 : .8));ctx.drawImage(isTint?coloredWash:wash,x-w/2,y-h/2,w,h);ctx.restore();
+    }
+  }
+  let boundsForWash={y:0,scale:1};
   if (previewMode) window.addEventListener('message', event => {
     if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'room-video-light') return;
     const valid = (color: LightColor) => color && [color.r, color.g, color.b].every(value => Number.isFinite(value) && value >= 0 && value <= 255) &&
@@ -89,6 +114,7 @@ export function initRoomLighting() {
     const bounds = scene.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
     const scale = Math.min(1, 960 / Math.max(bounds.width, bounds.height));
+    boundsForWash={y:bounds.y,scale};
     const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
     if (shade.width !== width || shade.height !== height) {
       shade.width = tint.width = grade.width = reflection.width = floorReflection.width = width; shade.height = tint.height = grade.height = reflection.height = floorReflection.height = height;
@@ -109,6 +135,21 @@ export function initRoomLighting() {
       const face = document.querySelector<HTMLElement>('.tv-face')!, art = face.getBoundingClientRect(), s = getComputedStyle(face);
       const n = (key: string) => parseFloat(s.getPropertyValue('--tv-body-' + key)) / 100;
       tvBounds = { x: (art.x - bounds.x + art.width * n('x')) * scale, y: (art.y - bounds.y + art.height * n('y')) * scale, width: art.width * n('w') * scale, height: art.height * n('h') * scale };
+    }
+    const depth=(mood.depth ?? 0)/100;
+    if(depth) {
+      shadowCtx.save();
+      const vignette=shadowCtx.createRadialGradient(width*.5,height*.48,width*.12,width*.5,height*.48,Math.max(width,height)*.66);
+      vignette.addColorStop(0,'rgba(0,0,0,0)');vignette.addColorStop(.5,`rgba(0,0,0,${depth*.12})`);vignette.addColorStop(1,`rgba(0,0,0,${depth*.65})`);
+      shadowCtx.fillStyle=vignette;shadowCtx.fillRect(0,0,width,height);
+      if(tvBounds) {
+        const t=tvBounds;
+        shadowCtx.filter=`blur(${Math.max(3,t.width*.045)}px)`;shadowCtx.fillStyle=`rgba(0,0,0,${depth*.32})`;
+        shadowCtx.fillRect(t.x+t.width*.015,t.y+t.height*.045,t.width,t.height);
+        shadowCtx.filter=`blur(${Math.max(2,t.width*.025)}px)`;
+        shadowCtx.beginPath();shadowCtx.ellipse(t.x+t.width*.5,t.y+t.height,t.width*.48,t.height*.045,0,0,Math.PI*2);shadowCtx.fill();
+      }
+      shadowCtx.restore();
     }
     if (gradeCtx && stage.classList.contains('home-mode')) paintRoomGrade(gradeCtx, document.querySelector<HTMLElement>('.tv-face')!,
       { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, { x: gx, y: gy, width: gw, height: gh }, mood, scale);
@@ -172,7 +213,13 @@ export function initRoomLighting() {
         { x: gx, y: gy, width: gw, height: gh }, innerHeight > innerWidth, screenColor.strength * tvGain, { ...getPresentation()?.reflection, table: 0 }, tvBounds, surfaces);
     }
     const reach = (mood.reach ?? 100) / 100;
-    glow(gx + gw / 2, gy + gh / 2, gw * .88 * reach, gh * 1.05 * reach, screenColor, .7 * tvGain);
+    const body=tvBounds ?? {x:gx,y:gy,width:gw,height:gh};
+    const cx=body.x+body.width/2,cy=body.y+body.height/2;
+    wallWash(cx,cy,body.width*2.3*reach,body.height*2.5*reach,screenColor,.9*tvGain);
+    if(mood.backlight) {
+      const l=mood.backlight,r=l.reach/100;
+      wallWash(cx,cy,body.width*2.4*r,body.height*2.6*r,{r:parseInt(l.color.slice(1,3),16),g:parseInt(l.color.slice(3,5),16),b:parseInt(l.color.slice(5,7),16),strength:l.intensity/100});
+    }
     // Narrow pools on the bezel make the screen's color visible on the TV
     // itself as well as the room. The live glass is cut out afterwards.
     glow(gx + gw / 2, gy, gw * .62, Math.max(gh * .12, 8), screenColor, rimGain, 0, 60, true);
@@ -185,7 +232,7 @@ export function initRoomLighting() {
     const cabinetClip=stage.classList.contains('modular-room') && cabinetBox ? toScene(cabinetBox) : undefined;
     const floorClip=stage.classList.contains('modular-room') ? toScene(floorPlane) : undefined;
     glow(gx + gw / 2, cabinetClip ? cabinetClip.y + cabinetClip.height*.35 : gy + gh * 1.17, gw * .72, Math.max(gh * .42, height * .09), floorColor, tvGain * (mood.cabinet ?? 100) / 100,0,60,false,cabinetClip);
-    glow(gx + gw / 2, floorClip ? Math.max(floorClip.y,gy+gh) + height*.12 : gy + gh + height * .29, gw * .95, height * .25, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100,0,60,false,floorClip);
+    glow(gx + gw / 2, floorClip ? Math.max(floorClip.y,gy+gh) + gh*.4 : gy + gh*1.65, gw * .95 * reach, gh*.85*reach, floorColor, .65 * tvGain * (mood.floor ?? 100) / 100,0,85,false,floorClip);
     const power = mood.intensity / 100;
     if (['blue-night', 'classic-night', 'moonlight'].includes(mood.preset)) glow(width * .12, height * .25, width * .6, height * .7,
       { r: 100, g: 140, b: 210, strength: power * .09 });
@@ -198,6 +245,7 @@ export function initRoomLighting() {
     }
     const boxes = new Map([...document.querySelectorAll<HTMLElement>('.decoration-box:not(.decor-depth-outline)')].map(el => [el.dataset.id, el]));
     for (const light of sources) {
+      if(mood.practicalLights === false) continue;
       const box = boxes.get(light.id);
       if (!box) continue;
       // The projected origin follows flips, skew and perspective as well as rotation.
@@ -210,7 +258,8 @@ export function initRoomLighting() {
       const color = { r: parseInt(light.color.slice(1, 3), 16), g: parseInt(light.color.slice(3, 5), 16),
         b: parseInt(light.color.slice(5, 7), 16), strength: light.intensity / 100 };
       const radius = Math.min(Math.max(width, height), box.offsetWidth * scale * light.radius);
-      glow(x, y, radius, radius * (light.shape === 'strip' ? .16 : light.shape === 'spot' ? .4 : 1), color, 1, light.angle ?? 0, light.softness ?? 60);
+      if(light.behindTv) wallWash(x,y,radius*2,radius*1.5,color);
+      else glow(x, y, radius, radius * (light.shape === 'strip' ? .16 : light.shape === 'spot' ? .4 : 1), color, 1, light.angle ?? 0, light.softness ?? 60);
     }
     // Preserve the live picture and its native CRT treatment exactly.
     for (const ctx of [shadowCtx, tintCtx, reflectionCtx, floorReflectionCtx].filter((c): c is CanvasRenderingContext2D => Boolean(c))) {
