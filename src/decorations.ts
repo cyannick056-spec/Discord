@@ -1,4 +1,5 @@
 import {canControlActivity,hostHeaders,unlockHost} from './activity-controls';
+import {refreshSpriteResolution} from './sprite-rendering';
 import { viewPresentation, viewMood, removeFromView, duplicateInView, saveView } from './view-state';
 import { MAX_SCENE_ITEMS, MAX_LIBRARY_ITEMS, type FurnitureMaterial } from '../material-catalog.mjs';
 import { applyFurnitureMaterial } from './furniture-material';
@@ -235,6 +236,7 @@ function position(box: HTMLDivElement, placement: Placement, sceneName: Scene, v
   box.style.opacity = box.dataset.solid === 'true' ? '1' : String(placement.opacity);
   box.style.zIndex = String(placement.z + (placement.foreground ? 100 : 0));
   box.style.transform = objectTransform(placement.rotation, placement.transform, placement.x, parseFloat(box.style.width), box.offsetHeight || parseFloat(box.style.width));
+  refreshSpriteResolution(box);
 }
 
 function ambientFilter(placement: Placement): string {

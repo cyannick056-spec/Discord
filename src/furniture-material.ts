@@ -2,6 +2,7 @@ import { materials, type FurnitureMaterial } from '../material-catalog.mjs';
 import { props } from '../room-catalog.mjs';
 import { solidFurniturePixels } from './furniture-appearance';
 import { proceduralMaterialTexture } from './material-textures';
+import {mountSprite,resizeSprite} from './sprite-rendering';
 
 const textures = new Map<string, Promise<HTMLImageElement | HTMLCanvasElement>>();
 const renders = new Map<string, HTMLCanvasElement>();
@@ -29,11 +30,10 @@ export async function applyFurnitureMaterial(box: HTMLElement, image: HTMLImageE
     if (!result) {
       const ratio = Math.min(1, 800 / image.naturalWidth, 1000 / image.naturalHeight);
       const width = Math.max(1, Math.round(image.naturalWidth * ratio)), height = Math.max(1, Math.round(image.naturalHeight * ratio));
-      result = document.createElement('canvas'); result.width = width; result.height = height;
+      result = resizeSprite(image,width,height);
       const ctx = result.getContext('2d', { willReadFrequently: true }); if (!ctx) return;
-      ctx.drawImage(image, 0, 0, width, height);
       const original = ctx.getImageData(0, 0, width, height), pixels = new Uint8ClampedArray(original.data);
-      solidFurniturePixels(pixels); original.data.set(pixels);ctx.putImageData(original,0,0);
+      solidFurniturePixels(pixels,width,height); original.data.set(pixels);ctx.putImageData(original,0,0);
       const tex = document.createElement('canvas'); tex.width = width; tex.height = height;
       const t = tex.getContext('2d', { willReadFrequently: true })!;
       if (tile) {
@@ -61,10 +61,7 @@ export async function applyFurnitureMaterial(box: HTMLElement, image: HTMLImageE
       renders.set(key, result); if (renders.size > 20) renders.delete(renders.keys().next().value!);
     }
     if (!box.isConnected) return;
-    const canvas = document.createElement('canvas'); canvas.className = 'decoration-material'; canvas.width = result.width; canvas.height = result.height;
-    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none';
-    canvas.style.filter = image.style.filter; canvas.style.clipPath = image.style.clipPath;
-    canvas.getContext('2d')!.drawImage(result, 0, 0); box.append(canvas); image.style.opacity = '0';
+    mountSprite(box,image,result,'decoration-material');
     box.dataset.material = preset.id;
   } catch { /* Keep the original photographic sprite if a texture is unavailable. */ }
 }
