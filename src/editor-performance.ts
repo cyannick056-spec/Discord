@@ -46,6 +46,32 @@ html.shis-editor-preview-lite .signal-sweep {
 html.shis-editor-preview-lite * {
   scroll-behavior: auto !important;
 }
+html.shis-editor-preview-lite #stage {
+  touch-action: none !important;
+  overscroll-behavior: none !important;
+}
+@media (pointer: coarse) {
+  html.shis-editor-open .preview-zoom {
+    gap: 8px !important;
+    padding: 6px !important;
+    border-radius: 14px !important;
+    bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    right: 12px !important;
+    touch-action: manipulation;
+  }
+  html.shis-editor-open .preview-zoom button {
+    min-width: 50px !important;
+    min-height: 48px !important;
+    padding: 0 12px !important;
+    font-size: 18px !important;
+    border-radius: 11px !important;
+    touch-action: manipulation;
+  }
+  html.shis-editor-open #previewZoomReset {
+    min-width: 72px !important;
+    font-size: 15px !important;
+  }
+}
 `;
 document.head.append(style);
 
@@ -60,6 +86,99 @@ if (previewMode) {
     const canvas = document.getElementById(id) as HTMLCanvasElement | null;
     if (canvas) { canvas.width = width; canvas.height = height; }
   }
+
+  // Mobile gesture layer. The old touch path could start dragging a figurine
+  // with the first finger before the second finger arrived for pinch zoom.
+  // Pointer capture here lets two fingers own the viewport gesture completely:
+  // pinch zooms around the midpoint and moving both fingers pans the preview.
+  // After a pinch, the remaining finger is swallowed until every finger lifts,
+  // preventing the common "jump" where an object suddenly moves.
+  const installMobilePinch = () => {
+    if (!coarsePointer) return;
+    const stage = document.getElementById('stage');
+    if (!stage) return;
+    const pointers = new Map<number, { x: number; y: number }>();
+    let pinch: { distance: number; midX: number; midY: number } | null = null;
+    let swallowUntilClear = false;
+
+    const pair = () => {
+      const points = [...pointers.values()].slice(0, 2);
+      if (points.length < 2) return null;
+      const [a, b] = points;
+      return {
+        midX: (a.x + b.x) / 2,
+        midY: (a.y + b.y) / 2,
+        distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      };
+    };
+
+    stage.addEventListener('pointerdown', event => {
+      if (event.pointerType !== 'touch') return;
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pointers.size !== 2 || pinch) return;
+      const point = pair();
+      if (!point) return;
+      pinch = point;
+      swallowUntilClear = true;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      parent.postMessage({ type: 'decor-zoom-start', x: point.midX, y: point.midY }, location.origin);
+    }, true);
+
+    stage.addEventListener('pointermove', event => {
+      if (event.pointerType !== 'touch' || !pointers.has(event.pointerId)) return;
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pinch && pointers.size >= 2) {
+        const point = pair();
+        if (!point) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        // Slight damping makes small finger movements easier to control.
+        const ratio = Math.pow(point.distance / pinch.distance, 0.88);
+        parent.postMessage({
+          type: 'decor-zoom-move', ratio,
+          dx: point.midX - pinch.midX, dy: point.midY - pinch.midY,
+        }, location.origin);
+        return;
+      }
+      if (swallowUntilClear) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+
+    const release = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !pointers.has(event.pointerId)) return;
+      pointers.delete(event.pointerId);
+      if (pinch && pointers.size < 2) {
+        pinch = null;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        parent.postMessage({ type: 'decor-gesture-end' }, location.origin);
+      } else if (swallowUntilClear) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      if (pointers.size === 0) swallowUntilClear = false;
+    };
+    stage.addEventListener('pointerup', release, true);
+    stage.addEventListener('pointercancel', release, true);
+
+    // Suppress the older TouchEvent pinch implementation only while the new
+    // two-finger viewport gesture owns the interaction. One-finger editing is
+    // left alone so figurines still drag normally.
+    const suppressLegacyTouch = (event: TouchEvent) => {
+      if (!pinch && !swallowUntilClear && event.touches.length < 2) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    stage.addEventListener('touchstart', suppressLegacyTouch, { capture: true, passive: false });
+    stage.addEventListener('touchmove', suppressLegacyTouch, { capture: true, passive: false });
+    stage.addEventListener('touchend', suppressLegacyTouch, { capture: true, passive: false });
+    stage.addEventListener('touchcancel', suppressLegacyTouch, { capture: true, passive: false });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installMobilePinch, { once: true });
+  else installMobilePinch();
 } else {
   let editorOpen = false;
   let lockedWidth = innerWidth;
@@ -205,11 +324,36 @@ if (previewMode) {
     if (editorOpen && editable(document.activeElement)) scrollTo(0, 0);
   }, { passive: true });
 
+  // On phones the old +/- buttons jumped by 40% each press. Intercept only
+  // those two buttons and translate the tap into a small centered wheel zoom;
+  // the existing zoom state and 100% reset button remain the source of truth.
+  const installMobileZoomButtons = () => {
+    if (!coarsePointer) return;
+    const frame = document.getElementById('previewFrame');
+    const minus = document.getElementById('previewZoomOut');
+    const plus = document.getElementById('previewZoomIn');
+    if (!frame || !minus || !plus) return;
+    const bind = (button: HTMLElement, deltaY: number) => button.addEventListener('click', event => {
+      if (!editorVisible()) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const bounds = frame.getBoundingClientRect();
+      frame.dispatchEvent(new WheelEvent('wheel', {
+        bubbles: true, cancelable: true, ctrlKey: true, deltaY,
+        clientX: bounds.left + bounds.width / 2,
+        clientY: bounds.top + bounds.height / 2,
+      }));
+    }, true);
+    bind(minus, 95);
+    bind(plus, -95);
+  };
+
   const installObserver = () => {
     const editor = document.getElementById('decorEditor');
     if (!editor) return;
     new MutationObserver(lockEditorViewport).observe(editor, { attributes: true, attributeFilter: ['hidden'] });
     lockEditorViewport();
+    installMobileZoomButtons();
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installObserver, { once: true });
   else installObserver();
