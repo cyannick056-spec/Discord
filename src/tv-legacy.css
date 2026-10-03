@@ -1,0 +1,38 @@
+/* TV treatments and control placement recovered from the pre-rebuild code.
+   Selectors target only the glass, keeping saved figures and room art intact. */
+:root{--osd:#edf6ee}
+#video{filter:none}
+#screenGlare{position:absolute;inset:0;z-index:3;pointer-events:none;opacity:0}
+#screen #retro{opacity:0;background:none;box-shadow:none}
+.crt.smooth #video{filter:blur(.4px)}
+.crt.normal #video{filter:blur(.42px) saturate(1.06) contrast(1.06)}
+.crt.normal.smooth #video{filter:blur(.65px) saturate(1.06) contrast(1.06)}
+#screen.crt.normal #retro{display:block;opacity:.7;background:repeating-linear-gradient(to bottom,rgba(0,0,0,.22) 0 1px,transparent 1px 3px),repeating-linear-gradient(to right,rgba(211,77,65,.012) 0 1px,rgba(79,192,115,.012) 1px 2px,rgba(71,108,205,.014) 2px 3px),radial-gradient(ellipse at center,transparent 57%,rgba(0,0,0,.48) 100%)}
+.crt.normal #screenGlare{opacity:.35;background:radial-gradient(ellipse at 30% 10%,rgba(205,222,241,.15),transparent 54%)}
+.crt.intense #video,.crt.scanlines #video{filter:blur(.55px) saturate(1.09) contrast(1.08)}
+.crt.intense.smooth #video,.crt.scanlines.smooth #video{filter:blur(.72px) saturate(1.09) contrast(1.08)}
+#screen.crt.intense #retro,#screen.crt.scanlines #retro{display:block;opacity:.84;background:repeating-linear-gradient(to bottom,rgba(0,0,0,.28) 0 1px,transparent 1px 3px),repeating-linear-gradient(to right,rgba(219,87,71,.025) 0 1px,rgba(70,189,125,.025) 1px 2px,rgba(83,127,219,.027) 2px 3px),radial-gradient(ellipse at center,transparent 44%,rgba(0,0,0,.61) 100%);box-shadow:inset 0 0 27px rgba(0,0,0,.6)}
+.crt.intense #screenGlare,.crt.scanlines #screenGlare{opacity:.48;background:radial-gradient(ellipse at 27% 7%,rgba(205,222,241,.19),transparent 55%)}
+#screen.crt.scanlines #signalSweep{filter:blur(.7px);opacity:.7}
+#screen.crt.no-signal:not(.off) #retro{display:block;opacity:.12;background:repeating-linear-gradient(180deg,rgba(0,0,0,.24) 0 1px,transparent 1px 4px),radial-gradient(ellipse at center,transparent 57%,rgba(0,0,0,.38) 100%);box-shadow:none}
+#screen.crt.off #retro{display:none}
+.crt.off #screenGlare,.no-signal #screenGlare{opacity:0}
+#screen:not(.no-signal) .osd-bottom{display:none}
+#liveBadge.live::before{content:'● ';font-size:.74em}
+#controls{left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);gap:10px;align-items:center}
+#controls button{display:flex;flex-direction:column;justify-content:center;gap:2px;width:50px;height:50px;min-width:50px;min-height:50px;padding:0;border:1px solid rgba(173,191,202,.55);background:var(--panel);color:#f0f2f1}
+#controls svg{width:20px;height:20px}
+.control-label{font:600 8px/1 system-ui,sans-serif;letter-spacing:.02em}
+#controls #options svg{display:none}
+#controls #options::before{content:'☷';font:600 22px/1 system-ui,sans-serif}
+#controls #volumeButton svg,#controls #exit svg{display:none}
+#controls #volumeButton::before{content:'♪';font:600 19px/1 system-ui,sans-serif}
+#controls #volumeButton[data-muted=true]::before,#controls #exit::before{content:'×';font:600 24px/1 system-ui,sans-serif}
+#controls #exit{background:var(--panel)}
+#controls #exit:hover{background:#404249}
+@media(orientation:landscape){
+ #controls{left:max(12px,env(safe-area-inset-left));right:auto;top:50%;bottom:auto;transform:translateY(-50%);flex-direction:column;padding:0}
+ #optionsPanel{left:max(78px,calc(env(safe-area-inset-left) + 66px));right:auto;top:50%;bottom:auto;transform:translateY(-50%);max-height:calc(var(--activity-height,100vh) - 32px)}
+ #volumePanel{left:max(78px,calc(env(safe-area-inset-left) + 66px));right:auto;top:50%;bottom:auto;transform:translateY(-50%);width:min(260px,calc(100% - 100px))}
+}
+@media(orientation:portrait){#volumePanel,#optionsPanel{left:50%;right:auto;transform:translateX(-50%)}}

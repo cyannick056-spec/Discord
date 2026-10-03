@@ -8,6 +8,7 @@ import {TvStatic,SignalSweeps} from './tv-static';
 import {tvModels} from '../public/tv/models.mjs';
 import {ActivityViewport} from './activity-viewport';
 import './activity.css';
+import './tv-legacy.css';
 
 type Placement={x:number;y:number;width:number;rotation:number;opacity:number;z:number;hidden:boolean;anchor?:string;foreground?:boolean;behindTv?:boolean;locked?:boolean;[key:string]:any};
 type Item={id:string;name:string;asset:string;kind?:string;placements:Record<string,Placement>;[key:string]:any};
@@ -25,7 +26,7 @@ let signalTimer:ReturnType<typeof setTimeout>|undefined,lastFrame=0,everLive=fal
 let pendingExit=false,liveTv='crt',signalVisible=true,switchingTv=false;
 const staticNoise=new TvStatic($<HTMLCanvasElement>('staticNoise'));
 const signalSweeps=new SignalSweeps($<HTMLCanvasElement>('signalSweep'));
-function syncStatic(){const active=liveTv==='crt'&&!document.hidden&&!draft;staticNoise.setActive(active&&signalVisible);signalSweeps.setActive(active&&!signalVisible&&(controls.retro==='scanlines'||controls.retro==='immersive'))}
+function syncStatic(){const active=liveTv==='crt'&&!document.hidden&&!draft;staticNoise.setActive(active&&signalVisible);signalSweeps.setActive(active&&!signalVisible&&controls.retro==='scanlines')}
 let volume=100;try{volume=Number(localStorage.getItem('shis-volume')??100)}catch{}
 volume=Math.max(0,Math.min(100,Number.isFinite(volume)?volume:100));
 const decoded=new Map<string,Promise<HTMLImageElement>>();let renderEpoch=0,previewEpoch=0;
@@ -126,15 +127,19 @@ function openEditor(){if(!canControlActivity())return;draft=structuredClone(save
 function closeEditor(){draft=null;dirty=false;$('editor').hidden=true;$('compactNotice').hidden=true;$<HTMLDialogElement>('closeDialog').close();syncStatic();}
 async function save(){if(!draft)return;const button=$<HTMLButtonElement>('save');button.disabled=true;try{const payload=prepareSave(draft);await json('/api/decorations',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});saved=payload;draft=structuredClone(payload);dirty=false;$('editorStatus').textContent='Guardado';renderLive()}catch(e){$('editorStatus').textContent=(e as Error).message;throw e}finally{button.disabled=false}}
 async function load(){if(draft||switchingTv)return;try{const value=await json<Manifest>('/api/decorations');if(draft||switchingTv)return;const changed=JSON.stringify(value)!==JSON.stringify(saved);saved=value;if(changed||!$('loading').hidden)await renderLive()}catch(e){notify((e as Error).message)}}
-function setVolume(){const audio=$<HTMLAudioElement>('audio');audio.volume=volume/100;$<HTMLInputElement>('volume').value=String(volume);$<HTMLOutputElement>('volumeValue').value=`${volume}%`;try{localStorage.setItem('shis-volume',String(volume))}catch{}}
-function signal(text:string){signalVisible=true;$('signal').hidden=false;$('statusText').textContent=text.toUpperCase();$('liveBadge').textContent='STANDBY';$('screen').classList.add('no-signal');syncStatic()}
-function lost(){if(signalTimer)clearTimeout(signalTimer);videoEpoch++;$<HTMLVideoElement>('video').srcObject=null;$<HTMLAudioElement>('audio').srcObject=null;signal(everLive?'Señal perdida':'Buscando señal…');signalTimer=setTimeout(()=>signal('Esperando señal…'),2000)}
+function setVolume(){const audio=$<HTMLAudioElement>('audio');audio.volume=volume/100;$<HTMLInputElement>('volume').value=String(volume);$<HTMLOutputElement>('volumeValue').value=`${volume}%`;$('volumeButton').dataset.muted=String(volume===0);try{localStorage.setItem('shis-volume',String(volume))}catch{}}
+function signal(text:string){signalVisible=true;$('signal').hidden=false;$('statusText').textContent=text.toUpperCase();$('liveBadge').textContent='STANDBY';$('liveBadge').classList.remove('live');$('screen').classList.add('no-signal');syncStatic()}
+function clearSignalTimer(){if(signalTimer)clearTimeout(signalTimer);signalTimer=undefined}
+function signalLost(){clearSignalTimer();signal(everLive?'SEÑAL PERDIDA':'BUSCANDO SEÑAL…');signalTimer=setTimeout(()=>{signalTimer=undefined;if(signalVisible)signal('ESPERANDO SEÑAL…')},2000)}
+function lost(){videoEpoch++;lastFrame=0;$<HTMLVideoElement>('video').srcObject=null;$<HTMLAudioElement>('audio').srcObject=null;signalLost()}
 function track(kind:'video'|'audio',t:MediaStreamTrack){if(kind==='audio'){const audio=$<HTMLAudioElement>('audio');audio.srcObject=new MediaStream([t]);setVolume();audio.play().catch(()=>$('enableAudio').hidden=false);return}
+ clearSignalTimer();signal('SEÑAL DETECTADA…');
  const video=$<HTMLVideoElement>('video');video.srcObject=new MediaStream([t]);video.play().catch(()=>{});const epoch=++videoEpoch;lastFrame=performance.now();
- const frame=()=>{if(epoch!==videoEpoch)return;lastFrame=performance.now();everLive=true;signalVisible=false;$('signal').hidden=true;$('liveBadge').textContent='PLAY';$('statusText').textContent='SEÑAL RECIBIDA';$('screen').classList.remove('no-signal');syncStatic();if(signalTimer)clearTimeout(signalTimer);if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame)};
+ const frame=()=>{if(epoch!==videoEpoch)return;lastFrame=performance.now();everLive=true;signalVisible=false;$('signal').hidden=true;$('liveBadge').textContent='PLAY';$('liveBadge').classList.add('live');$('statusText').textContent='';$('screen').classList.remove('no-signal');syncStatic();clearSignalTimer();if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame)};
+ t.addEventListener('ended',()=>{if(epoch===videoEpoch)lost()},{once:true});
  if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame);else (video as HTMLVideoElement).onplaying=frame;
 }
-async function connect(){if(!accessToken)return;viewer?.stop();signal('Buscando señal…');viewer=new CloudflareViewer(()=>accessToken,track,lost,e=>{signal('Esperando señal…');console.warn(e)});await viewer.start();setTimeout(()=>{if(!everLive&&$('statusText').textContent==='BUSCANDO SEÑAL…')signal('Esperando señal…')},8000)}
+async function connect(){if(!accessToken)return;viewer?.stop();clearSignalTimer();videoEpoch++;lastFrame=0;signal('BUSCANDO SEÑAL…');viewer=new CloudflareViewer(()=>accessToken,track,lost,e=>{if(signalVisible){clearSignalTimer();signal('ESPERANDO SEÑAL…')}console.warn(e)});await viewer.start();if(signalVisible&&$('statusText').textContent==='BUSCANDO SEÑAL…')signalTimer=setTimeout(()=>{signalTimer=undefined;if(signalVisible&&$('statusText').textContent==='BUSCANDO SEÑAL…')signal('ESPERANDO SEÑAL…')},8000)}
 async function boot(){try{
  const config=await json<{discordClientId:string}>('/api/config');
  const session=(window as any).__shisDiscordSession;sdk=session?.sdk??new DiscordSDK(config.discordClientId);await sdk!.ready();
@@ -194,6 +199,6 @@ $('hostForm').onsubmit=async e=>{e.preventDefault();try{await unlockHost($<HTMLI
 
 window.addEventListener('shis-host-change',()=>{updateControls();if(draft&&!canControlActivity()){closeEditor();notify('Vuelve a entrar como host para editar')}});
 initActivityControls(state=>{const changed=JSON.stringify(controls)!==JSON.stringify(state);controls=state;if(changed)updateControls()});
-setInterval(()=>{if(!document.hidden)void load();if(!document.hidden&&lastFrame&&performance.now()-lastFrame>8000&&$('signal').hidden){lost();lastFrame=0}},2000);
+setInterval(()=>{if(!document.hidden)void load();if(!document.hidden&&lastFrame&&performance.now()-lastFrame>8000&&$('signal').hidden){signalLost();lastFrame=0}},2000);
 for(const [id,attribute] of [['liveThemes','liveTheme'],['editThemes','theme']]){const container=$(id);for(const theme of roomThemes){const b=document.createElement('button');b.textContent=theme.name;b.dataset[attribute]=theme.id;container.append(b)}}
-window.addEventListener('pagehide',()=>{viewer?.stop();staticNoise.stop();signalSweeps.stop()});setVolume();load();boot();
+window.addEventListener('pagehide',()=>{clearSignalTimer();viewer?.stop();staticNoise.stop();signalSweeps.stop()});setVolume();load();boot();
