@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import express from 'express';
 import { installDecorations } from './decorations.mjs';
 import { installCloudflare } from './cloudflare.mjs';
@@ -133,9 +134,12 @@ if (existsSync(distDir)) {
     res.type('image/svg+xml').set('Cache-Control', 'public, max-age=3600')
       .sendFile(path.join(distDir, 'rooms', 'generated', `${match[1]}.svg`));
   });
-  const serveActivityEntry = (req, res) => {
+  const serveActivityEntry = async (req, res) => {
     res.set('Cache-Control', 'no-store');
-    if (validActivityTicket(req.query.ticket)) return res.sendFile(path.join(distDir, 'index.html'));
+    if (validActivityTicket(req.query.ticket)) {
+      const html = await readFile(path.join(distDir, 'index.html'), 'utf8');
+      return res.type('html').send(html.replace('</head>', '<script type="module" src="/upload-limits.js"></script></head>'));
+    }
     if (typeof req.query.frame_id === 'string' || typeof req.query.instance_id === 'string') {
       return res.sendFile(path.join(distDir, 'gate.html'));
     }
@@ -145,7 +149,7 @@ if (existsSync(distDir)) {
   app.use(express.static(distDir, { index: false, maxAge: '1h' }));
   app.use((req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
-    serveActivityEntry(req, res);
+    return serveActivityEntry(req, res).catch(next);
   });
 }
 
