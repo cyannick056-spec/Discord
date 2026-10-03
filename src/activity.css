@@ -41,3 +41,12 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline-color:#a5a
 
 #backdrop,.backdrop{z-index:-2}
 #room,#previewRoom{isolation:isolate}
+/* Inexpensive CRT glass treatment covers both the noise and its OSD. */
+.crt.no-signal:not(.off) #retro{display:block;z-index:5;background:radial-gradient(ellipse at center,transparent 48%,#0002 78%,#0005 100%),repeating-linear-gradient(0deg,#0002 0 1px,transparent 1px 3px)}
+.crt.no-signal.intense #retro{background:radial-gradient(ellipse at center,transparent 42%,#0003 78%,#0006 100%),repeating-linear-gradient(0deg,#0003 0 1px,transparent 1px 3px)}
+.crt.no-signal #staticNoise{opacity:.92}
+.osd{color:#d3d6d6;text-shadow:0 1px 1px #000}.osd-top{font-size:clamp(6px,calc(var(--glass-width,700px) * .014),12px)}.osd-bottom{font-size:clamp(5px,calc(var(--glass-width,700px) * .011),9px)}
+.no-signal-copy{color:#d3d6d6;text-shadow:0 1px 1px #000}.no-signal-copy strong{font-size:clamp(12px,calc(var(--glass-width,700px) * .031),24px);font-weight:400;letter-spacing:.22em}.no-signal-copy span{font-size:clamp(7px,calc(var(--glass-width,700px) * .014),12px);opacity:.8}
+.tv-frame[src*="real-crt"]{clip-path:inset(1.464% 1.113% 1.464% 1.113% round 1.8%)}
+.tv-frame[src*="real-flat"]{clip-path:inset(4.12% 1.36% 4.53% 1.48% round .4%)}
+#stage.compact .no-signal-copy strong{font-size:8px}#stage.compact .no-signal-copy span{font-size:5px}#stage.compact .osd-top{font-size:5px}

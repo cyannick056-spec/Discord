@@ -5,6 +5,7 @@ import {photoLayout} from '../public/photo-layout.mjs';
 import {roomThemes,roomThemeIds,themeFor,roomPhoto} from '../public/room-themes.mjs';
 import {viewFor,keyFor,placementFor,settingsFor,prepareSave,updatePlacement,figureRect,slotColors} from './activity-model.mjs';
 import {TvStatic,SignalSweeps} from './tv-static';
+import {tvModels} from '../public/tv/models.mjs';
 import {ActivityViewport} from './activity-viewport';
 import './activity.css';
 
@@ -24,7 +25,7 @@ let signalTimer:ReturnType<typeof setTimeout>|undefined,lastFrame=0,everLive=fal
 let pendingExit=false,liveTv='crt',signalVisible=true,switchingTv=false;
 const staticNoise=new TvStatic($<HTMLCanvasElement>('staticNoise'));
 const signalSweeps=new SignalSweeps($<HTMLCanvasElement>('signalSweep'));
-function syncStatic(){const active=liveTv==='crt'&&!document.hidden&&!draft;staticNoise.setActive(active&&signalVisible);signalSweeps.setActive(active&&!signalVisible&&controls.retro==='scanlines')}
+function syncStatic(){const active=liveTv==='crt'&&!document.hidden&&!draft;staticNoise.setActive(active&&signalVisible);signalSweeps.setActive(active&&!signalVisible&&(controls.retro==='scanlines'||controls.retro==='immersive'))}
 let volume=100;try{volume=Number(localStorage.getItem('shis-volume')??100)}catch{}
 volume=Math.max(0,Math.min(100,Number.isFinite(volume)?volume:100));
 const decoded=new Map<string,Promise<HTMLImageElement>>();let renderEpoch=0,previewEpoch=0;
@@ -69,14 +70,14 @@ async function renderLive(){
  // Solo pantalla reuses the saved home composition for its optional figures.
  const sourceKey=controls.scene==='arcade'?keyFor(view,controls.aspect):key;
  const {p,type,result,screen}=layout(room,sourceKey,saved,view,controls.scene==='arcade');
- const src=photoSource(type,view,themeFor(p));try{await loadPhoto(src)}catch{notify('No se pudo cargar el fondo');return}if(epoch!==renderEpoch)return;
+ const src=photoSource(type,view,themeFor(p));try{await Promise.all([loadPhoto(src),loadPhoto(`/tv/real-${type}.webp`)])}catch{notify('No se pudo cargar el fondo');return}if(epoch!==renderEpoch)return;
  const bg=$<HTMLImageElement>('backdrop');if(bg.getAttribute('src')!==src)bg.src=src;
- setRect($('photo'),result.photo);setRect($('screen'),result.screen);const tv=$<HTMLImageElement>('tvFrame');tv.src=`/tv/shared-${type}.svg`;setRect(tv,result.frame);tv.hidden=controls.scene==='arcade'||view==='window';
+ setRect($('photo'),result.photo);setRect($('screen'),result.screen);const tv=$<HTMLImageElement>('tvFrame');tv.src=`/tv/real-${type}.webp`;setRect(tv,result.frame);tv.hidden=controls.scene==='arcade'||view==='window';
  $('stage').classList.toggle('solo',controls.scene==='arcade'||view==='window');
  $('stage').classList.toggle('compact',view==='window');$('controls').hidden=view==='window';if(view==='window'){ $('optionsPanel').hidden=true;$('volumePanel').hidden=true; }
- $('roomText').textContent=controls.aspect;
+ $('roomText').textContent='SHIS PLUS';$('screen').style.setProperty('--glass-width',result.screen.width+'px');
  liveTv=type;$('screen').className=[type==='crt'?'crt':'',signalVisible?'no-signal':'',controls.retro==='immersive'?'intense':controls.retro,controls.smoothing?'smooth':''].join(' ');
- $('screen').style.borderRadius=type==='crt'&&p.screen?.rounded!==false&&view!=='window'?'5% / 8%':'0';
+ $('screen').style.borderRadius=type==='crt'&&p.screen?.rounded!==false&&view!=='window'?tvModels[type].rounding:'0';
  $<HTMLVideoElement>('video').style.objectFit=p.video?.fit??'contain';
  renderFigures(room,$('figures'),saved,key,screen,p,false);$('loading').hidden=true;syncStatic();document.querySelectorAll<HTMLButtonElement>('[data-live-theme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.liveTheme===themeFor(p))));document.querySelectorAll<HTMLButtonElement>('[data-live-tv]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.liveTv===type)));
 }
@@ -103,9 +104,9 @@ function editorSettings(){return (draft!.presentations??={})[activeKey()]??=stru
 function resetFreshSettings(m:Manifest){m.presentations??={};for(const v of ['landscape','portrait','window'])for(const a of ['16:9','4:3']){const k=keyFor(v,a);m.presentations[k]=structuredClone(settingsFor(m,k));}}
 async function renderPreview(){if(!draft)return;const epoch=++previewEpoch,room=$('previewRoom');const area=$('preview'),ratio=editView==='portrait'?9/16:editView==='window'?4/3:16/9;
  const w=Math.min(area.clientWidth-16,(area.clientHeight-16)*ratio);room.style.width=`${Math.max(1,w)}px`;room.style.height=`${Math.max(1,w/ratio)}px`;room.style.aspectRatio=String(ratio);
- const {p,type,result,screen}=layout(room,activeKey(),draft,editView);const src=photoSource(type,editView,themeFor(p));try{await loadPhoto(src)}catch{notify('No se pudo cargar el fondo');return}if(epoch!==previewEpoch||!draft)return;
- const bg=room.querySelector<HTMLImageElement>('.backdrop')!;if(bg.getAttribute('src')!==src)bg.src=src;bg.hidden=editView==='window';setRect(room.querySelector<HTMLElement>('.photo')!,result.photo);setRect(room.querySelector<HTMLElement>('.screen')!,result.screen);const tv=room.querySelector<HTMLImageElement>('.tv-frame')!;tv.src=`/tv/shared-${type}.svg`;setRect(tv,result.frame);tv.hidden=editView==='window';
- room.querySelector<HTMLElement>('.screen')!.style.borderRadius=type==='crt'&&p.screen?.rounded!==false?'5% / 8%':'0';
+ const {p,type,result,screen}=layout(room,activeKey(),draft,editView);const src=photoSource(type,editView,themeFor(p));try{await Promise.all([loadPhoto(src),loadPhoto(`/tv/real-${type}.webp`)])}catch{notify('No se pudo cargar el fondo');return}if(epoch!==previewEpoch||!draft)return;
+ const bg=room.querySelector<HTMLImageElement>('.backdrop')!;if(bg.getAttribute('src')!==src)bg.src=src;bg.hidden=editView==='window';setRect(room.querySelector<HTMLElement>('.photo')!,result.photo);setRect(room.querySelector<HTMLElement>('.screen')!,result.screen);const tv=room.querySelector<HTMLImageElement>('.tv-frame')!;tv.src=`/tv/real-${type}.webp`;setRect(tv,result.frame);tv.hidden=editView==='window';
+ room.querySelector<HTMLElement>('.screen')!.style.borderRadius=type==='crt'&&p.screen?.rounded!==false?tvModels[type].rounding:'0';
  renderFigures(room,room.querySelector<HTMLElement>('.figures')!,draft,activeKey(),screen,p,true);
 }
 function syncEditor(refresh=true){if(!draft)return;

@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {access} from 'node:fs/promises';
 import {roomThemes,themeFor,roomPhoto} from '../public/room-themes.mjs';
+import {tvModels} from '../public/tv/models.mjs';
 import {themeGlass} from '../public/room-theme-glass.mjs';
 import {validPresentations} from '../studio-validation.mjs';
 import {photoLayout} from '../public/photo-layout.mjs';
@@ -9,9 +10,9 @@ import {photoLayout} from '../public/photo-layout.mjs';
 test('shared TV models retain identical frame and glass proportions in every room and orientation',()=>{
  for(const {id} of roomThemes)for(const type of ['crt','flat'])for(const [width,height] of [[1200,800],[430,932]]){
   const {frame,screen}=photoLayout(width,height,type,{},false,id);
-  assert.ok(Math.abs(frame.height/frame.width-(type==='crt'?.76:.6))<1e-8);
-  assert.ok(Math.abs(screen.width/frame.width-(type==='crt'?.824:.976))<1e-8);
-  assert.ok(Math.abs((screen.left-frame.left)/frame.width-(type==='crt'?.088:.012))<1e-8);
+  assert.ok(Math.abs(frame.height/frame.width-tvModels[type].height/tvModels[type].width)<1e-8);
+  assert.ok(Math.abs(screen.width/frame.width-tvModels[type].glass[2]/tvModels[type].width)<1e-8);
+  assert.ok(Math.abs((screen.left-frame.left)/frame.width-tvModels[type].glass[0]/tvModels[type].width)<1e-8);
  }
 });
 test('the shared TV remains complete in Discord landscape aspect ratios',()=>{
@@ -28,7 +29,7 @@ test('all room options validate and retain neutral fallback for older preference
  assert.equal(validPresentations({[key]:{roomTheme:'unavailable'}},views),false);assert.equal(themeFor({}), 'midnight');assert.equal(themeFor({roomTheme:'unavailable'}),'midnight');
 });
 test('each neutral room has both TVs and orientations, with glass aligned at every zoom',async()=>{
- for(const {id} of roomThemes.filter(t=>t.id!=='midnight'))for(const type of ['crt','flat'])for(const orientation of ['wide','portrait']){
+ for(const {id} of roomThemes)for(const type of ['crt','flat'])for(const orientation of ['wide','portrait']){
   await access(new URL('../public'+roomPhoto(type,orientation==='wide'?'landscape':'portrait',id),import.meta.url));
   const [iw,ih,x,y,w,h]=themeGlass[id][`${type}-${orientation}`];assert.ok(x>0&&y>0&&x+w<iw&&y+h<ih);
   for(const zoom of [1,1.4,2])for(const pan of [-40,0,40]){
