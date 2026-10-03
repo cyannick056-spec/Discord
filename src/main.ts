@@ -3,7 +3,7 @@ import {CloudflareViewer} from './cloudflare';
 import {canControlActivity,hostHeaders,unlockHost,initActivityControls,changeActivityControls,type Controls} from './activity-controls';
 import {photoLayout} from '../public/photo-layout.mjs';
 import {viewFor,keyFor,placementFor,settingsFor,prepareSave,updatePlacement,figureRect,slotColors} from './activity-model.mjs';
-import {TvStatic} from './tv-static';
+import {TvStatic,SignalSweeps} from './tv-static';
 import './activity.css';
 
 type Placement={x:number;y:number;width:number;rotation:number;opacity:number;z:number;hidden:boolean;anchor?:string;foreground?:boolean;behindTv?:boolean;locked?:boolean;[key:string]:any};
@@ -21,7 +21,8 @@ let sdk:DiscordSDK|null=null,accessToken='',viewer:CloudflareViewer|null=null,pe
 let signalTimer:ReturnType<typeof setTimeout>|undefined,lastFrame=0,everLive=false,videoEpoch=0;
 let pendingExit=false,liveTv='crt',signalVisible=true,switchingTv=false;
 const staticNoise=new TvStatic($<HTMLCanvasElement>('staticNoise'));
-function syncStatic(){staticNoise.setActive(signalVisible&&liveTv==='crt'&&!document.hidden&&!draft)}
+const signalSweeps=new SignalSweeps($<HTMLCanvasElement>('signalSweep'));
+function syncStatic(){const active=liveTv==='crt'&&!document.hidden&&!draft;staticNoise.setActive(active&&signalVisible);signalSweeps.setActive(active&&!signalVisible&&controls.retro==='scanlines')}
 let volume=100;try{volume=Number(localStorage.getItem('shis-volume')??100)}catch{}
 volume=Math.max(0,Math.min(100,Number.isFinite(volume)?volume:100));
 const decoded=new Map<string,Promise<HTMLImageElement>>();let renderEpoch=0,previewEpoch=0;
@@ -186,4 +187,4 @@ window.addEventListener('resize',()=>{renderLive();if(draft){$('compactNotice').
 window.addEventListener('shis-host-change',()=>{updateControls();if(draft&&!canControlActivity()){closeEditor();notify('Vuelve a entrar como host para editar')}});
 initActivityControls(state=>{const changed=JSON.stringify(controls)!==JSON.stringify(state);controls=state;if(changed)updateControls()});
 setInterval(()=>{if(!document.hidden)void load();if(!document.hidden&&lastFrame&&performance.now()-lastFrame>8000&&$('signal').hidden){lost();lastFrame=0}},2000);
-window.addEventListener('pagehide',()=>{viewer?.stop();staticNoise.stop()});setVolume();load();boot();
+window.addEventListener('pagehide',()=>{viewer?.stop();staticNoise.stop();signalSweeps.stop()});setVolume();load();boot();
