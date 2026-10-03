@@ -23,13 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: package.json
       - run: npm install
       - run: node --check public/simple-mode.js
+      - run: node --check public/one-room.js
       - run: node --check public/upload-limits.js
       - run: npx tsc --noEmit
       - run: npm test
