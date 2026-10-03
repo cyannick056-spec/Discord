@@ -13,5 +13,7 @@ for(const type of ['crt','flat'])for(const portrait of [false,true])test(`${type
  }
 });
 test('compact video occupies all available space',()=>{
- assert.deepEqual(photoLayout(300,200,'crt',{},true).screen,{left:0,top:0,width:300,height:200});
+ const layout=photoLayout(300,200,'crt',{},true);
+ assert.deepEqual(layout.screen,{left:0,top:0,width:300,height:200});
+ assert.deepEqual(layout.photo,layout.screen);
 });

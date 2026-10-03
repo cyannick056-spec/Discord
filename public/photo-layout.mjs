@@ -7,6 +7,7 @@ export const glass = {
  'flat-portrait': [864,1536,146,484,572,303],
 };
 export function photoLayout(width,height,type,camera={},compact=false){
+ if(compact)return {photo:{left:0,top:0,width,height},screen:{left:0,top:0,width,height}};
  const portrait=height>width && !compact;
  const [iw,ih,x,y,w,h]=glass[`${type}-${portrait?'portrait':'wide'}`];
  const zoom=Math.max(1,Math.min(2,camera.zoom??1));
