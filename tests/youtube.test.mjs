@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import {parseYouTubeLink,playbackPosition,validatePlayback} from '../youtube-model.mjs';
 import {installPlayback} from '../playback.mjs';
-import {youtubeBase,youtubeScriptUrl,youtubeEmbedUrl,youtubeResourceUrl,isDiscordOrigin,isYouTubeScriptResponse} from '../youtube-network.mjs';
+import {youtubeBase,youtubeIdentity,youtubeMappedResourceUrl,youtubeScriptUrl,youtubeEmbedUrl,youtubeResourceUrl,isDiscordOrigin,isYouTubeScriptResponse} from '../youtube-network.mjs';
 import {safeResourceLabel,needsPlaybackCommand,playbackSelectionKey} from '../youtube-diagnostics.mjs';
 test('playback diagnostics exclude credentials, signed query strings and video identifiers; buffering does not repeatedly restart playback',()=>{
  assert.equal(safeResourceLabel('https://name:password@www.google.com/js/th/private-id?ticket=secret#token'),'www.google.com/js/th');
@@ -15,16 +15,24 @@ test('playback diagnostics exclude credentials, signed query strings and video i
  assert.equal(playbackSelectionKey({videoId:'dQw4w9WgXcQ',playing:false,position:0}),playbackSelectionKey({videoId:'dQw4w9WgXcQ',playing:true,position:100}));
  assert.notEqual(playbackSelectionKey({playlistId:'PL1234567890',index:0}),playbackSelectionKey({playlistId:'PL1234567890',index:1}));
 });
-test('existing YouTube iframe URLs preserve playback parameters while message origin remains a bare origin',()=>{
+test('existing YouTube iframe URLs preserve playback parameters and expose only a clean activity identity',()=>{
  const host='https://1553964489517568082.discordsays.com';
- const url=new URL(youtubeEmbedUrl(host+'/',{videoId:'dQw4w9WgXcQ',position:90.9,playing:true}));
+ const url=new URL(youtubeEmbedUrl(host+'/?ticket=super-secret',{videoId:'dQw4w9WgXcQ',position:90.9,playing:true}));
  assert.equal(url.pathname,'/youtube/embed/dQw4w9WgXcQ');assert.equal(url.origin,host);
- assert.equal(url.searchParams.get('origin'),host);assert.equal(url.searchParams.get('enablejsapi'),'1');assert.equal(url.searchParams.get('start'),'90');assert.equal(url.searchParams.get('autoplay'),'1');
- const list=new URL(youtubeEmbedUrl(host+'/.proxy/',{playlistId:'PL1234567890',index:2}));
+ assert.equal(url.searchParams.get('origin'),host);assert.equal(url.searchParams.get('widget_referrer'),host+'/');
+ assert.equal(url.searchParams.get('widget_referrer').includes('ticket'),false);
+ assert.equal(youtubeIdentity(host+'/?ticket=super-secret'),host+'/');
+ assert.equal(url.searchParams.get('enablejsapi'),'1');assert.equal(url.searchParams.get('start'),'90');assert.equal(url.searchParams.get('autoplay'),'1');
+ const list=new URL(youtubeEmbedUrl(host+'/.proxy/?ticket=secret',{playlistId:'PL1234567890',index:2}));
  assert.equal(list.pathname,'/.proxy/youtube/embed/videoseries');assert.equal(list.searchParams.get('list'),'PL1234567890');assert.equal(list.searchParams.get('index'),'2');
+ assert.equal(list.searchParams.get('widget_referrer'),host+'/');
  assert.equal(new URL(youtubeEmbedUrl('http://localhost:5173/',{videoId:'dQw4w9WgXcQ'})).origin,'https://www.youtube.com');
- assert.equal(youtubeResourceUrl(host+'/', '/s/player/main.js'),host+'/s/player/main.js');
- assert.equal(youtubeResourceUrl(host+'/.proxy/', '/s/player/main.js'),host+'/.proxy/s/player/main.js');
+ assert.equal(youtubeResourceUrl(host+'/', '/s/player/main.js'),host+'/youtube/s/player/main.js');
+ assert.equal(youtubeResourceUrl(host+'/.proxy/', '/s/player/main.js'),host+'/.proxy/youtube/s/player/main.js');
+ assert.equal(youtubeMappedResourceUrl(host+'/?ticket=secret','/youtubei/v1/player'),host+'/youtube/youtubei/v1/player');
+ assert.equal(youtubeMappedResourceUrl(host+'/.proxy/?ticket=secret','/api/stats/qoe'),host+'/.proxy/youtube/api/stats/qoe');
+ assert.equal(youtubeMappedResourceUrl('http://localhost:5173/','/youtubei/v1/player'),'https://www.youtube.com/youtubei/v1/player');
+ assert.throws(()=>youtubeMappedResourceUrl(host+'/', '//evil.test/x'));
  assert.throws(()=>youtubeResourceUrl(host+'/', '/api/config'));
 });
 test('YouTube uses the configured Discord route for scripts and iframe host; rejects HTML masquerading as a loader',()=>{
