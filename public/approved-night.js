@@ -50,14 +50,11 @@ style.textContent = `
   html.shis-approved-night #tvScene { z-index:4 !important; }
   html.shis-approved-night #decorationLayer { z-index:8 !important; }
 
-  /* La escena aprobada ya lleva toda la iluminación pintada. */
   html.shis-approved-night .room-scene::before,
   html.shis-approved-night .room-scene::after { display:none !important; }
 
-  /* CRT: conserva el modelo clásico y todos sus filtros. */
   html.shis-approved-night [data-shis-tv="crt"] .crt-overlay { display:block !important; }
 
-  /* Plana: pantalla limpia, sin barridos/scanlines de CRT. */
   html.shis-approved-night [data-shis-tv="flat"] .crt-overlay,
   html.shis-approved-night [data-shis-tv="flat"] .signal-sweep,
   html.shis-approved-night [data-shis-tv="flat"] .noise { display:none !important; }
@@ -67,7 +64,6 @@ style.textContent = `
   html.shis-approved-night [data-shis-tv="flat"] .screen-wrap::after { display:none !important; }
   html.shis-approved-night [data-shis-tv="flat"] .video-mount video { filter:none !important; }
 
-  /* La TV de la app ocupa el espacio de la TV pintada en el entorno. */
   @media (orientation:landscape) and (min-height:361px) {
     html.shis-approved-night [data-shis-tv="crt"] #tvScene,
     html.shis-approved-night [data-shis-tv="crt"] #tvScene.aspect-4x3 {
@@ -109,7 +105,6 @@ style.textContent = `
     }
   }
 
-  /* Juegos antiguos: 4:3 llena la pantalla CRT sin bordes del contenedor. */
   html.shis-approved-night [data-shis-tv="crt"] #tvScene.aspect-4x3 .video-mount video {
     width:100% !important;
     height:100% !important;
@@ -117,7 +112,6 @@ style.textContent = `
     object-position:center !important;
   }
 
-  /* Panel realmente mínimo: figuritas + tipo de pantalla. */
   html.shis-approved-night #shisSimpleEditor .simple-card { max-height:min(39dvh,350px) !important; }
   html.shis-approved-night #shisSimpleEditor header strong::after {
     content:' · Noche acogedora';
