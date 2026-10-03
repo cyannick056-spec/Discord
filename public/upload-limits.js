@@ -1,5 +1,5 @@
 import './mobile-performance.js';
-import './simple-mode.js';
+import './approved-night.js';
 
 const SHIS_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const SHIS_LEGACY_CLIENT_GUARD_BYTES = 2 * 1024 * 1024;
@@ -33,9 +33,6 @@ function installSelectionGuard() {
   `;
   document.head.append(style);
 
-  // Android/WebView puede intentar seleccionar texto tras una pulsación larga
-  // aunque el elemento no sea editable. Conservamos selección dentro de campos
-  // del editor para no romper nombres, claves ni valores.
   document.addEventListener('selectstart', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return event.preventDefault();
@@ -65,8 +62,6 @@ function updateFigurePicker() {
     }
   }
 
-  // El layout moderno oculta varias acciones antiguas de la barra superior.
-  // Dejamos la subida dentro del panel de Objetos, donde siempre es encontrable.
   const sidebar = document.querySelector('.editor-sidebar');
   if (sidebar && label.parentElement !== sidebar) sidebar.prepend(label);
 
@@ -93,9 +88,6 @@ installSelectionGuard();
 if (nativeBlobSize && !globalThis.__shisUploadLimitInstalled) {
   globalThis.__shisUploadLimitInstalled = true;
 
-  // El editor antiguo aún compara file.size contra 2 MB. Para archivos válidos
-  // de hasta 8 MB exponemos un tamaño compatible con esa comprobación; fetch
-  // sigue enviando el Blob/File real y el backend valida el límite verdadero.
   Object.defineProperty(File.prototype, 'size', {
     configurable: true,
     get() {
