@@ -1,1 +1,0 @@
-RELAY_PUBLISH_KEY is an internal relay-to-Activity credential. It must be identical to the Activity STREAM_KEY and is intentionally separate from the Switch STREAM_KEY.
