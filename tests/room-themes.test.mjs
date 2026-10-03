@@ -6,13 +6,29 @@ import {themeGlass} from '../public/room-theme-glass.mjs';
 import {validPresentations} from '../studio-validation.mjs';
 import {photoLayout} from '../public/photo-layout.mjs';
 
-test('all room options validate and retain original fallback for older preferences',()=>{
+test('shared TV models retain identical frame and glass proportions in every room and orientation',()=>{
+ for(const {id} of roomThemes)for(const type of ['crt','flat'])for(const [width,height] of [[1200,800],[430,932]]){
+  const {frame,screen}=photoLayout(width,height,type,{},false,id);
+  assert.ok(Math.abs(frame.height/frame.width-(type==='crt'?.76:.6))<1e-8);
+  assert.ok(Math.abs(screen.width/frame.width-(type==='crt'?.824:.976))<1e-8);
+  assert.ok(Math.abs((screen.left-frame.left)/frame.width-(type==='crt'?.088:.012))<1e-8);
+ }
+});
+test('the shared TV remains complete in Discord landscape aspect ratios',()=>{
+ for(const {id} of roomThemes)for(const type of ['crt','flat'])for(const [width,height] of [[1536,674],[1920,650]]){
+  const {photo,frame}=photoLayout(width,height,type,{},false,id);
+  assert.ok(photo.top+frame.top>=11.999);
+  assert.ok(photo.top+frame.top+frame.height<=height);
+ }
+});
+
+test('all room options validate and retain neutral fallback for older preferences',()=>{
  const key='home-landscape-16x9',views=new Set([key]);
  for(const theme of roomThemes)assert.equal(validPresentations({[key]:{style:'minimal',environment:'cozy-night',roomTheme:theme.id}},views),true);
- assert.equal(validPresentations({[key]:{roomTheme:'unavailable'}},views),false);assert.equal(themeFor({}), 'classic');assert.equal(themeFor({roomTheme:'unavailable'}),'classic');
+ assert.equal(validPresentations({[key]:{roomTheme:'unavailable'}},views),false);assert.equal(themeFor({}), 'midnight');assert.equal(themeFor({roomTheme:'unavailable'}),'midnight');
 });
 test('each neutral room has both TVs and orientations, with glass aligned at every zoom',async()=>{
- for(const {id} of roomThemes.filter(t=>t.id!=='classic'))for(const type of ['crt','flat'])for(const orientation of ['wide','portrait']){
+ for(const {id} of roomThemes.filter(t=>t.id!=='midnight'))for(const type of ['crt','flat'])for(const orientation of ['wide','portrait']){
   await access(new URL('../public'+roomPhoto(type,orientation==='wide'?'landscape':'portrait',id),import.meta.url));
   const [iw,ih,x,y,w,h]=themeGlass[id][`${type}-${orientation}`];assert.ok(x>0&&y>0&&x+w<iw&&y+h<ih);
   for(const zoom of [1,1.4,2])for(const pan of [-40,0,40]){

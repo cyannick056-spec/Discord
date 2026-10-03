@@ -26,7 +26,7 @@ export class TvStatic {
   if(!this.active)return;
   if(!document.hidden&&this.context&&this.frame){
    const pixels=this.frame.data,passes=bands(performance.now(),this.canvas.height);
-   for(let i=0;i<pixels.length;i+=4){this.seed^=this.seed<<13;this.seed^=this.seed>>>17;this.seed^=this.seed<<5;const y=Math.floor(i/4/this.canvas.width);let shift=0;for(const {center,halfWidth} of passes){const distance=y-center,strength=Math.max(0,1-Math.abs(distance)/halfWidth);shift+=(distance<0?45:-55)*strength}const v=Math.max(0,Math.min(255,75+(this.seed&127)+shift));pixels[i]=pixels[i+1]=pixels[i+2]=v;pixels[i+3]=255;}
+   for(let i=0;i<pixels.length;i+=4){this.seed^=this.seed<<13;this.seed^=this.seed>>>17;this.seed^=this.seed<<5;const y=Math.floor(i/4/this.canvas.width);let shift=0;for(const {center,halfWidth} of passes){const distance=y-center,strength=Math.max(0,1-Math.abs(distance)/halfWidth);shift+=(distance<0?24:-20)*strength}const v=Math.max(0,Math.min(255,48+(this.seed&255)*.8+shift));pixels[i]=pixels[i+1]=pixels[i+2]=v;pixels[i+3]=255;}
    this.context.putImageData(this.frame,0,0);
   }
   this.timer=setTimeout(this.draw,83);
