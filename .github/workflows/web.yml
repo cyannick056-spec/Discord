@@ -29,6 +29,8 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
       - run: npm install
+      - run: node --check public/simple-mode.js
+      - run: node --check public/upload-limits.js
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
