@@ -8,6 +8,45 @@ function realSize(file) {
   return nativeBlobSize.call(file);
 }
 
+function installSelectionGuard() {
+  if (globalThis.__shisSelectionGuardInstalled) return;
+  globalThis.__shisSelectionGuardInstalled = true;
+
+  const style = document.createElement('style');
+  style.id = 'shis-selection-guard';
+  style.textContent = `
+    html, body, #app, #stage,
+    .stage, .room-scene, .tv-scene, .player, .scene-controls,
+    button, label, img, canvas {
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      -webkit-touch-callout: none !important;
+    }
+    input, textarea, select, [contenteditable="true"] {
+      -webkit-user-select: text !important;
+      user-select: text !important;
+      -webkit-touch-callout: default !important;
+    }
+  `;
+  document.head.append(style);
+
+  // Android/WebView puede intentar seleccionar texto tras una pulsación larga
+  // aunque el elemento no sea editable. Conservamos selección dentro de campos
+  // del editor para no romper nombres, claves ni valores.
+  document.addEventListener('selectstart', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return event.preventDefault();
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    event.preventDefault();
+  }, true);
+
+  document.addEventListener('copy', (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('input, textarea, [contenteditable="true"]')) return;
+    event.preventDefault();
+  }, true);
+}
+
 function updateFigurePicker() {
   const input = document.querySelector('#editorUpload');
   if (!(input instanceof HTMLInputElement)) return;
@@ -45,6 +84,8 @@ function updateFigurePicker() {
   label.style.cursor = 'pointer';
   label.title = 'Subir una figurita PNG o GIF de hasta 8 MB';
 }
+
+installSelectionGuard();
 
 if (nativeBlobSize && !globalThis.__shisUploadLimitInstalled) {
   globalThis.__shisUploadLimitInstalled = true;
