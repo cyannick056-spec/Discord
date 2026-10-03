@@ -1,599 +1,165 @@
-import {beginSceneTransition} from './scene-transition';
-import {canControlActivity,initActivityControls,changeActivityControls} from './activity-controls';
-import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded-app-sdk';
-import { initDecorations, setDecorationViewers, requestAppClose } from './decorations';
-import { CloudflareViewer } from './cloudflare';
-import { initRoomLighting } from './lighting';
-import './style.css';
-import './scenes.css';
+import {DiscordSDK,Events,RPCCloseCodes,type Types} from '@discord/embedded-app-sdk';
+import {CloudflareViewer} from './cloudflare';
+import {canControlActivity,hostHeaders,unlockHost,initActivityControls,changeActivityControls,type Controls} from './activity-controls';
+import {photoLayout} from '../public/photo-layout.mjs';
+import {viewFor,keyFor,placementFor,settingsFor,prepareSave,updatePlacement,figureRect,slotColors} from './activity-model.mjs';
+import './activity.css';
 
-type AppConfig = {
-  discordClientId: string;
-  discordAuthAvailable: boolean;
-  defaultStream: string;
-};
-
-const statusText = document.querySelector<HTMLSpanElement>('#statusText')!;
-const roomText = document.querySelector<HTMLSpanElement>('#roomText')!;
-const liveBadge = document.querySelector<HTMLSpanElement>('#liveBadge')!;
-const videoMount = document.querySelector<HTMLDivElement>('#videoMount')!;
-const audioMount = document.querySelector<HTMLDivElement>('#audioMount')!;
-const emptyState = document.querySelector<HTMLDivElement>('#emptyState')!;
-const staticNoise = document.querySelector<HTMLCanvasElement>('#staticNoise')!;
-const signalSweep = document.querySelector<HTMLCanvasElement>('#signalSweep')!;
-const audioButton = document.querySelector<HTMLButtonElement>('#audioButton')!;
-const retryButton = document.querySelector<HTMLButtonElement>('#retryButton')!;
-const tvScene = document.querySelector<HTMLDivElement>('#tvScene')!;
-const aspectButton = document.querySelector<HTMLButtonElement>('#aspectButton')!;
-const exitButton = document.querySelector<HTMLButtonElement>('#exitButton')!;
-const stage = document.querySelector<HTMLElement>('#stage')!;
-const player = document.querySelector<HTMLElement>('#player')!;
-const homeScreenMount = document.querySelector<HTMLDivElement>('#homeScreenMount')!;
-const arcadeScene = document.querySelector<HTMLDivElement>('#arcadeScene')!;
-const arcadeScreen = document.querySelector<HTMLDivElement>('#arcadeScreen')!;
-const modeButton = document.querySelector<HTMLButtonElement>('#modeButton')!;
-const filterButton = document.querySelector<HTMLButtonElement>('#filterButton')!;
-const settingsControl = document.querySelector<HTMLDivElement>('#settingsControl')!;
-const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButton')!;
-const settingsPanel = document.querySelector<HTMLDivElement>('#settingsPanel')!;
-const smoothingButton = document.querySelector<HTMLButtonElement>('#smoothingButton')!;
-const viewerStatus = document.querySelector<HTMLSpanElement>('#viewerStatus')!;
-const viewerRetry = document.querySelector<HTMLButtonElement>('#viewerRetry')!;
-const volumeControl = document.querySelector<HTMLDivElement>('#volumeControl')!;
-const volumeButton = document.querySelector<HTMLButtonElement>('#volumeButton')!;
-const volumePanel = document.querySelector<HTMLDivElement>('#volumePanel')!;
-const volumeSlider = document.querySelector<HTMLInputElement>('#volumeSlider')!;
-const volumeValue = document.querySelector<HTMLOutputElement>('#volumeValue')!;
-
-let cloudflareViewer: CloudflareViewer | null = null;
-let config: AppConfig | null = null;
-let discordSdk: DiscordSDK | null = null;
-let discordAccessToken = '';
-let retryDiscordAuthorization: (() => Promise<void>) | null = null;
-let participantOrder: string[] = [];
-let signalLostTimer: ReturnType<typeof setTimeout> | null = null;
-let activeVideoElement: HTMLVideoElement | null = null;
-let streamEpoch=0;
-let lastDecodedFrameAt = 0;
-let videoStalled = false;
-const editorPreviewMode = new URLSearchParams(location.search).has('editorPreview');
-
-type AspectMode = '16:9' | '4:3';
-let aspectMode: AspectMode = '16:9';
-try {
-  if (localStorage.getItem('shis-tv-aspect') === '4:3') aspectMode = '4:3';
-} catch { /* Embedded browsers may deny storage. */ }
-if (editorPreviewMode) aspectMode = new URLSearchParams(location.search).get('aspect') === '4:3' ? '4:3' : '16:9';
-
-function setAspect(mode: AspectMode) {
-  if(aspectMode!==mode) beginSceneTransition();
-  aspectMode = mode;
-  tvScene.classList.toggle('aspect-4x3', mode === '4:3');
-  aspectButton.textContent = mode;
-  aspectButton.setAttribute('aria-label', `Cambiar proporción de la TV a ${mode === '4:3' ? '16:9' : '4:3'}`);
-  if (!editorPreviewMode) try { localStorage.setItem('shis-tv-aspect', mode); } catch { /* Session-only fallback. */ }
-  window.dispatchEvent(new Event('shis-aspect-change'));
+type Placement={x:number;y:number;width:number;rotation:number;opacity:number;z:number;hidden:boolean;anchor?:string;foreground?:boolean;behindTv?:boolean;locked?:boolean;[key:string]:any};
+type Item={id:string;name:string;asset:string;kind?:string;placements:Record<string,Placement>;[key:string]:any};
+type Manifest={items:Item[];presentations?:Record<string,any>;[key:string]:any};
+type View='landscape'|'portrait'|'window';
+type Person=Types.GetActivityInstanceConnectedParticipantsResponse['participants'][number];
+const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
+const params=new URLSearchParams(location.search),ticket=params.get('ticket')||'';
+const api=(path:string)=>path+(path.includes('?')?'&':'?')+new URLSearchParams({ticket});
+const headers=()=>({...hostHeaders(),'X-Activity-Ticket':ticket});
+let saved:Manifest={items:[]},draft:Manifest|null=null,selected='',editView:View='landscape',editAspect='16:9',dirty=false,undo:Manifest[]=[];
+let controls:Controls={aspect:'16:9',scene:'home',retro:'immersive',smoothing:true,revision:0,epoch:'',host:false};
+let sdk:DiscordSDK|null=null,accessToken='',viewer:CloudflareViewer|null=null,people:Person[]=[],order:string[]=[],participantRevision=0;
+let signalTimer:ReturnType<typeof setTimeout>|undefined,lastFrame=0,everLive=false,videoEpoch=0;
+let pendingExit=false;
+let volume=100;try{volume=Number(localStorage.getItem('shis-volume')??100)}catch{}
+volume=Math.max(0,Math.min(100,Number.isFinite(volume)?volume:100));
+const decoded=new Map<string,Promise<HTMLImageElement>>();let renderEpoch=0,previewEpoch=0;
+const currentView=()=>viewFor(innerWidth,innerHeight) as View;
+const activeKey=()=>keyFor(editView,editAspect);
+const item=()=>draft?.items.find(i=>i.id===selected);
+const isFigure=(i:Item)=>!i.kind||i.kind==='viewer-slot';
+function notify(message:string){$('notice').textContent=message;$('notice').hidden=false;setTimeout(()=>$('notice').hidden=true,4500)}
+async function json<T>(path:string,init:RequestInit={}):Promise<T>{const r=await fetch(api(path),{...init,headers:{...headers(),...init.headers},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||`HTTP ${r.status}`);return data;}
+function loadPhoto(src:string){let p=decoded.get(src);if(!p){const image=new Image();image.src=src;p=image.decode().then(()=>image);decoded.set(src,p)}return p;}
+function photoSource(type:string,view:View){return `/rooms/approved-${type}-${view==='portrait'?'portrait':'wide'}.jpg`;}
+function setRect(el:HTMLElement,r:Record<string,number>){for(const [name,value]of Object.entries(r))el.style.setProperty(name,`${value}px`);}
+function layout(room:HTMLElement,key:string,manifest:Manifest,view:View,solo=false){
+ const p=settingsFor(manifest,key),type=p.tvModel==='flat-modern'?'flat':'crt';
+ let result=photoLayout(room.clientWidth,room.clientHeight,type,p.camera,view==='window');
+ if(solo&&view!=='window'){
+ const ratio=controls.aspect==='4:3'?4/3:16/9,w=Math.min(room.clientWidth,room.clientHeight*ratio),h=w/ratio;
+ result={photo:{left:(room.clientWidth-w)/2,top:(room.clientHeight-h)/2,width:w,height:h},screen:{left:0,top:0,width:w,height:h}};
+ }
+ return {p,type,result,screen:{x:result.photo.left+result.screen.left,y:result.photo.top+result.screen.top,width:result.screen.width,height:result.screen.height}};
 }
-setAspect(aspectMode);
-
-type SceneMode = 'home' | 'arcade';
-let sceneMode: SceneMode = 'home';
-try {
-  if (localStorage.getItem('shis-scene') === 'arcade') sceneMode = 'arcade';
-} catch { /* Session-only fallback. */ }
-if (editorPreviewMode) sceneMode = new URLSearchParams(location.search).get('scene') === 'arcade' ? 'arcade' : 'home';
-
-function setScene(mode: SceneMode) {
-  if(sceneMode!==mode) beginSceneTransition();
-  sceneMode = mode;
-  stage.classList.toggle('home-mode', mode === 'home');
-  stage.classList.toggle('arcade-mode', mode === 'arcade');
-  arcadeScene.hidden = mode !== 'arcade';
-  aspectButton.hidden = mode === 'arcade';
-  volumePanel.hidden = true;
-  volumeButton.setAttribute('aria-expanded', 'false');
-  (mode === 'arcade' ? arcadeScreen : homeScreenMount).appendChild(player);
-  modeButton.textContent = mode === 'arcade' ? 'Casa' : 'Arcade';
-  modeButton.setAttribute('aria-label', mode === 'arcade' ? 'Cambiar a modo casa' : 'Cambiar a modo arcade');
-  videoMount.querySelector('video')?.play().catch(() => {});
-  window.dispatchEvent(new Event('shis-scene-change'));
-  if (!editorPreviewMode) try { localStorage.setItem('shis-scene', mode); } catch { /* Session-only fallback. */ }
+function peopleForSlots(){return order.map(id=>people.find(p=>p.id===id)).filter(Boolean) as Person[];}
+function avatar(p:Person){return p.avatar?`https://cdn.discordapp.com/avatars/${p.id}/${p.avatar}.png?size=128`:`https://cdn.discordapp.com/embed/avatars/${(BigInt(p.id)>>22n)%6n}.png`;}
+function renderFigures(room:HTMLElement,layer:HTMLElement,manifest:Manifest,key:string,screen:any,p:any,editable:boolean){
+ const members=peopleForSlots(),existing=new Map([...layer.children].map(n=>[(n as HTMLElement).dataset.id,n as HTMLElement])),visible=new Set<string>();
+ for(const i of manifest.items){if(!isFigure(i))continue;const place=placementFor(i,key);if(!place||place.hidden)continue;
+ const slot=i.kind==='viewer-slot',index=slotColors.indexOf(i.id.replace('viewer-slot-','')),person=members[index];if(slot&&!person&&!editable)continue;
+ visible.add(i.id);const box=existing.get(i.id)??document.createElement('div');box.className='figure'+(slot?' slot':'')+(editable&&selected===i.id?' selected':'');box.dataset.id=i.id;
+ const rect=figureRect(place,{x:0,y:0,width:room.clientWidth,height:room.clientHeight},screen,p.camera);
+ box.style.left=`${rect.x}px`;box.style.top=`${rect.y}px`;box.style.width=`${rect.width}px`;box.style.opacity=String(place.opacity);box.style.zIndex=String(place.z+(place.foreground?100:0));box.style.transform=`translate(-50%,-50%) rotate(${place.rotation}deg)`;
+ if(slot)box.style.setProperty('--slot',slotColors[index]??'white');
+ const src=slot&&person?avatar(person):!slot?api(`/api/decorations/assets/${encodeURIComponent(i.asset)}`):'';
+ if(src){let image=box.querySelector('img');if(!image){image=document.createElement('img');box.replaceChildren(image)}image.alt=slot?(person?.username||i.name):i.name;image.draggable=false;if(image.getAttribute('src')!==src)image.src=src;box.style.lineHeight='';box.style.border='';box.style.aspectRatio='';}
+ else {const label=String(index+1);if(box.textContent!==label)box.textContent=label;Object.assign(box.style,{color:'white',lineHeight:'2',textAlign:'center',border:'2px solid var(--slot)',background:'black',aspectRatio:'1'})}
+ if(box.parentElement!==layer)layer.append(box);
+ }
+ for(const [id,box]of existing)if(!visible.has(id!))box.remove();
 }
-setScene(sceneMode);
-
-type RetroLevel = 'off' | 'normal' | 'immersive' | 'scanlines';
-let retroLevel: RetroLevel = 'immersive';
-let smoothing = true;
-let volume = 100;
-try {
-  const storedVolume = Number(localStorage.getItem('shis-volume'));
-  if (localStorage.getItem('shis-volume') !== null && Number.isFinite(storedVolume)) {
-    volume = Math.max(0, Math.min(100, storedVolume));
-  }
-} catch { /* Session-only fallback. */ }
-
-function setRetroLevel(level: RetroLevel) {
-  retroLevel = level;
-  stage.classList.toggle('retro-strong', level === 'normal');
-  stage.classList.toggle('retro-immersive', level === 'immersive');
-  stage.classList.toggle('retro-scanlines', level === 'scanlines');
-  filterButton.dataset.level = level;
-  filterButton.setAttribute('aria-pressed', String(level !== 'off'));
-  const names: Record<RetroLevel, string> = {
-    off: 'apagado', normal: 'normal', immersive: 'inmersivo', scanlines: 'barrido',
-  };
-  filterButton.textContent = `Retro ${names[level]}`;
-  const next: Record<RetroLevel, RetroLevel> = {
-    off: 'normal', normal: 'immersive', immersive: 'scanlines', scanlines: 'off',
-  };
-  filterButton.setAttribute('aria-label', `Retro ${names[level]}; cambiar a ${names[next[level]]}`);
-  filterButton.title = `Retro: ${names[level]}. Pulsar para ${names[next[level]]}`;
+async function renderLive(){
+ const epoch=++renderEpoch,view=currentView(),key=keyFor(view,controls.aspect,controls.scene),room=$('room');
+ // Solo pantalla reuses the saved home composition for its optional figures.
+ const sourceKey=controls.scene==='arcade'?keyFor(view,controls.aspect):key;
+ const {p,type,result,screen}=layout(room,sourceKey,saved,view,controls.scene==='arcade');
+ const src=photoSource(type,view);try{await loadPhoto(src)}catch{notify('No se pudo cargar el fondo');return}if(epoch!==renderEpoch)return;
+ const bg=$<HTMLImageElement>('backdrop');if(bg.getAttribute('src')!==src)bg.src=src;
+ setRect($('photo'),result.photo);setRect($('screen'),result.screen);
+ $('stage').classList.toggle('solo',controls.scene==='arcade'||view==='window');
+ $('screen').className=[type==='crt'?'crt':'',controls.retro==='immersive'?'intense':controls.retro,controls.smoothing?'smooth':''].join(' ');
+ $('screen').style.borderRadius=type==='crt'&&p.screen?.rounded!==false&&view!=='window'?'5% / 8%':'0';
+ $<HTMLVideoElement>('video').style.objectFit=p.video?.fit??'contain';
+ renderFigures(room,$('figures'),saved,key,screen,p,false);$('loading').hidden=true;
 }
-setRetroLevel(retroLevel);
-
-function setSmoothing(enabled: boolean) {
-  smoothing = enabled;
-  stage.classList.toggle('edge-smoothing', enabled);
-  smoothingButton.setAttribute('aria-pressed', String(enabled));
-  smoothingButton.setAttribute('aria-label', enabled ? 'Desactivar suavizado de bordes' : 'Activar suavizado de bordes');
-  smoothingButton.title = enabled ? 'Suavizado activado: pulsar para comparar' : 'Suavizar bordes dentados';
+function remember(){if(!draft)return;undo.push(structuredClone(draft));if(undo.length>30)undo.shift();dirty=true;}
+function mutate(fn:()=>void,history=true){if(!draft)return;if(history)remember();fn();dirty=true;renderPreview();syncEditor(false);}
+function update(patch:Record<string,any>,history=true){mutate(()=>updatePlacement(draft!,selected,activeKey(),patch),history)}
+function editorSettings(){return (draft!.presentations??={})[activeKey()]??=structuredClone(settingsFor(draft!,activeKey()))}
+function resetFreshSettings(m:Manifest){m.presentations??={};for(const v of ['landscape','portrait','window'])for(const a of ['16:9','4:3']){const k=keyFor(v,a);m.presentations[k]=structuredClone(settingsFor(m,k));}}
+async function renderPreview(){if(!draft)return;const epoch=++previewEpoch,room=$('previewRoom');const area=$('preview'),ratio=editView==='portrait'?9/16:editView==='window'?4/3:16/9;
+ const w=Math.min(area.clientWidth-16,(area.clientHeight-16)*ratio);room.style.width=`${Math.max(1,w)}px`;room.style.height=`${Math.max(1,w/ratio)}px`;room.style.aspectRatio=String(ratio);
+ const {p,type,result,screen}=layout(room,activeKey(),draft,editView);const src=photoSource(type,editView);try{await loadPhoto(src)}catch{notify('No se pudo cargar el fondo');return}if(epoch!==previewEpoch||!draft)return;
+ const bg=room.querySelector<HTMLImageElement>('.backdrop')!;if(bg.getAttribute('src')!==src)bg.src=src;bg.hidden=editView==='window';setRect(room.querySelector<HTMLElement>('.photo')!,result.photo);setRect(room.querySelector<HTMLElement>('.screen')!,result.screen);
+ room.querySelector<HTMLElement>('.screen')!.style.borderRadius=type==='crt'&&p.screen?.rounded!==false?'5% / 8%':'0';
+ renderFigures(room,room.querySelector<HTMLElement>('.figures')!,draft,activeKey(),screen,p,true);
 }
-setSmoothing(smoothing);
-
-function setVolume(value: number) {
-  volume = Math.max(0, Math.min(100, value));
-  volumeSlider.value = String(volume);
-  volumeValue.value = `${volume}%`;
-  volumeButton.dataset.muted = String(volume === 0);
-  volumeButton.title = `Volumen: ${volume}%`;
-  audioMount.querySelectorAll('audio').forEach((element) => { element.volume = volume / 100; });
-  try { localStorage.setItem('shis-volume', String(volume)); } catch { /* Session-only fallback. */ }
+function syncEditor(refresh=true){if(!draft)return;
+ document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===editView)));
+ document.querySelectorAll<HTMLButtonElement>('[data-edit-aspect]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.editAspect===editAspect)));
+ const list=$<HTMLSelectElement>('figureList');if(refresh){const all=draft.items.filter(isFigure);list.replaceChildren(...all.map(i=>new Option(i.name,i.id)));if(!all.some(i=>i.id===selected))selected=all[0]?.id??'';list.value=selected;}
+ const i=item(),p=i?placementFor(i,activeKey()):null;for(const id of ['size','rotation','figureName','copy','hideFigure','remove','front','back','anchor'])$<HTMLInputElement>(id).disabled=!i;
+ $<HTMLInputElement>('figureName').value=i?.name??'';$<HTMLInputElement>('size').value=String(p?.width??15);$<HTMLInputElement>('rotation').value=String(p?.rotation??0);
+ $('hideFigure').textContent=!p||p.hidden?'Mostrar':'Ocultar';$('anchor').textContent=p?.anchor==='frame'?'Anclada a TV · cambiar':'Anclada a sala · cambiar';
+ const s=editorSettings();$<HTMLInputElement>('zoom').value=String(s.camera?.zoom??1);$<HTMLInputElement>('panX').value=String(s.camera?.x??0);$<HTMLInputElement>('panY').value=String(s.camera?.y??0);
+ document.querySelectorAll<HTMLButtonElement>('[data-tv]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tv===(s.tvModel==='flat-modern'?'flat':'crt'))));
+ document.querySelectorAll<HTMLButtonElement>('[data-fit]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.fit===(s.video?.fit??'contain'))));$('round').textContent=`Curvas CRT: ${s.screen?.rounded===false?'no':'sí'}`;$<HTMLButtonElement>('undo').disabled=!undo.length;
+ $('slotTools').replaceChildren(...slotColors.map((color:string,index:number)=>{const button=document.createElement('button');button.textContent=`${index+1} · ${color}`;button.onclick=()=>{const id=`viewer-slot-${color}`;mutate(()=>{let slot=draft!.items.find(i=>i.id===id);if(!slot){slot={id,kind:'viewer-slot',asset:'',name:`Espectador ${index+1}`,placements:{}};draft!.items.push(slot)}const old=placementFor(slot,activeKey());updatePlacement(draft!,id,activeKey(),{...(old??{x:10+index*20,y:85,width:8,rotation:0,opacity:1,z:18,anchor:'scene'}),hidden:old?!old.hidden:false});selected=id});syncEditor()};return button}));
 }
-setVolume(volume);
-
-function isInsideDiscord() {
-  const params = new URLSearchParams(window.location.search);
-  return params.has('frame_id') || params.has('instance_id');
+function openEditor(){if(!canControlActivity())return;draft=structuredClone(saved);resetFreshSettings(draft);editView=currentView();editAspect=controls.aspect;dirty=false;undo=[];$('editor').hidden=false;$('optionsPanel').hidden=true;$('compactNotice').hidden=currentView()!=='window';syncEditor();renderPreview();}
+function closeEditor(){draft=null;dirty=false;$('editor').hidden=true;$('compactNotice').hidden=true;$<HTMLDialogElement>('closeDialog').close();}
+async function save(){if(!draft)return;const button=$<HTMLButtonElement>('save');button.disabled=true;try{const payload=prepareSave(draft);await json('/api/decorations',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});saved=payload;draft=structuredClone(payload);dirty=false;$('editorStatus').textContent='Guardado';renderLive()}catch(e){$('editorStatus').textContent=(e as Error).message;throw e}finally{button.disabled=false}}
+async function load(){if(draft)return;try{const value=await json<Manifest>('/api/decorations');if(draft)return;const changed=JSON.stringify(value)!==JSON.stringify(saved);saved=value;if(changed||!$('loading').hidden)await renderLive()}catch(e){notify((e as Error).message)}}
+function setVolume(){const audio=$<HTMLAudioElement>('audio');audio.volume=volume/100;$<HTMLInputElement>('volume').value=String(volume);$<HTMLOutputElement>('volumeValue').value=`${volume}%`;try{localStorage.setItem('shis-volume',String(volume))}catch{}}
+function signal(text:string){$('signal').hidden=false;$('signal').textContent=text}
+function lost(){if(signalTimer)clearTimeout(signalTimer);videoEpoch++;$<HTMLVideoElement>('video').srcObject=null;$<HTMLAudioElement>('audio').srcObject=null;signal(everLive?'Señal perdida':'Buscando señal…');signalTimer=setTimeout(()=>signal('Esperando señal…'),2000)}
+function track(kind:'video'|'audio',t:MediaStreamTrack){if(kind==='audio'){const audio=$<HTMLAudioElement>('audio');audio.srcObject=new MediaStream([t]);setVolume();audio.play().catch(()=>$('enableAudio').hidden=false);return}
+ const video=$<HTMLVideoElement>('video');video.srcObject=new MediaStream([t]);video.play().catch(()=>{});const epoch=++videoEpoch;lastFrame=performance.now();
+ const frame=()=>{if(epoch!==videoEpoch)return;lastFrame=performance.now();everLive=true;$('signal').hidden=true;if(signalTimer)clearTimeout(signalTimer);if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame)};
+ if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame);else (video as HTMLVideoElement).onplaying=frame;
 }
-
-function setStatus(text: string) {
-  statusText.textContent = text;
-}
-
-function setLive(isLive: boolean) {
-  if (isLive && signalLostTimer) {
-    clearTimeout(signalLostTimer);
-    signalLostTimer = null;
-  }
-  liveBadge.textContent = isLive ? 'PLAY' : 'STANDBY';
-  liveBadge.classList.toggle('live', isLive);
-  stage.classList.toggle('has-signal', isLive);
-  emptyState.style.display = isLive ? 'none' : 'flex';
-}
-
-function signalLost() {
-  if (signalLostTimer) clearTimeout(signalLostTimer);
-  setLive(false);
-  setStatus('SEÑAL PERDIDA');
-  signalLostTimer = setTimeout(() => {
-    signalLostTimer = null;
-    if (!stage.classList.contains('has-signal')) setStatus('ESPERANDO SEÑAL…');
-  }, 2000);
-}
-
-const noiseContext = staticNoise.getContext('2d', { alpha: false });
-const noiseFrame = noiseContext?.createImageData(staticNoise.width, staticNoise.height);
-const sweepContext = signalSweep.getContext('2d');
-const sweepFrame = sweepContext?.createImageData(signalSweep.width, signalSweep.height);
-let noiseSeed = 0x6a09e667;
-function nextNoise() {
-  noiseSeed ^= noiseSeed << 13;
-  noiseSeed ^= noiseSeed >>> 17;
-  noiseSeed ^= noiseSeed << 5;
-  return noiseSeed & 255;
-}
-function drawSignalSweeps(now: number) {
-  if (!sweepContext || !sweepFrame) return;
-  const { width, height } = signalSweep;
-  const data = sweepFrame.data;
-  data.fill(0);
-  const band = Math.floor((now / 31) % height);
-  for (let y = Math.max(0, band - 2); y < Math.min(height, band + 3); y++) {
-    const strength = 1 - Math.abs(y - band) / 3;
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      const grain = nextNoise() / 255;
-      data[i] = 205;
-      data[i + 1] = 222;
-      data[i + 2] = 241;
-      data[i + 3] = Math.round(22 * strength * (.5 + grain));
-    }
-  }
-  sweepContext.putImageData(sweepFrame, 0, 0);
-}
-function drawStatic(now: number) {
-  if (noiseContext && noiseFrame && !stage.classList.contains('has-signal')) {
-    const width = staticNoise.width;
-    const band = Math.floor((now / 31) % staticNoise.height);
-    for (let i = 0; i < noiseFrame.data.length; i += 4) {
-      const value = nextNoise();
-      const y = Math.floor(i / 4 / width);
-      const grain = Math.min(255, value + (Math.abs(y - band) < 3 ? 35 : 0));
-      noiseFrame.data[i] = grain;
-      noiseFrame.data[i + 1] = grain;
-      noiseFrame.data[i + 2] = Math.min(255, grain + 3);
-      noiseFrame.data[i + 3] = 255;
-    }
-    noiseContext.putImageData(noiseFrame, 0, 0);
-  }
-  if (stage.classList.contains('has-signal') && stage.classList.contains('retro-scanlines')) {
-    drawSignalSweeps(now);
-  }
-  setTimeout(() => drawStatic(performance.now()), 42);
-}
-drawStatic(performance.now());
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { cache: 'no-store' });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-  return body as T;
-}
-
-async function initDiscord(clientId: string) {
-  if (!isInsideDiscord() || !clientId) {
-    throw new Error('Abre Shis Stream desde la actividad de Discord');
-  }
-
-  type AuthUser = Awaited<ReturnType<DiscordSDK['commands']['authenticate']>>['user'];
-  const gateSession = (window as Window & { __shisDiscordSession?: {
-    sdk: DiscordSDK; user: AuthUser; accessToken: string;
-  } }).__shisDiscordSession;
-  discordSdk = gateSession?.sdk ?? new DiscordSDK(clientId);
-  await discordSdk.ready();
-  exitButton.hidden = false;
-  document.querySelector<HTMLButtonElement>('#editorExit')!.hidden = false;
-  type Participant = Types.GetActivityInstanceConnectedParticipantsResponse['participants'][number];
-  const avatarUrl = (user: Participant) => user.avatar ?
-    `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` :
-    `https://cdn.discordapp.com/embed/avatars/${(BigInt(user.id) >> 22n) % 6n}.png`;
-  let activityPeople: Participant[] = [];
-  let selfUser: Participant | null = null;
-  let activityOk = false;
-  let rosterRevision = 0;
-  let authState = config?.discordAuthAvailable ? '…' : 'sin clave';
-  let authProblem = '';
-  let authInFlight = false;
-  if (gateSession) {
-    discordAccessToken = gateSession.accessToken;
-    selfUser = { ...gateSession.user, bot: false, flags: gateSession.user.public_flags };
-    authState = 'sí';
-  }
-  const showParticipants = () => {
-    const byId = new Map<string, Participant>();
-    for (const person of [...activityPeople, ...(selfUser ? [selfUser] : [])]) {
-      if (!person.bot && !byId.has(person.id)) byId.set(person.id, person);
-    }
-    const people = [...byId.values()];
-    const present = new Set(people.map((person) => person.id));
-    participantOrder = participantOrder.filter((id) => present.has(id));
-    for (const person of people) if (!participantOrder.includes(person.id)) participantOrder.push(person.id);
-    setDecorationViewers(participantOrder.map((id) => byId.get(id)!).filter(Boolean).map((person) => ({
-      id: person.id, name: person.nickname || person.global_name || person.username, avatar: avatarUrl(person),
-    })));
-    const connection = authState === 'sin clave' ? 'Falta clave de Discord' :
-      authState === '×' ? `Acceso falló: ${authProblem}` :
-      authState === '…' ? 'Conectando…' :
-      activityOk ? 'Conectado' : 'Lista no disponible';
-    viewerStatus.textContent = `${people.length} espectador${people.length === 1 ? '' : 'es'} · ${connection}`;
-    viewerStatus.title = `En esta Activity: ${activityOk ? activityPeople.length : 'lista no disponible'}.`;
-    viewerRetry.hidden = authState !== '×';
-  };
-  showParticipants();
-  const onActivityUpdate = ({ participants }: Types.GetActivityInstanceConnectedParticipantsResponse) => {
-    activityOk = true;
-    rosterRevision++;
-    activityPeople = participants.filter((person) => !person.bot);
-    showParticipants();
-  };
-  const authenticateDiscord = async () => {
-    if (authInFlight) return;
-    authInFlight = true;
-    viewerRetry.disabled = true;
-    authState = '…';
-    showParticipants();
-    let step = 'permiso de Discord';
-    try {
-      let accessToken = '';
-      try { accessToken = sessionStorage.getItem('shis-discord-access') || ''; } catch { /* Retry OAuth. */ }
-      step = 'lectura del perfil';
-      let auth;
-      if (accessToken) {
-        try { auth = await discordSdk!.commands.authenticate({ access_token: accessToken }); }
-        catch {
-          accessToken = '';
-          try { sessionStorage.removeItem('shis-discord-access'); } catch { /* No storage. */ }
-        }
-      }
-      if (!accessToken) {
-        step = 'permiso de Discord';
-        const { code } = await discordSdk!.commands.authorize({
-          client_id: clientId, response_type: 'code', scope: ['identify'], prompt: 'none', state: '',
-        });
-        step = 'canje del código';
-        const response = await fetch('/api/discord-token', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }),
-        });
-        const body = await response.json() as { access_token?: string; error?: string };
-        if (!response.ok || !body.access_token) throw new Error(body.error || 'Discord rechazó el acceso');
-        accessToken = body.access_token;
-        step = 'lectura del perfil';
-        auth = await discordSdk!.commands.authenticate({ access_token: accessToken });
-        try { sessionStorage.setItem('shis-discord-access', accessToken); } catch { /* Session only. */ }
-      }
-      discordAccessToken = accessToken;
-      selfUser = { ...auth!.user, bot: false, flags: auth!.user.public_flags };
-      authState = 'sí';
-      showParticipants();
-      void refreshParticipants();
-    } catch (error) {
-      discordAccessToken = '';
-      try { sessionStorage.removeItem('shis-discord-access'); } catch { /* No storage. */ }
-      authState = '×';
-      const rpcError = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : null;
-      const code = typeof rpcError?.code === 'number' ? String(rpcError.code) : '';
-      const message = typeof rpcError?.message === 'string' ? rpcError.message.replace(/\s+/g, ' ').slice(0, 70) :
-        error instanceof Error ? error.message.replace(/\s+/g, ' ').slice(0, 70) : '';
-      authProblem = `${step}${code ? ` (${code})` : ''}${message ? `: ${message}` : ''}`;
-      showParticipants();
-      console.warn(`No se pudo autorizar el perfil de Discord (${step}):`, error);
-    } finally {
-      authInFlight = false;
-      viewerRetry.disabled = false;
-    }
-  };
-  retryDiscordAuthorization = authenticateDiscord;
-  viewerRetry.addEventListener('click', () => {
-    void authenticateDiscord().then(() => {
-      if (discordAccessToken && config && !cloudflareViewer) void connectViewer(config.defaultStream).catch(showConnectionError);
-    });
-  });
-  let refreshInFlight = false;
-  const refreshParticipants = async () => {
-    if (refreshInFlight) return;
-    refreshInFlight = true;
-    const startedRevision = rosterRevision;
-    try {
-      const activity = await discordSdk!.commands.getActivityInstanceConnectedParticipants();
-      activityOk = true;
-      if (startedRevision === rosterRevision) {
-        activityPeople = activity.participants.filter((person) => !person.bot);
-      }
-    } catch (error) {
-      if (startedRevision === rosterRevision) {
-        activityOk = false;
-        activityPeople = [];
-      }
-      console.warn('No se pudo consultar la Activity:', error);
-    }
-    showParticipants();
-    refreshInFlight = false;
-  };
-  void discordSdk.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE, onActivityUpdate)
-    .catch((error) => console.warn('No se pudo seguir cambios de participantes:', error));
-  void refreshParticipants();
-  if (!config?.discordAuthAvailable) throw new Error('Falta configurar la autorización de Discord');
-  if (!discordAccessToken) await authenticateDiscord();
-  if (!discordAccessToken) throw new Error('Autoriza tu perfil en Discord para ver la transmisión');
-  setInterval(() => { if (!document.hidden) void refreshParticipants(); }, 5000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshParticipants(); });
-}
-
-function clearVideo() {
-  activeVideoElement = null;
-  videoMount.replaceChildren();
-  signalLost();
-}
-
-function attachCloudflareTrack(kind: 'video' | 'audio', mediaTrack: MediaStreamTrack) {
-  if (kind === 'audio') {
-    const element = document.createElement('audio');
-    element.autoplay = true;
-    element.srcObject = new MediaStream([mediaTrack]);
-    element.style.display = 'none';
-    element.volume = volume / 100;
-    audioMount.replaceChildren(element);
-    void element.play().then(() => { audioButton.hidden = true; })
-      .catch(() => { audioButton.hidden = false; });
-    return;
-  }
-  const element = document.createElement('video');
-  element.autoplay = true;
-  element.srcObject = new MediaStream([mediaTrack]);
-  element.setAttribute('playsinline', 'true');
-  activeVideoElement = element;
-  lastDecodedFrameAt = performance.now();
-  videoStalled = false;
-  videoMount.replaceChildren(element);
-  setStatus('SEÑAL DETECTADA…');
-  void element.play().catch(() => {});
-  if ('requestVideoFrameCallback' in element) {
-    const onFrame: VideoFrameRequestCallback = (now) => {
-      if (activeVideoElement !== element) return;
-      lastDecodedFrameAt = now;
-      videoStalled = false;
-      if (!stage.classList.contains('has-signal')) {
-        setLive(true);
-        setStatus('');
-      }
-      element.requestVideoFrameCallback(onFrame);
-    };
-    element.requestVideoFrameCallback(onFrame);
-  } else {
-    setLive(true);
-    setStatus('');
-  }
-}
-
-setInterval(() => {
-  if (document.hidden || !activeVideoElement || videoStalled ||
-      !('requestVideoFrameCallback' in activeVideoElement)) return;
-  if (performance.now() - lastDecodedFrameAt > 10000) {
-    videoStalled = true;
-    signalLost();
-  }
-}, 2000);
-
-async function connectViewer(stream: string) {
-  const epoch=++streamEpoch;
-  if (!discordAccessToken) throw new Error('Autoriza tu perfil en Discord para ver la transmisión');
-  if (signalLostTimer) {
-    clearTimeout(signalLostTimer);
-    signalLostTimer = null;
-  }
-
-  if (cloudflareViewer) {
-    cloudflareViewer.stop();
-    cloudflareViewer = null;
-  }
-  audioMount.replaceChildren();
-  activeVideoElement = null;
-  videoMount.replaceChildren();
-  audioButton.hidden = true;
-
-  retryButton.hidden = true;
-  setStatus('SINTONIZANDO…');
-  setLive(false);
-  roomText.textContent = `shis-${stream}`;
-
-  const viewer = new CloudflareViewer(
-    () => discordAccessToken,
-    (kind,track) => {if(epoch===streamEpoch)attachCloudflareTrack(kind,track);},
-    () => {
-      if(epoch!==streamEpoch || cloudflareViewer!==viewer)return;
-      audioMount.replaceChildren();
-      audioButton.hidden = true;
-      clearVideo();
-    },
-    error => {if(epoch===streamEpoch && cloudflareViewer===viewer)showConnectionError(error);},
-  );
-  cloudflareViewer = viewer;
-  await viewer.start();
-  if(epoch!==streamEpoch) {
-    viewer.stop();
-    if (cloudflareViewer===viewer) cloudflareViewer=null;
-    return;
-  }
-  if (!activeVideoElement) setStatus('BUSCANDO SEÑAL…');
-}
-
-function showConnectionError(error: unknown) {
-  console.error(error);
-  setLive(false);
-  setStatus(error instanceof Error && /Discord|actividad|perfil|autoriza/i.test(error.message) ?
-    'ABRE EN DISCORD' : 'ERROR DE SEÑAL');
-  retryButton.hidden = false;
-}
-
-async function boot() {
-  try {
-    config = await fetchJson<AppConfig>('/api/config');
-    await initDiscord(config.discordClientId);
-    await connectViewer(config.defaultStream);
-  } catch (error) {
-    showConnectionError(error);
-  }
-}
-
-modeButton.addEventListener('click', () => shareControls({scene:sceneMode === 'home' ? 'arcade' : 'home'}));
-settingsButton.addEventListener('click', () => {
-  if(!canControlActivity())return;
-  settingsPanel.hidden = !settingsPanel.hidden;
-  settingsButton.setAttribute('aria-expanded', String(!settingsPanel.hidden));
-  volumePanel.hidden = true;
-  volumeButton.setAttribute('aria-expanded', 'false');
+async function connect(){if(!accessToken)return;viewer?.stop();signal('Buscando señal…');viewer=new CloudflareViewer(()=>accessToken,track,lost,e=>{signal('Esperando señal…');console.warn(e)});await viewer.start();setTimeout(()=>{if(!everLive&&$('signal').textContent==='Buscando señal…')signal('Esperando señal…')},8000)}
+async function boot(){try{
+ const config=await json<{discordClientId:string}>('/api/config');
+ const session=(window as any).__shisDiscordSession;sdk=session?.sdk??new DiscordSDK(config.discordClientId);await sdk!.ready();
+ if(session)accessToken=session.accessToken;else{const {code}=await sdk!.commands.authorize({client_id:config.discordClientId,response_type:'code',scope:['identify'],prompt:'none',state:''});const r=await fetch('/api/discord-token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const b=await r.json();if(!r.ok)throw new Error(b.error);accessToken=b.access_token;await sdk!.commands.authenticate({access_token:accessToken})}
+ const receive=(data:Types.GetActivityInstanceConnectedParticipantsResponse)=>{participantRevision++;const next=data.participants.filter(p=>!p.bot);if(JSON.stringify(next)===JSON.stringify(people))return;people=next;const present=new Set(people.map(p=>p.id));order=order.filter(id=>present.has(id));for(const p of people)if(!order.includes(p.id))order.push(p.id);renderLive()};
+ await sdk!.subscribe(Events.ACTIVITY_INSTANCE_PARTICIPANTS_UPDATE,receive);let busy=false;
+ const refresh=async()=>{if(busy||document.hidden)return;busy=true;const rev=participantRevision;try{const p=await sdk!.commands.getActivityInstanceConnectedParticipants();if(rev===participantRevision)receive(p)}catch{if(rev===participantRevision)receive({participants:[]})}finally{busy=false}};
+ await refresh();setInterval(refresh,5000);await connect();
+ }catch(e){signal('Abre Shis Stream desde Discord');notify((e as Error).message)}}
+function updateControls(){const host=canControlActivity();$('options').hidden=!host;$('optionsPanel').hidden=!host||$('optionsPanel').hidden;$('smooth').textContent=`Suavizado: ${controls.smoothing?'sí':'no'}`;$<HTMLSelectElement>('filter').value=controls.retro;document.querySelectorAll<HTMLButtonElement>('[data-aspect],[data-scene]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.aspect?b.dataset.aspect===controls.aspect:b.dataset.scene===controls.scene)));renderLive()}
+function share(value:Partial<Controls>){changeActivityControls(value).catch(e=>notify(e.message))}
+$('focusEditor').onclick=()=>{const active=$('editor').classList.toggle('focus-preview');$('focusEditor').textContent=active?'Ver botones':'Vista grande';renderPreview()};
+$('options').onclick=()=>$('optionsPanel').hidden=!$('optionsPanel').hidden;
+$('volumeButton').onclick=()=>{const el=$('volumePanel');el.hidden=!el.hidden;$('volumeButton').setAttribute('aria-expanded',String(!el.hidden));$<HTMLAudioElement>('audio').play().then(()=>$('enableAudio').hidden=true).catch(()=>{})};
+$('enableAudio').onclick=()=>$<HTMLAudioElement>('audio').play().then(()=>$('enableAudio').hidden=true).catch(()=>notify('Toca Volumen para activar sonido'));
+$('volume').oninput=()=>{volume=Number($<HTMLInputElement>('volume').value);setVolume()};
+const leave=()=>{viewer?.stop();sdk?.close(RPCCloseCodes.CLOSE_NORMAL,'Salió de Shis Stream')};
+$('exit').onclick=()=>{if(dirty){pendingExit=true;$<HTMLDialogElement>('closeDialog').showModal();return}leave()};
+$('edit').onclick=openEditor;$('reconnect').onclick=()=>connect().catch(e=>notify(e.message));
+$('smooth').onclick=()=>share({smoothing:!controls.smoothing});$('filter').onchange=()=>share({retro:$<HTMLSelectElement>('filter').value as Controls['retro']});
+$('closeEditor').onclick=()=>{pendingExit=false;return dirty?$<HTMLDialogElement>('closeDialog').showModal():closeEditor()};$('save').onclick=()=>save().catch(()=>{});$('saveClose').onclick=()=>save().then(()=>{closeEditor();if(pendingExit)leave()}).catch(()=>{});$('discardClose').onclick=()=>{closeEditor();if(pendingExit)leave()};$('cancelClose').onclick=()=>{pendingExit=false;$<HTMLDialogElement>('closeDialog').close()};
+$('undo').onclick=()=>{const old=undo.pop();if(old){draft=old;dirty=true;syncEditor();renderPreview()}};
+$('figureList').onchange=()=>{selected=$<HTMLSelectElement>('figureList').value;syncEditor(false);renderPreview()};
+$('figureName').onchange=()=>{const i=item();if(i){mutate(()=>i.name=$<HTMLInputElement>('figureName').value.slice(0,70));syncEditor()}};
+for(const [id,property]of [['size','width'],['rotation','rotation']]){$(id).addEventListener('pointerdown',()=>remember());$(id).oninput=()=>update({[property]:Number($<HTMLInputElement>(id).value)},false)}
+for(const [id,property]of [['zoom','zoom'],['panX','x'],['panY','y']]){$(id).addEventListener('pointerdown',()=>remember());$(id).oninput=()=>mutate(()=>{const s=editorSettings();(s.camera??={})[property]=Number($<HTMLInputElement>(id).value)},false)}
+$('hideFigure').onclick=()=>{const p=item()&&placementFor(item(),activeKey());update({hidden:!p||!p.hidden})};$('remove').onclick=()=>update({hidden:true});
+$('front').onclick=()=>update({z:Math.min(99,(placementFor(item(),activeKey())?.z??10)+1)});$('back').onclick=()=>update({z:Math.max(0,(placementFor(item(),activeKey())?.z??10)-1)});
+$('copy').onclick=()=>{const i=item();if(!i||i.kind==='viewer-slot')return;mutate(()=>{const copy=structuredClone(i);copy.id=crypto.randomUUID();copy.placements={[activeKey()]:structuredClone(placementFor(i,activeKey())??{x:50,y:65,width:15,rotation:0,opacity:1,z:10,hidden:false,anchor:'scene'})};copy.name=`${copy.name} copia`.slice(0,70);draft!.items.push(copy);selected=copy.id;updatePlacement(draft!,copy.id,activeKey(),{x:Math.min(130,(placementFor(copy,activeKey())?.x??50)+3)})});syncEditor()};
+$('anchor').onclick=()=>{const i=item(),p=i&&placementFor(i,activeKey());if(!p)return;const room=$('previewRoom'),l=layout(room,activeKey(),draft!,editView),rect=figureRect(p,{x:0,y:0,width:room.clientWidth,height:room.clientHeight},l.screen,l.p.camera);const target=p.anchor==='frame'?{x:0,y:0,width:room.clientWidth,height:room.clientHeight}:l.screen;update({anchor:p.anchor==='frame'?'scene':'frame',x:Math.max(-30,Math.min(130,(rect.x-target.x)/target.width*100)),y:Math.max(-35,Math.min(145,(rect.y-target.y)/target.height*100)),width:Math.max(1,Math.min(130,rect.width/target.width*100))})};
+$('round').onclick=()=>mutate(()=>{const s=editorSettings();s.screen={...s.screen,rounded:s.screen?.rounded===false}});$('resetRoom').onclick=()=>mutate(()=>editorSettings().camera={zoom:1,x:0,y:0});
+document.addEventListener('click',event=>{const b=(event.target as Element).closest<HTMLButtonElement>('button');if(!b)return;
+ if(b.dataset.aspect)share({aspect:b.dataset.aspect as Controls['aspect']});if(b.dataset.scene)share({scene:b.dataset.scene as Controls['scene']});
+ if(!draft)return;if(b.dataset.view){editView=b.dataset.view as View;syncEditor();renderPreview()}
+ if(b.dataset.editAspect){editAspect=b.dataset.editAspect;syncEditor();renderPreview()}
+ if(b.dataset.tab){$('figureTools').hidden=b.dataset.tab!=='figures';$('roomTools').hidden=b.dataset.tab!=='room';document.querySelectorAll('[data-tab]').forEach(n=>n.setAttribute('aria-pressed',String(n===b)))}
+ if(b.dataset.tv)mutate(()=>editorSettings().tvModel=b.dataset.tv==='flat'?'flat-modern':'original');if(b.dataset.fit)mutate(()=>editorSettings().video={fit:b.dataset.fit,auto:false});
+ if(b.dataset.nudge){const p=item()&&placementFor(item(),activeKey());if(p){const [x,y]=b.dataset.nudge.split(',').map(Number);update({x:Math.max(-30,Math.min(130,p.x+x)),y:Math.max(-35,Math.min(145,p.y+y))})}}
 });
-filterButton.addEventListener('click', () => shareControls({retro:retroLevel === 'off' ? 'normal' : retroLevel === 'normal' ? 'immersive' : retroLevel === 'immersive' ? 'scanlines' : 'off'}));
-smoothingButton.addEventListener('click', () => shareControls({smoothing:!smoothing}));
-aspectButton.addEventListener('click', () => shareControls({aspect:aspectMode === '4:3' ? '16:9' : '4:3'}));
-volumeButton.addEventListener('click', () => {
-  if(!audioButton.hidden) audioButton.click();
-  volumePanel.hidden = !volumePanel.hidden;
-  volumeButton.setAttribute('aria-expanded', String(!volumePanel.hidden));
-  settingsPanel.hidden = true;
-  settingsButton.setAttribute('aria-expanded', 'false');
-});
-volumeSlider.addEventListener('input', () => setVolume(Number(volumeSlider.value)));
-document.addEventListener('pointerdown', (event) => {
-  if (!volumeControl.contains(event.target as Node)) {
-    volumePanel.hidden = true;
-    volumeButton.setAttribute('aria-expanded', 'false');
-  }
-  if (!settingsControl.contains(event.target as Node)) {
-    settingsPanel.hidden = true;
-    settingsButton.setAttribute('aria-expanded', 'false');
-  }
-});
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !volumePanel.hidden) {
-    volumePanel.hidden = true;
-    volumeButton.setAttribute('aria-expanded', 'false');
-    volumeButton.focus();
-  }
-  if (event.key === 'Escape' && !settingsPanel.hidden) {
-    settingsPanel.hidden = true;
-    settingsButton.setAttribute('aria-expanded', 'false');
-    settingsButton.focus();
-  }
-});
-const exitActivity = () => requestAppClose(() => discordSdk?.close(RPCCloseCodes.CLOSE_NORMAL, 'Salió de Shis Stream'));
-exitButton.addEventListener('click', exitActivity);
-document.querySelector('#editorExit')!.addEventListener('click', exitActivity);
-
-audioButton.addEventListener('click', async () => {
-  const audioElements = [...audioMount.querySelectorAll('audio')];
-  if (audioElements.length === 0) return;
-  const results = await Promise.allSettled(audioElements.map((element) => element.play()));
-  audioButton.hidden = results.every((result) => result.status === 'fulfilled');
-  if (!audioButton.hidden) audioButton.title = 'El audio sigue bloqueado; toca de nuevo para activarlo';
-});
-
-retryButton.addEventListener('click', async () => {
-  try {
-    if (!config) return await boot();
-    if (!discordAccessToken && retryDiscordAuthorization) await retryDiscordAuthorization();
-    if (discordAccessToken) await connectViewer(config.defaultStream);
-  } catch (error) {
-    showConnectionError(error);
-  }
-});
-
-function updateHostControls(){
-  const host=canControlActivity();stage.classList.toggle('spectator-mode',!host);
-  settingsControl.hidden=!host;
-  if(!host)settingsPanel.hidden=true;
-}
-function shareControls(value:Parameters<typeof changeActivityControls>[0]){
-  if(!canControlActivity())return;
-  void changeActivityControls(value).catch(error=>{const notice=document.querySelector<HTMLElement>('#mediaNotice')!;notice.textContent=error.message;notice.hidden=false;});
-}
-window.addEventListener('shis-host-change',updateHostControls);
-updateHostControls();
-initActivityControls(state=>{
-  if(aspectMode!==state.aspect)setAspect(state.aspect);
-  if(sceneMode!==state.scene)setScene(state.scene);
-  if(retroLevel!==state.retro)setRetroLevel(state.retro);
-  if(smoothing!==state.smoothing)setSmoothing(state.smoothing);
-});
-let hostPress:ReturnType<typeof setTimeout>|undefined,pressPoint:{x:number;y:number}|undefined;
-const cancelHostPress=()=>{clearTimeout(hostPress);hostPress=undefined;};
-player.addEventListener('pointerdown',event=>{
-  if(canControlActivity() || event.button!==0)return;
-  pressPoint={x:event.clientX,y:event.clientY};hostPress=setTimeout(()=>document.querySelector<HTMLButtonElement>('#editorButton')!.click(),1100);
-});
-player.addEventListener('pointermove',event=>{if(pressPoint && Math.hypot(event.clientX-pressPoint.x,event.clientY-pressPoint.y)>10)cancelHostPress();});
-for(const event of ['pointerup','pointercancel','pointerleave'])player.addEventListener(event,cancelHostPress);
-document.addEventListener('keydown',event=>{if(event.ctrlKey && event.shiftKey && event.key.toLowerCase()==='h'){event.preventDefault();document.querySelector<HTMLButtonElement>('#editorButton')!.click();}});
-initRoomLighting();
-initDecorations();
-if (!editorPreviewMode) boot();
+$('upload').onchange=async()=>{const input=$<HTMLInputElement>('upload'),file=input.files?.[0];input.value='';if(!file||!draft)return;if(!['image/png','image/gif'].includes(file.type)||file.size>8*1024*1024){notify('Usa PNG o GIF de hasta 8 MB');return}try{const {asset}=await json<{asset:string}>('/api/decorations/assets',{method:'POST',headers:{'Content-Type':file.type},body:file});if(!draft)return;mutate(()=>{const i:Item={id:crypto.randomUUID(),asset,name:file.name.slice(0,70),placements:{}};draft!.items.push(i);selected=i.id;updatePlacement(draft!,i.id,activeKey(),{x:50,y:65,width:15,rotation:0,opacity:1,z:10,hidden:false,anchor:'scene'})});syncEditor()}catch(e){notify((e as Error).message)}};
+const pointers=new Map<number,{x:number,y:number}>();let pinch:{distance:number;zoom:number}|null=null;
+let drag:{id:string;startX:number;startY:number;p:Placement;basis:any;pointer:number}|null=null;
+$('previewRoom').onpointerdown=e=>{pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});$('previewRoom').setPointerCapture?.(e.pointerId);if(pointers.size===2&&draft){const [a,b]=[...pointers.values()];remember();pinch={distance:Math.hypot(a.x-b.x,a.y-b.y),zoom:editorSettings().camera?.zoom??1};drag=null;return;}const box=(e.target as Element).closest<HTMLElement>('.figure');if(!box||!draft||e.button!==0)return;selected=box.dataset.id!;const p=placementFor(item(),activeKey());if(!p||p.locked)return;remember();const room=$('previewRoom'),l=layout(room,activeKey(),draft,editView);drag={id:selected,startX:e.clientX,startY:e.clientY,p:structuredClone(p),basis:figureRect(p,{x:0,y:0,width:room.clientWidth,height:room.clientHeight},l.screen,l.p.camera).basis,pointer:e.pointerId};room.setPointerCapture(e.pointerId);syncEditor(false);e.preventDefault()};
+$('previewRoom').onpointermove=e=>{if(pointers.has(e.pointerId))pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pinch&&pointers.size===2&&draft){const [a,b]=[...pointers.values()];mutate(()=>{const s=editorSettings();s.camera={...s.camera,zoom:Math.max(1,Math.min(2,pinch!.zoom*Math.hypot(a.x-b.x,a.y-b.y)/Math.max(1,pinch!.distance))) }},false);return;}if(!drag||e.pointerId!==drag.pointer||!draft)return;selected=drag.id;update({x:Math.max(-30,Math.min(130,drag.p.x+(e.clientX-drag.startX)/drag.basis.width*100)),y:Math.max(-35,Math.min(145,drag.p.y+(e.clientY-drag.startY)/drag.basis.height*100))},false)};
+const release=(e:PointerEvent)=>{pointers.delete(e.pointerId);pinch=null;drag=null};$('previewRoom').onpointerup=release;$('previewRoom').onpointercancel=release;
+$('previewRoom').addEventListener('wheel',e=>{if(!draft||!e.ctrlKey)return;e.preventDefault();mutate(()=>{const s=editorSettings();s.camera={...s.camera,zoom:Math.max(1,Math.min(2,(s.camera?.zoom??1)-Math.sign(e.deltaY)*.06))}})},{passive:false});
+let hold:ReturnType<typeof setTimeout>|undefined;let holdPoint={x:0,y:0};
+$('screen').onpointerdown=e=>{holdPoint={x:e.clientX,y:e.clientY};hold=setTimeout(()=>{if(!canControlActivity())$<HTMLDialogElement>('hostDialog').showModal();else openEditor()},800)};
+$('screen').onpointermove=e=>{if(Math.hypot(e.clientX-holdPoint.x,e.clientY-holdPoint.y)>12)clearTimeout(hold)};$('screen').onpointerup=() =>clearTimeout(hold);$('screen').onpointercancel=()=>clearTimeout(hold);
+$('hostForm').onsubmit=async e=>{e.preventDefault();try{await unlockHost($<HTMLInputElement>('hostKey').value);$<HTMLInputElement>('hostKey').value='';$<HTMLDialogElement>('hostDialog').close();updateControls();openEditor()}catch(error){$('hostStatus').textContent=(error as Error).message}};$('cancelHost').onclick=()=>$<HTMLDialogElement>('hostDialog').close();
+window.addEventListener('resize',()=>{renderLive();if(draft){$('compactNotice').hidden=currentView()!=='window';renderPreview()}});
+window.addEventListener('shis-host-change',()=>{updateControls();if(draft&&!canControlActivity()){closeEditor();notify('Vuelve a entrar como host para editar')}});
+initActivityControls(state=>{const changed=JSON.stringify(controls)!==JSON.stringify(state);controls=state;if(changed)updateControls()});
+setInterval(()=>{if(!document.hidden)void load();if(!document.hidden&&lastFrame&&performance.now()-lastFrame>8000&&$('signal').hidden){lost();lastFrame=0}},2000);
+window.addEventListener('pagehide',()=>viewer?.stop());setVolume();load();boot();

@@ -64,8 +64,6 @@ async function enterActivity() {
     if (viewport && currentViewport) currentViewport.content = viewport.content;
     document.head.querySelector('style')?.remove();
     document.body.innerHTML = activity.body.innerHTML;
-    const uploadLimitsModule = '/upload-limits.js';
-    await import(/* @vite-ignore */ uploadLimitsModule);
     await import('./main');
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : 'No se pudo entrar desde Discord';

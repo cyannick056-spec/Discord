@@ -25,7 +25,7 @@ app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
   directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),
   editKey: process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY,
-  rebuildRooms: true,
+  rebuildRooms: false,
   hostAuthorized: activityControls.isHost,
 });
 
@@ -130,7 +130,7 @@ if (existsSync(distDir)) {
     res.set('Cache-Control', 'no-store');
     if (validActivityTicket(req.query.ticket)) {
       const html = await readFile(path.join(distDir, 'index.html'), 'utf8');
-      return res.type('html').send(html.replace('</head>', '<script type="module" src="/upload-limits.js"></script></head>'));
+      return res.type('html').send(html);
     }
     if (typeof req.query.frame_id === 'string' || typeof req.query.instance_id === 'string') {
       return res.sendFile(path.join(distDir, 'gate.html'));

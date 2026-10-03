@@ -1,4 +1,3 @@
-import './editor-performance';
 
 export type Controls={aspect:'16:9'|'4:3';scene:'home'|'arcade';retro:'off'|'normal'|'immersive'|'scanlines';smoothing:boolean;revision:number;epoch:string;host:boolean};
 const params=new URLSearchParams(location.search),ticket=params.get('ticket')||'';
@@ -9,7 +8,7 @@ let host=params.has('editorPreview'),state:Controls|undefined,apply:((state:Cont
 export const canControlActivity=()=>host;
 export const hostHeaders=()=>({'X-Host-Token':token,'X-Activity-Instance':activityInstance});
 const url='/api/activity-controls?'+new URLSearchParams({instance:activityInstance,...(ticket?{ticket}:{})});
-function receive(value:Controls){if(state && value.epoch===state.epoch && value.revision<state.revision)return;state=value;host=value.host;apply?.(value);window.dispatchEvent(new Event('shis-host-change'));}
+function receive(value:Controls){if(state && value.epoch===state.epoch && value.revision<state.revision)return;const changed=host!==value.host;state=value;host=value.host;apply?.(value);if(changed)window.dispatchEvent(new Event('shis-host-change'));}
 export async function refreshActivityControls(){const requestedToken=token;const r=await fetch(url,{headers:hostHeaders(),cache:'no-store'});if(!r.ok)throw new Error('No se pudo cargar el formato compartido');const value=await r.json();if(requestedToken===token)receive(value);}
 export async function unlockHost(key:string){
   const r=await fetch('/api/host/auth?'+new URLSearchParams({instance:activityInstance,...(ticket?{ticket}:{})}),{method:'POST',headers:{'X-Decoration-Key':key}});
