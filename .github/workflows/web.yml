@@ -6,12 +6,12 @@ on:
     paths:
       - 'relay/**'
       - 'src/**'
+      - 'public/**'
       - 'server.mjs'
       - 'cloudflare.mjs'
       - 'decorations.mjs'
       - 'studio-validation.mjs'
       - 'index.html'
-      - 'public/crt-room-neutral*'
       - 'tests/**'
       - 'package.json'
       - '.github/workflows/**'
