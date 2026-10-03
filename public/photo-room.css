@@ -1,0 +1,16 @@
+/* The TV, cabinet and table already belong to the supplied photograph. */
+html.one-room #oneWallPatch,html.one-room #oneFloorPatch,html.one-room #oneTable,html.one-room #oneCrt {display:none!important}
+html.one-room #tvScene,html.one-room [data-tv=flat] #tvScene {aspect-ratio:auto!important;max-width:none!important;right:auto!important;bottom:auto!important}
+html.one-room #tvScene .tv-shell,html.one-room #tvScene .tv-face,html.one-room [data-tv=flat] #tvScene .tv-shell,html.one-room [data-tv=flat] #tvScene .tv-face {aspect-ratio:auto!important;padding:0!important;background:none!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+html.one-room #tvScene .screen-wrap {right:auto!important;bottom:auto!important;padding:0!important;box-shadow:none!important}
+html.one-room [data-tv=crt] #tvScene .screen-wrap {border-radius:5% / 8%!important}
+html.one-room [data-tv=flat] #tvScene .screen-wrap {border-radius:0!important}
+html.one-room #tvScene video {position:static!important;width:100%!important;height:100%!important;left:auto!important;top:auto!important;object-fit:contain!important;transform:none!important}
+@media(max-height:360px),(max-width:520px) and (max-height:400px),(max-width:360px) and (max-height:520px){
+ html.one-room #oneBg{display:none!important}
+ html.one-room #tvScene,html.one-room [data-tv=flat] #tvScene{left:0!important;top:0!important;width:100%!important;height:100%!important;transform:none!important}
+ html.one-room #tvScene .screen-wrap{left:0!important;top:0!important;width:100%!important;height:100%!important;border-radius:0!important}
+ html.one-room.room-edit #oneEditor{display:none!important}
+ html.one-room.room-edit .room-scene{visibility:hidden}
+ html.one-room.room-edit .compact-edit-notice{display:grid!important;position:fixed;inset:0;place-items:center;z-index:1500;color:#e4f6ff;background:#080b12;text-shadow:0 0 16px #9bc7ff;font:600 22px system-ui}
+}

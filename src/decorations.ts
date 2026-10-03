@@ -1076,7 +1076,8 @@ export function initDecorations() {
       return asset as string;
     }
   });
-  setInterval(() => { if (editor.hidden && !document.hidden) loadDecorations(); }, 30000);
+  window.addEventListener('shis-decoration-refresh', () => { void loadDecorations(); });
+  setInterval(() => { if (editor.hidden && !document.hidden && !document.documentElement.classList.contains('room-edit')) loadDecorations(); }, 5000);
   window.addEventListener('resize', () => {
     render(saved, scene(), currentView(), false);
     editorEnvironment.open = true;
