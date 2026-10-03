@@ -146,11 +146,11 @@ export function installDecorations(app, { directory, editKey, rebuildRooms = fal
   app.post('/api/decorations/auth', editorOnly, (_req, res) => res.sendStatus(204));
 
   app.post('/api/decorations/assets', editorOnly,
-    express.raw({ type: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'], limit: '2mb' }),
+    express.raw({ type: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'], limit: '8mb' }),
     async (req, res) => {
       const buffer = req.body;
       const extension = Buffer.isBuffer(buffer) && buffer.length > 0 && assetExtension(buffer);
-      if (!extension) return res.status(400).json({ error: 'Usa una imagen PNG, JPG, WebP o GIF (máximo 2 MB)' });
+      if (!extension) return res.status(400).json({ error: 'Usa una imagen PNG, JPG, WebP o GIF (máximo 8 MB)' });
       try {
         await mkdir(assetsDir, { recursive: true });
         const asset = `${crypto.randomUUID()}.${extension}`;
