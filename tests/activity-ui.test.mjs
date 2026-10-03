@@ -33,6 +33,12 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  state={...state,scene:'arcade'};await timers.find(t=>t.delay===1500).fn();await new Promise(r=>setTimeout(r,10));
  w.document.querySelector('[data-live-tv=crt]').click();await new Promise(r=>setTimeout(r,20));assert.equal(state.scene,'home');assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/approved-crt-wide.jpg');assert.equal(w.document.querySelector('#staticNoise').hidden,false);
  assert.deepEqual(manifest.items[0].placements['home-portrait-16x9'],before.items[0].placements['home-portrait-16x9']);assert.equal(manifest.presentations['home-portrait-4x3'].tvModel,'original');
+ const preserved=structuredClone(manifest.items);
+ w.document.querySelector('[data-live-theme=midnight]').click();await new Promise(r=>setTimeout(r,20));
+ assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/themes/midnight-crt-wide.webp');assert.deepEqual(manifest.items,preserved);assert.equal(manifest.presentations['home-portrait-4x3'].roomTheme,'midnight');
+ w.document.querySelector('#edit').click();w.document.querySelector('[data-theme=rain]').click();w.document.querySelector('#save').click();await new Promise(r=>setTimeout(r,20));w.document.querySelector('#closeEditor').click();
+ assert.equal(manifest.presentations['home-landscape-16x9'].roomTheme,'rain');assert.equal(manifest.presentations['home-portrait-4x3'].roomTheme,'midnight');assert.deepEqual(manifest.items,preserved);
+ w.document.querySelector('[data-live-tv=flat]').click();await new Promise(r=>setTimeout(r,20));assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/themes/rain-flat-wide.webp');
  const event=new w.Event('contextmenu',{bubbles:true,cancelable:true});w.document.querySelector('#screen').dispatchEvent(event);assert.equal(event.defaultPrevented,true);
  const fieldEvent=new w.Event('selectstart',{bubbles:true,cancelable:true});w.document.querySelector('#hostKey').dispatchEvent(fieldEvent);assert.equal(fieldEvent.defaultPrevented,false);
  state={...state,host:false};await timers.find(t=>t.delay===1500).fn();await new Promise(r=>setTimeout(r,10));
