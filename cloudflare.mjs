@@ -1,10 +1,16 @@
 // Cloudflare Realtime SFU signaling stays on this server. Never expose the App Secret to a viewer.
 import crypto from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
 const sessions = new Map();
 const authorizedViewers = new Map();
 let publisher = null;
 const publisherTimeout = 15_000;
+const publisherStateFile = path.join(
+  process.env.DECORATION_DATA_DIR ? path.dirname(process.env.DECORATION_DATA_DIR) : '/tmp',
+  'shis-cloudflare-publisher.json',
+);
 
 function ready() {
   return Boolean(process.env.CLOUDFLARE_SFU_APP_ID && process.env.CLOUDFLARE_SFU_APP_SECRET);
@@ -52,8 +58,46 @@ function fail(res, error) {
   res.status(502).json({ error: error instanceof Error ? error.message : 'Error de conexión' });
 }
 
+function readPersistedPublisher() {
+  try {
+    const value = JSON.parse(readFileSync(publisherStateFile, 'utf8'));
+    if (!sid(value?.sessionId) || !Number.isFinite(value?.seen)) return null;
+    return { sessionId: value.sessionId, seen: Number(value.seen) };
+  } catch {
+    return null;
+  }
+}
+
+function persistPublisher(state) {
+  publisher = state;
+  try {
+    mkdirSync(path.dirname(publisherStateFile), { recursive: true });
+    const temporary = `${publisherStateFile}.${process.pid}.tmp`;
+    writeFileSync(temporary, JSON.stringify(state));
+    renameSync(temporary, publisherStateFile);
+  } catch (error) {
+    console.warn('No se pudo persistir el publisher de Cloudflare:', error instanceof Error ? error.message : error);
+  }
+}
+
+function clearPublisher(sessionId) {
+  if (!sessionId || publisher?.sessionId === sessionId) publisher = null;
+  try {
+    const stored = readPersistedPublisher();
+    if (!stored || !sessionId || stored.sessionId === sessionId) unlinkSync(publisherStateFile);
+  } catch {
+    // Already gone, or another instance is rotating the file.
+  }
+}
+
 function activePublisher() {
-  if (publisher && Date.now() - publisher.seen < publisherTimeout) return publisher;
+  const now = Date.now();
+  if (publisher && now - publisher.seen < publisherTimeout) return publisher;
+  const stored = readPersistedPublisher();
+  if (stored && now - stored.seen < publisherTimeout) {
+    publisher = stored;
+    return publisher;
+  }
   publisher = null;
   return null;
 }
@@ -119,7 +163,7 @@ export function installCloudflare(app, requireActivityTicket) {
           !Array.isArray(result.tracks) || result.tracks.length !== 2) {
         throw new Error('Respuesta incompleta de Cloudflare');
       }
-      publisher = { sessionId, seen: Date.now() };
+      persistPublisher({ sessionId, seen: Date.now() });
       res.json({ description: result.sessionDescription });
     } catch (error) { fail(res, error); }
   });
@@ -128,8 +172,9 @@ export function installCloudflare(app, requireActivityTicket) {
     const sessionId = req.body?.sessionId;
     if (!sid(sessionId)) return res.status(400).json({ error: 'Sesión inválida' });
     try {
-      if (publisher?.sessionId !== sessionId) {
-        // Restore discovery if the web service restarted while the Switch kept streaming.
+      const current = activePublisher();
+      if (current?.sessionId !== sessionId) {
+        // Restore discovery if this instance restarted while the Switch kept streaming.
         const result = await sfu('GET', sessionPath(sessionId, ''));
         const active = result.tracks?.filter((track) => track.location === 'local' && track.status === 'active') || [];
         if (!active.some((track) => track.trackName === 'screen') ||
@@ -137,13 +182,13 @@ export function installCloudflare(app, requireActivityTicket) {
           return res.status(409).json({ error: 'La sesión ya no transmite' });
         }
       }
-      publisher = { sessionId, seen: Date.now() };
+      persistPublisher({ sessionId, seen: Date.now() });
       res.json({ ok: true });
     } catch (error) { fail(res, error); }
   });
 
   app.post('/api/cloudflare/publisher/end', publisherAuth, (req, res) => {
-    if (publisher?.sessionId === req.body?.sessionId) publisher = null;
+    clearPublisher(req.body?.sessionId);
     res.json({ ok: true });
   });
 
