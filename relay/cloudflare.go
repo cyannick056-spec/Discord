@@ -56,8 +56,15 @@ func newCFPublisher() (*cfPublisher, error) {
  if !strings.HasPrefix(base, "https://") && !strings.HasPrefix(base, "http://localhost:") {
   return nil, errors.New("SHIS_ACTIVITY_URL must be an HTTPS URL")
  }
+ key := strings.TrimSpace(os.Getenv("RELAY_PUBLISH_KEY"))
+ if key == "" {
+  // Backward-compatible fallback for older deployments. Production uses a
+  // dedicated relay->Activity key so the Switch stream key never needs to
+  // change when internal service wiring changes.
+  key = env("STREAM_KEY")
+ }
  return &cfPublisher{client: &http.Client{Timeout: 12 * time.Second},
-  base: base, key: env("STREAM_KEY")}, nil
+  base: base, key: key}, nil
 }
 
 func (p *cfPublisher) notify(path string) {
@@ -275,4 +282,3 @@ func runCFAudioPacer(id uint64, track *webrtc.TrackLocalStaticSample, in <-chan 
   }
  }
 }
-
