@@ -3,6 +3,7 @@ import {CloudflareViewer} from './cloudflare';
 import {canControlActivity,hostHeaders,unlockHost,initActivityControls,changeActivityControls,type Controls} from './activity-controls';
 import {photoLayout} from '../public/photo-layout.mjs';
 import {viewFor,keyFor,placementFor,settingsFor,prepareSave,updatePlacement,figureRect,slotColors} from './activity-model.mjs';
+import {TvStatic} from './tv-static';
 import './activity.css';
 
 type Placement={x:number;y:number;width:number;rotation:number;opacity:number;z:number;hidden:boolean;anchor?:string;foreground?:boolean;behindTv?:boolean;locked?:boolean;[key:string]:any};
@@ -18,7 +19,9 @@ let saved:Manifest={items:[]},draft:Manifest|null=null,selected='',editView:View
 let controls:Controls={aspect:'16:9',scene:'home',retro:'immersive',smoothing:true,revision:0,epoch:'',host:false};
 let sdk:DiscordSDK|null=null,accessToken='',viewer:CloudflareViewer|null=null,people:Person[]=[],order:string[]=[],participantRevision=0;
 let signalTimer:ReturnType<typeof setTimeout>|undefined,lastFrame=0,everLive=false,videoEpoch=0;
-let pendingExit=false;
+let pendingExit=false,liveTv='crt',signalVisible=true,switchingTv=false;
+const staticNoise=new TvStatic($<HTMLCanvasElement>('staticNoise'));
+function syncStatic(){staticNoise.setActive(signalVisible&&liveTv==='crt'&&!document.hidden&&!draft)}
 let volume=100;try{volume=Number(localStorage.getItem('shis-volume')??100)}catch{}
 volume=Math.max(0,Math.min(100,Number.isFinite(volume)?volume:100));
 const decoded=new Map<string,Promise<HTMLImageElement>>();let renderEpoch=0,previewEpoch=0;
@@ -28,7 +31,7 @@ const item=()=>draft?.items.find(i=>i.id===selected);
 const isFigure=(i:Item)=>!i.kind||i.kind==='viewer-slot';
 function notify(message:string){$('notice').textContent=message;$('notice').hidden=false;setTimeout(()=>$('notice').hidden=true,4500)}
 async function json<T>(path:string,init:RequestInit={}):Promise<T>{const r=await fetch(api(path),{...init,headers:{...headers(),...init.headers},cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||`HTTP ${r.status}`);return data;}
-function loadPhoto(src:string){let p=decoded.get(src);if(!p){const image=new Image();image.src=src;p=image.decode().then(()=>image);decoded.set(src,p)}return p;}
+function loadPhoto(src:string){let p=decoded.get(src);if(!p){const image=new Image();image.src=src;p=image.decode().then(()=>image).catch(error=>{decoded.delete(src);throw error});decoded.set(src,p)}return p;}
 function photoSource(type:string,view:View){return `/rooms/approved-${type}-${view==='portrait'?'portrait':'wide'}.jpg`;}
 function setRect(el:HTMLElement,r:Record<string,number>){for(const [name,value]of Object.entries(r))el.style.setProperty(name,`${value}px`);}
 function layout(room:HTMLElement,key:string,manifest:Manifest,view:View,solo=false){
@@ -66,10 +69,25 @@ async function renderLive(){
  const bg=$<HTMLImageElement>('backdrop');if(bg.getAttribute('src')!==src)bg.src=src;
  setRect($('photo'),result.photo);setRect($('screen'),result.screen);
  $('stage').classList.toggle('solo',controls.scene==='arcade'||view==='window');
- $('screen').className=[type==='crt'?'crt':'',controls.retro==='immersive'?'intense':controls.retro,controls.smoothing?'smooth':''].join(' ');
+ liveTv=type;$('screen').className=[type==='crt'?'crt':'',signalVisible?'no-signal':'',controls.retro==='immersive'?'intense':controls.retro,controls.smoothing?'smooth':''].join(' ');
  $('screen').style.borderRadius=type==='crt'&&p.screen?.rounded!==false&&view!=='window'?'5% / 8%':'0';
  $<HTMLVideoElement>('video').style.objectFit=p.video?.fit??'contain';
- renderFigures(room,$('figures'),saved,key,screen,p,false);$('loading').hidden=true;
+ renderFigures(room,$('figures'),saved,key,screen,p,false);$('loading').hidden=true;syncStatic();document.querySelectorAll<HTMLButtonElement>('[data-live-tv]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.liveTv===type)));
+}
+async function switchTv(type:string){
+ if(!canControlActivity()||switchingTv)return;
+ switchingTv=true;
+ const buttons=[...document.querySelectorAll<HTMLButtonElement>('[data-live-tv]')];buttons.forEach(b=>b.disabled=true);
+ try{
+  // Read fresh before saving so a quick model change cannot overwrite figures.
+  const latest=await json<Manifest>('/api/decorations'),payload=prepareSave(latest);
+  for(const view of ['landscape','portrait','window'])for(const aspect of ['16:9','4:3'])payload.presentations[keyFor(view,aspect)].tvModel=type==='flat'?'flat-modern':'original';
+  await loadPhoto(photoSource(type,currentView()));
+  await json('/api/decorations',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  saved=payload;
+  if(controls.scene!=='home')await changeActivityControls({scene:'home'});
+  await renderLive();notify(type==='flat'?'TV plana aplicada':'TV CRT aplicada');
+ }catch(e){notify((e as Error).message)}finally{switchingTv=false;buttons.forEach(b=>b.disabled=false)}
 }
 function remember(){if(!draft)return;undo.push(structuredClone(draft));if(undo.length>30)undo.shift();dirty=true;}
 function mutate(fn:()=>void,history=true){if(!draft)return;if(history)remember();fn();dirty=true;renderPreview();syncEditor(false);}
@@ -95,16 +113,16 @@ function syncEditor(refresh=true){if(!draft)return;
  document.querySelectorAll<HTMLButtonElement>('[data-fit]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.fit===(s.video?.fit??'contain'))));$('round').textContent=`Curvas CRT: ${s.screen?.rounded===false?'no':'sí'}`;$<HTMLButtonElement>('undo').disabled=!undo.length;
  $('slotTools').replaceChildren(...slotColors.map((color:string,index:number)=>{const button=document.createElement('button');button.textContent=`${index+1} · ${color}`;button.onclick=()=>{const id=`viewer-slot-${color}`;mutate(()=>{let slot=draft!.items.find(i=>i.id===id);if(!slot){slot={id,kind:'viewer-slot',asset:'',name:`Espectador ${index+1}`,placements:{}};draft!.items.push(slot)}const old=placementFor(slot,activeKey());updatePlacement(draft!,id,activeKey(),{...(old??{x:10+index*20,y:85,width:8,rotation:0,opacity:1,z:18,anchor:'scene'}),hidden:old?!old.hidden:false});selected=id});syncEditor()};return button}));
 }
-function openEditor(){if(!canControlActivity())return;draft=structuredClone(saved);resetFreshSettings(draft);editView=currentView();editAspect=controls.aspect;dirty=false;undo=[];$('editor').hidden=false;$('optionsPanel').hidden=true;$('compactNotice').hidden=currentView()!=='window';syncEditor();renderPreview();}
-function closeEditor(){draft=null;dirty=false;$('editor').hidden=true;$('compactNotice').hidden=true;$<HTMLDialogElement>('closeDialog').close();}
+function openEditor(){if(!canControlActivity())return;draft=structuredClone(saved);resetFreshSettings(draft);editView=currentView();editAspect=controls.aspect;dirty=false;undo=[];$('editor').hidden=false;$('optionsPanel').hidden=true;$('compactNotice').hidden=currentView()!=='window';syncEditor();renderPreview();syncStatic();}
+function closeEditor(){draft=null;dirty=false;$('editor').hidden=true;$('compactNotice').hidden=true;$<HTMLDialogElement>('closeDialog').close();syncStatic();}
 async function save(){if(!draft)return;const button=$<HTMLButtonElement>('save');button.disabled=true;try{const payload=prepareSave(draft);await json('/api/decorations',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});saved=payload;draft=structuredClone(payload);dirty=false;$('editorStatus').textContent='Guardado';renderLive()}catch(e){$('editorStatus').textContent=(e as Error).message;throw e}finally{button.disabled=false}}
-async function load(){if(draft)return;try{const value=await json<Manifest>('/api/decorations');if(draft)return;const changed=JSON.stringify(value)!==JSON.stringify(saved);saved=value;if(changed||!$('loading').hidden)await renderLive()}catch(e){notify((e as Error).message)}}
+async function load(){if(draft||switchingTv)return;try{const value=await json<Manifest>('/api/decorations');if(draft||switchingTv)return;const changed=JSON.stringify(value)!==JSON.stringify(saved);saved=value;if(changed||!$('loading').hidden)await renderLive()}catch(e){notify((e as Error).message)}}
 function setVolume(){const audio=$<HTMLAudioElement>('audio');audio.volume=volume/100;$<HTMLInputElement>('volume').value=String(volume);$<HTMLOutputElement>('volumeValue').value=`${volume}%`;try{localStorage.setItem('shis-volume',String(volume))}catch{}}
-function signal(text:string){$('signal').hidden=false;$('signal').textContent=text}
+function signal(text:string){signalVisible=true;$('signal').hidden=false;$('signal').textContent=text;$('screen').classList.add('no-signal');syncStatic()}
 function lost(){if(signalTimer)clearTimeout(signalTimer);videoEpoch++;$<HTMLVideoElement>('video').srcObject=null;$<HTMLAudioElement>('audio').srcObject=null;signal(everLive?'Señal perdida':'Buscando señal…');signalTimer=setTimeout(()=>signal('Esperando señal…'),2000)}
 function track(kind:'video'|'audio',t:MediaStreamTrack){if(kind==='audio'){const audio=$<HTMLAudioElement>('audio');audio.srcObject=new MediaStream([t]);setVolume();audio.play().catch(()=>$('enableAudio').hidden=false);return}
  const video=$<HTMLVideoElement>('video');video.srcObject=new MediaStream([t]);video.play().catch(()=>{});const epoch=++videoEpoch;lastFrame=performance.now();
- const frame=()=>{if(epoch!==videoEpoch)return;lastFrame=performance.now();everLive=true;$('signal').hidden=true;if(signalTimer)clearTimeout(signalTimer);if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame)};
+ const frame=()=>{if(epoch!==videoEpoch)return;lastFrame=performance.now();everLive=true;signalVisible=false;$('signal').hidden=true;$('screen').classList.remove('no-signal');syncStatic();if(signalTimer)clearTimeout(signalTimer);if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame)};
  if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame);else (video as HTMLVideoElement).onplaying=frame;
 }
 async function connect(){if(!accessToken)return;viewer?.stop();signal('Buscando señal…');viewer=new CloudflareViewer(()=>accessToken,track,lost,e=>{signal('Esperando señal…');console.warn(e)});await viewer.start();setTimeout(()=>{if(!everLive&&$('signal').textContent==='Buscando señal…')signal('Esperando señal…')},8000)}
@@ -140,6 +158,7 @@ $('copy').onclick=()=>{const i=item();if(!i||i.kind==='viewer-slot')return;mutat
 $('anchor').onclick=()=>{const i=item(),p=i&&placementFor(i,activeKey());if(!p)return;const room=$('previewRoom'),l=layout(room,activeKey(),draft!,editView),rect=figureRect(p,{x:0,y:0,width:room.clientWidth,height:room.clientHeight},l.screen,l.p.camera);const target=p.anchor==='frame'?{x:0,y:0,width:room.clientWidth,height:room.clientHeight}:l.screen;update({anchor:p.anchor==='frame'?'scene':'frame',x:Math.max(-30,Math.min(130,(rect.x-target.x)/target.width*100)),y:Math.max(-35,Math.min(145,(rect.y-target.y)/target.height*100)),width:Math.max(1,Math.min(130,rect.width/target.width*100))})};
 $('round').onclick=()=>mutate(()=>{const s=editorSettings();s.screen={...s.screen,rounded:s.screen?.rounded===false}});$('resetRoom').onclick=()=>mutate(()=>editorSettings().camera={zoom:1,x:0,y:0});
 document.addEventListener('click',event=>{const b=(event.target as Element).closest<HTMLButtonElement>('button');if(!b)return;
+ if(b.dataset.liveTv)void switchTv(b.dataset.liveTv);
  if(b.dataset.aspect)share({aspect:b.dataset.aspect as Controls['aspect']});if(b.dataset.scene)share({scene:b.dataset.scene as Controls['scene']});
  if(!draft)return;if(b.dataset.view){editView=b.dataset.view as View;syncEditor();renderPreview()}
  if(b.dataset.editAspect){editAspect=b.dataset.editAspect;syncEditor();renderPreview()}
@@ -155,11 +174,14 @@ $('previewRoom').onpointermove=e=>{if(pointers.has(e.pointerId))pointers.set(e.p
 const release=(e:PointerEvent)=>{pointers.delete(e.pointerId);pinch=null;drag=null};$('previewRoom').onpointerup=release;$('previewRoom').onpointercancel=release;
 $('previewRoom').addEventListener('wheel',e=>{if(!draft||!e.ctrlKey)return;e.preventDefault();mutate(()=>{const s=editorSettings();s.camera={...s.camera,zoom:Math.max(1,Math.min(2,(s.camera?.zoom??1)-Math.sign(e.deltaY)*.06))}})},{passive:false});
 let hold:ReturnType<typeof setTimeout>|undefined;let holdPoint={x:0,y:0};
-$('screen').onpointerdown=e=>{holdPoint={x:e.clientX,y:e.clientY};hold=setTimeout(()=>{if(!canControlActivity())$<HTMLDialogElement>('hostDialog').showModal();else openEditor()},800)};
+$('screen').onpointerdown=e=>{e.preventDefault();clearTimeout(hold);$('screen').setPointerCapture?.(e.pointerId);holdPoint={x:e.clientX,y:e.clientY};hold=setTimeout(()=>{if(!canControlActivity())$<HTMLDialogElement>('hostDialog').showModal();else openEditor()},800)};
 $('screen').onpointermove=e=>{if(Math.hypot(e.clientX-holdPoint.x,e.clientY-holdPoint.y)>12)clearTimeout(hold)};$('screen').onpointerup=() =>clearTimeout(hold);$('screen').onpointercancel=()=>clearTimeout(hold);
+document.addEventListener('selectstart',event=>{const target=event.target as Element;if(!target.closest?.('input,textarea,[contenteditable="true"]'))event.preventDefault()});
+document.addEventListener('contextmenu',event=>{const target=event.target as Element;if(!target.closest?.('input,textarea,[contenteditable="true"]'))event.preventDefault()});
+document.addEventListener('visibilitychange',syncStatic);
 $('hostForm').onsubmit=async e=>{e.preventDefault();try{await unlockHost($<HTMLInputElement>('hostKey').value);$<HTMLInputElement>('hostKey').value='';$<HTMLDialogElement>('hostDialog').close();updateControls();openEditor()}catch(error){$('hostStatus').textContent=(error as Error).message}};$('cancelHost').onclick=()=>$<HTMLDialogElement>('hostDialog').close();
 window.addEventListener('resize',()=>{renderLive();if(draft){$('compactNotice').hidden=currentView()!=='window';renderPreview()}});
 window.addEventListener('shis-host-change',()=>{updateControls();if(draft&&!canControlActivity()){closeEditor();notify('Vuelve a entrar como host para editar')}});
 initActivityControls(state=>{const changed=JSON.stringify(controls)!==JSON.stringify(state);controls=state;if(changed)updateControls()});
 setInterval(()=>{if(!document.hidden)void load();if(!document.hidden&&lastFrame&&performance.now()-lastFrame>8000&&$('signal').hidden){lost();lastFrame=0}},2000);
-window.addEventListener('pagehide',()=>viewer?.stop());setVolume();load();boot();
+window.addEventListener('pagehide',()=>{viewer?.stop();staticNoise.stop()});setVolume();load();boot();
