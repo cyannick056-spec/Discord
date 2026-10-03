@@ -34,13 +34,15 @@ El emisor de Nintendo Switch está en [`cyannick056-spec/Shis-Stream`](https://g
 - Controles compartidos reservados al host.
 - Volumen local y salida independientes para espectadores.
 - Editor para posición, tamaño, capas, encuadre, iluminación y materiales.
-- Fondos de escena que **solo cambian el entorno**: no crean, borran, sustituyen ni mueven objetos.
+- Fondos de escena basados en **imágenes**, no escenarios dibujados por CSS/SVG.
+- Los fondos solo cambian el entorno: no crean, borran, sustituyen ni mueven objetos.
 - La TV, los muebles, las imágenes/figuritas personales, el filtro, las luces y el encuadre se conservan al cambiar de fondo.
-- Escena predeterminada configurable: guarda el fondo, el filtro/ambiente y la lluvia para el siguiente inicio sin alterar TV, muebles, figuritas ni posiciones.
-- Lluvia animada como capa independiente del fondo, activable desde el editor.
-- Fondos actuales: rincón nocturno, madrugada clásica, noche de nogal, rincón violeta, ventana nocturna, balcón nocturno, callejón/basurero, cuarto azul frío, cuarto rosa/violeta, loft industrial, bosque abierto y sala de mañana.
+- La escena predeterminada se elige desde la barra superior del editor con **★ Usar al abrir**.
+- Al iniciar, la escena predeterminada conserva el fondo y el filtro/ambiente y reutiliza la composición de la vista guardada cuando corresponde.
+- Lluvia animada como capa independiente del fondo.
+- Fondos visibles actuales: **Madrugada clásica**, **Noche de nogal** y **Rincón violeta**.
 - Catálogo integrado limitado a **muebles y superficies de apoyo**.
-- Imágenes y figuritas personales añadidas por el usuario desde el editor.
+- Imágenes y figuritas personales PNG/GIF añadidas por el usuario desde el editor, hasta 8 MB por archivo.
 - Ajustes independientes para vista horizontal, vertical y ventana pequeña.
 - Perfiles, versiones de escena y biblioteca personal de objetos.
 - Avatares de espectadores integrados en la escena.
@@ -126,7 +128,7 @@ Railway construye el relay con `relay/Dockerfile`.
 - `activity-controls.mjs` — estado compartido host/espectadores.
 - `decorations.mjs` — almacenamiento y validación de escenas.
 - `relay/` — relay TCP/WebRTC.
-- `public/rooms/` — fondos y muebles integrados de las escenas actuales.
+- `public/rooms/` — fondos fotográficos y muebles integrados actuales.
 - `tests/` — pruebas del comportamiento actual.
 
 ## Seguridad

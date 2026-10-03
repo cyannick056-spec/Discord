@@ -127,13 +127,6 @@ app.post('/api/discord-token', async (req, res) => {
 });
 
 if (existsSync(distDir)) {
-  const generatedRooms = new Set(['rain-window','rainy-balcony','alley-trash','blue-room','rose-room','industrial-loft','forest-open','morning-room']);
-  app.get('/rooms/:file', (req, res, next) => {
-    const match = /^([a-z0-9-]+)-(wide|portrait)\.webp$/.exec(req.params.file);
-    if (!match || !generatedRooms.has(match[1])) return next();
-    res.type('image/svg+xml').set('Cache-Control', 'public, max-age=3600')
-      .sendFile(path.join(distDir, 'rooms', 'generated', `${match[1]}.svg`));
-  });
   const serveActivityEntry = async (req, res) => {
     res.set('Cache-Control', 'no-store');
     if (validActivityTicket(req.query.ticket)) {
