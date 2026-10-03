@@ -37,6 +37,13 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  const fieldEvent=new w.Event('selectstart',{bubbles:true,cancelable:true});w.document.querySelector('#hostKey').dispatchEvent(fieldEvent);assert.equal(fieldEvent.defaultPrevented,false);
  state={...state,host:false};await timers.find(t=>t.delay===1500).fn();await new Promise(r=>setTimeout(r,10));
  assert.equal(w.document.querySelector('#options').hidden,true);w.document.querySelector('#edit').click();assert.equal(w.document.querySelector('#editor').hidden,true);
+ assert.equal(w.document.querySelector('#staticNoise').width,320);assert.equal(w.document.querySelector('#staticNoise').height,180);
+ assert.equal(w.document.querySelector('.no-signal-copy strong').textContent,'SIN SEÑAL');assert.equal(w.document.querySelector('#liveBadge').textContent,'STANDBY');
+ w.document.querySelector('#volumeButton').click();assert.equal(w.document.querySelector('#volumePanel').hidden,false);
+ w.innerWidth=205;w.innerHeight=205;w.dispatchEvent(new w.Event('resize'));await new Promise(r=>setTimeout(r,10));
+ assert.equal(w.document.querySelector('#stage').classList.contains('compact'),true);assert.equal(w.document.querySelector('#controls').hidden,true);assert.equal(w.document.querySelector('#volumePanel').hidden,true);assert.equal(w.document.querySelector('#optionsPanel').hidden,true);
+ const pointer=new w.Event('pointerdown',{cancelable:true});w.document.querySelector('#screen').dispatchEvent(pointer);assert.equal(pointer.defaultPrevented,false);
+ w.innerWidth=1200;w.innerHeight=800;w.dispatchEvent(new w.Event('resize'));await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#controls').hidden,false);assert.equal(w.document.querySelector('#stage').classList.contains('compact'),false);
  assert.equal(typeof participantCallback,'function');assert.equal(w.document.documentElement.classList.contains('one-room'),false);
  }finally{dom.window.close()}
 });

@@ -69,6 +69,8 @@ async function renderLive(){
  const bg=$<HTMLImageElement>('backdrop');if(bg.getAttribute('src')!==src)bg.src=src;
  setRect($('photo'),result.photo);setRect($('screen'),result.screen);
  $('stage').classList.toggle('solo',controls.scene==='arcade'||view==='window');
+ $('stage').classList.toggle('compact',view==='window');$('controls').hidden=view==='window';if(view==='window'){ $('optionsPanel').hidden=true;$('volumePanel').hidden=true; }
+ $('roomText').textContent=controls.aspect;
  liveTv=type;$('screen').className=[type==='crt'?'crt':'',signalVisible?'no-signal':'',controls.retro==='immersive'?'intense':controls.retro,controls.smoothing?'smooth':''].join(' ');
  $('screen').style.borderRadius=type==='crt'&&p.screen?.rounded!==false&&view!=='window'?'5% / 8%':'0';
  $<HTMLVideoElement>('video').style.objectFit=p.video?.fit??'contain';
@@ -118,14 +120,14 @@ function closeEditor(){draft=null;dirty=false;$('editor').hidden=true;$('compact
 async function save(){if(!draft)return;const button=$<HTMLButtonElement>('save');button.disabled=true;try{const payload=prepareSave(draft);await json('/api/decorations',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});saved=payload;draft=structuredClone(payload);dirty=false;$('editorStatus').textContent='Guardado';renderLive()}catch(e){$('editorStatus').textContent=(e as Error).message;throw e}finally{button.disabled=false}}
 async function load(){if(draft||switchingTv)return;try{const value=await json<Manifest>('/api/decorations');if(draft||switchingTv)return;const changed=JSON.stringify(value)!==JSON.stringify(saved);saved=value;if(changed||!$('loading').hidden)await renderLive()}catch(e){notify((e as Error).message)}}
 function setVolume(){const audio=$<HTMLAudioElement>('audio');audio.volume=volume/100;$<HTMLInputElement>('volume').value=String(volume);$<HTMLOutputElement>('volumeValue').value=`${volume}%`;try{localStorage.setItem('shis-volume',String(volume))}catch{}}
-function signal(text:string){signalVisible=true;$('signal').hidden=false;$('signal').textContent=text;$('screen').classList.add('no-signal');syncStatic()}
+function signal(text:string){signalVisible=true;$('signal').hidden=false;$('statusText').textContent=text.toUpperCase();$('liveBadge').textContent='STANDBY';$('screen').classList.add('no-signal');syncStatic()}
 function lost(){if(signalTimer)clearTimeout(signalTimer);videoEpoch++;$<HTMLVideoElement>('video').srcObject=null;$<HTMLAudioElement>('audio').srcObject=null;signal(everLive?'Señal perdida':'Buscando señal…');signalTimer=setTimeout(()=>signal('Esperando señal…'),2000)}
 function track(kind:'video'|'audio',t:MediaStreamTrack){if(kind==='audio'){const audio=$<HTMLAudioElement>('audio');audio.srcObject=new MediaStream([t]);setVolume();audio.play().catch(()=>$('enableAudio').hidden=false);return}
  const video=$<HTMLVideoElement>('video');video.srcObject=new MediaStream([t]);video.play().catch(()=>{});const epoch=++videoEpoch;lastFrame=performance.now();
- const frame=()=>{if(epoch!==videoEpoch)return;lastFrame=performance.now();everLive=true;signalVisible=false;$('signal').hidden=true;$('screen').classList.remove('no-signal');syncStatic();if(signalTimer)clearTimeout(signalTimer);if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame)};
+ const frame=()=>{if(epoch!==videoEpoch)return;lastFrame=performance.now();everLive=true;signalVisible=false;$('signal').hidden=true;$('liveBadge').textContent='PLAY';$('statusText').textContent='SEÑAL RECIBIDA';$('screen').classList.remove('no-signal');syncStatic();if(signalTimer)clearTimeout(signalTimer);if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame)};
  if('requestVideoFrameCallback'in video)video.requestVideoFrameCallback(frame);else (video as HTMLVideoElement).onplaying=frame;
 }
-async function connect(){if(!accessToken)return;viewer?.stop();signal('Buscando señal…');viewer=new CloudflareViewer(()=>accessToken,track,lost,e=>{signal('Esperando señal…');console.warn(e)});await viewer.start();setTimeout(()=>{if(!everLive&&$('signal').textContent==='Buscando señal…')signal('Esperando señal…')},8000)}
+async function connect(){if(!accessToken)return;viewer?.stop();signal('Buscando señal…');viewer=new CloudflareViewer(()=>accessToken,track,lost,e=>{signal('Esperando señal…');console.warn(e)});await viewer.start();setTimeout(()=>{if(!everLive&&$('statusText').textContent==='BUSCANDO SEÑAL…')signal('Esperando señal…')},8000)}
 async function boot(){try{
  const config=await json<{discordClientId:string}>('/api/config');
  const session=(window as any).__shisDiscordSession;sdk=session?.sdk??new DiscordSDK(config.discordClientId);await sdk!.ready();
@@ -174,7 +176,7 @@ $('previewRoom').onpointermove=e=>{if(pointers.has(e.pointerId))pointers.set(e.p
 const release=(e:PointerEvent)=>{pointers.delete(e.pointerId);pinch=null;drag=null};$('previewRoom').onpointerup=release;$('previewRoom').onpointercancel=release;
 $('previewRoom').addEventListener('wheel',e=>{if(!draft||!e.ctrlKey)return;e.preventDefault();mutate(()=>{const s=editorSettings();s.camera={...s.camera,zoom:Math.max(1,Math.min(2,(s.camera?.zoom??1)-Math.sign(e.deltaY)*.06))}})},{passive:false});
 let hold:ReturnType<typeof setTimeout>|undefined;let holdPoint={x:0,y:0};
-$('screen').onpointerdown=e=>{e.preventDefault();clearTimeout(hold);$('screen').setPointerCapture?.(e.pointerId);holdPoint={x:e.clientX,y:e.clientY};hold=setTimeout(()=>{if(!canControlActivity())$<HTMLDialogElement>('hostDialog').showModal();else openEditor()},800)};
+$('screen').onpointerdown=e=>{if(currentView()==='window')return;e.preventDefault();clearTimeout(hold);$('screen').setPointerCapture?.(e.pointerId);holdPoint={x:e.clientX,y:e.clientY};hold=setTimeout(()=>{if(!canControlActivity())$<HTMLDialogElement>('hostDialog').showModal();else openEditor()},800)};
 $('screen').onpointermove=e=>{if(Math.hypot(e.clientX-holdPoint.x,e.clientY-holdPoint.y)>12)clearTimeout(hold)};$('screen').onpointerup=() =>clearTimeout(hold);$('screen').onpointercancel=()=>clearTimeout(hold);
 document.addEventListener('selectstart',event=>{const target=event.target as Element;if(!target.closest?.('input,textarea,[contenteditable="true"]'))event.preventDefault()});
 document.addEventListener('contextmenu',event=>{const target=event.target as Element;if(!target.closest?.('input,textarea,[contenteditable="true"]'))event.preventDefault()});

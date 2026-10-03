@@ -1,5 +1,5 @@
 // Noise is generated only inside the inactive CRT glass, never on the room.
-// A 96×72 buffer at 8 fps keeps the work bounded on Android.
+// The original 320×180 grain at 12 fps keeps the work bounded on Android.
 export class TvStatic {
  private timer:ReturnType<typeof setTimeout>|undefined;
  private active=false;
@@ -7,7 +7,7 @@ export class TvStatic {
  private context:CanvasRenderingContext2D|null;
  private frame:ImageData|null;
  constructor(private canvas:HTMLCanvasElement){
-  canvas.width=96;canvas.height=72;
+  canvas.width=320;canvas.height=180;
   this.context=canvas.getContext('2d',{alpha:false});
   this.frame=this.context?.createImageData(canvas.width,canvas.height)??null;
  }
@@ -20,11 +20,11 @@ export class TvStatic {
  private draw=()=>{
   if(!this.active)return;
   if(!document.hidden&&this.context&&this.frame){
-   const pixels=this.frame.data;
-   for(let i=0;i<pixels.length;i+=4){this.seed^=this.seed<<13;this.seed^=this.seed>>>17;this.seed^=this.seed<<5;const v=32+(this.seed&159);pixels[i]=pixels[i+1]=pixels[i+2]=v;pixels[i+3]=255;}
+   const pixels=this.frame.data,band=Math.floor((performance.now()/31)%this.canvas.height);
+   for(let i=0;i<pixels.length;i+=4){this.seed^=this.seed<<13;this.seed^=this.seed>>>17;this.seed^=this.seed<<5;const y=Math.floor(i/4/this.canvas.width),v=Math.min(255,(this.seed&255)+(Math.abs(y-band)<3?35:0));pixels[i]=pixels[i+1]=v;pixels[i+2]=Math.min(255,v+3);pixels[i+3]=255;}
    this.context.putImageData(this.frame,0,0);
   }
-  this.timer=setTimeout(this.draw,125);
+  this.timer=setTimeout(this.draw,83);
  }
  stop(){this.setActive(false)}
 }
