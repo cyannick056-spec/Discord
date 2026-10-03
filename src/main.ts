@@ -4,7 +4,6 @@ import { DiscordSDK, Events, RPCCloseCodes, type Types } from '@discord/embedded
 import { initDecorations, setDecorationViewers, requestAppClose } from './decorations';
 import { CloudflareViewer } from './cloudflare';
 import { initRoomLighting } from './lighting';
-import { YouTubeRoom } from './youtube';
 import './style.css';
 import './scenes.css';
 
@@ -54,8 +53,6 @@ let retryDiscordAuthorization: (() => Promise<void>) | null = null;
 let participantOrder: string[] = [];
 let signalLostTimer: ReturnType<typeof setTimeout> | null = null;
 let activeVideoElement: HTMLVideoElement | null = null;
-let youtubeRoom:YouTubeRoom|null=null;
-let currentMediaSource:'switch'|'youtube'='switch';
 let streamEpoch=0;
 let lastDecodedFrameAt = 0;
 let videoStalled = false;
@@ -150,7 +147,6 @@ function setVolume(value: number) {
   volumeButton.dataset.muted = String(volume === 0);
   volumeButton.title = `Volumen: ${volume}%`;
   audioMount.querySelectorAll('audio').forEach((element) => { element.volume = volume / 100; });
-  youtubeRoom?.setVolume(volume);
   try { localStorage.setItem('shis-volume', String(volume)); } catch { /* Session-only fallback. */ }
 }
 setVolume(volume);
@@ -359,7 +355,7 @@ async function initDiscord(clientId: string) {
   retryDiscordAuthorization = authenticateDiscord;
   viewerRetry.addEventListener('click', () => {
     void authenticateDiscord().then(() => {
-      if (currentMediaSource==='switch' && discordAccessToken && config && !cloudflareViewer) void connectViewer(config.defaultStream).catch(showConnectionError);
+      if (discordAccessToken && config && !cloudflareViewer) void connectViewer(config.defaultStream).catch(showConnectionError);
     });
   });
   let refreshInFlight = false;
@@ -394,14 +390,12 @@ async function initDiscord(clientId: string) {
 }
 
 function clearVideo() {
-  if(currentMediaSource==='youtube')return;
   activeVideoElement = null;
   videoMount.replaceChildren();
   signalLost();
 }
 
 function attachCloudflareTrack(kind: 'video' | 'audio', mediaTrack: MediaStreamTrack) {
-  if(currentMediaSource==='youtube')return;
   if (kind === 'audio') {
     const element = document.createElement('audio');
     element.autoplay = true;
@@ -451,7 +445,6 @@ setInterval(() => {
 }, 2000);
 
 async function connectViewer(stream: string) {
-  if(currentMediaSource==='youtube')return;
   const epoch=++streamEpoch;
   if (!discordAccessToken) throw new Error('Autoriza tu perfil en Discord para ver la transmisión');
   if (signalLostTimer) {
@@ -477,7 +470,7 @@ async function connectViewer(stream: string) {
     () => discordAccessToken,
     (kind,track) => {if(epoch===streamEpoch)attachCloudflareTrack(kind,track);},
     () => {
-      if(epoch!==streamEpoch || currentMediaSource==='youtube' || cloudflareViewer!==viewer)return;
+      if(epoch!==streamEpoch || cloudflareViewer!==viewer)return;
       audioMount.replaceChildren();
       audioButton.hidden = true;
       clearVideo();
@@ -495,7 +488,6 @@ async function connectViewer(stream: string) {
 }
 
 function showConnectionError(error: unknown) {
-  if(currentMediaSource==='youtube')return;
   console.error(error);
   setLive(false);
   setStatus(error instanceof Error && /Discord|actividad|perfil|autoriza/i.test(error.message) ?
@@ -507,7 +499,7 @@ async function boot() {
   try {
     config = await fetchJson<AppConfig>('/api/config');
     await initDiscord(config.discordClientId);
-    try { await youtubeRoom?.refresh(); } catch { await connectViewer(config.defaultStream); }
+    await connectViewer(config.defaultStream);
   } catch (error) {
     showConnectionError(error);
   }
@@ -525,8 +517,7 @@ filterButton.addEventListener('click', () => shareControls({retro:retroLevel ===
 smoothingButton.addEventListener('click', () => shareControls({smoothing:!smoothing}));
 aspectButton.addEventListener('click', () => shareControls({aspect:aspectMode === '4:3' ? '16:9' : '4:3'}));
 volumeButton.addEventListener('click', () => {
-  if(currentMediaSource==='youtube')youtubeRoom?.activate();
-  else if(!audioButton.hidden) audioButton.click();
+  if(!audioButton.hidden) audioButton.click();
   volumePanel.hidden = !volumePanel.hidden;
   volumeButton.setAttribute('aria-expanded', String(!volumePanel.hidden));
   settingsPanel.hidden = true;
@@ -560,7 +551,6 @@ exitButton.addEventListener('click', exitActivity);
 document.querySelector('#editorExit')!.addEventListener('click', exitActivity);
 
 audioButton.addEventListener('click', async () => {
-  if(currentMediaSource==='youtube'){youtubeRoom?.activate();audioButton.hidden=true;return;}
   const audioElements = [...audioMount.querySelectorAll('audio')];
   if (audioElements.length === 0) return;
   const results = await Promise.allSettled(audioElements.map((element) => element.play()));
@@ -570,7 +560,6 @@ audioButton.addEventListener('click', async () => {
 
 retryButton.addEventListener('click', async () => {
   try {
-    if(currentMediaSource==='youtube'){await youtubeRoom?.retry();return;}
     if (!config) return await boot();
     if (!discordAccessToken && retryDiscordAuthorization) await retryDiscordAuthorization();
     if (discordAccessToken) await connectViewer(config.defaultStream);
@@ -581,9 +570,8 @@ retryButton.addEventListener('click', async () => {
 
 function updateHostControls(){
   const host=canControlActivity();stage.classList.toggle('spectator-mode',!host);
-  settingsControl.hidden=!host;document.querySelector<HTMLElement>('#sourceButton')!.hidden=!host;
-  videoMount.inert=!host && currentMediaSource==='youtube';
-  if(!host){settingsPanel.hidden=true;document.querySelector<HTMLDialogElement>('#sourceDialog')!.close();}
+  settingsControl.hidden=!host;
+  if(!host)settingsPanel.hidden=true;
 }
 function shareControls(value:Parameters<typeof changeActivityControls>[0]){
   if(!canControlActivity())return;
@@ -608,21 +596,4 @@ for(const event of ['pointerup','pointercancel','pointerleave'])player.addEventL
 document.addEventListener('keydown',event=>{if(event.ctrlKey && event.shiftKey && event.key.toLowerCase()==='h'){event.preventDefault();document.querySelector<HTMLButtonElement>('#editorButton')!.click();}});
 initRoomLighting();
 initDecorations();
-if(!editorPreviewMode)youtubeRoom=new YouTubeRoom(async source=>{
-  currentMediaSource=source;streamEpoch++;
-  stage.classList.toggle('youtube-source',source==='youtube');
-  updateHostControls();
-  if(signalLostTimer){clearTimeout(signalLostTimer);signalLostTimer=null;}
-  cloudflareViewer?.stop();cloudflareViewer=null;
-  activeVideoElement=null;
-  videoMount.replaceChildren();audioMount.replaceChildren();audioButton.hidden=true;retryButton.hidden=true;
-  document.querySelector<HTMLElement>('#mediaNotice')!.hidden=true;
-  setLive(source==='youtube');setStatus('');roomText.textContent='';
-  window.dispatchEvent(new Event('shis-media-layout-change'));
-  if(source==='switch' && config && discordAccessToken)await connectViewer(config.defaultStream);
-},()=>volume,async url=>{
-  if(!discordSdk)throw new Error('Abre la actividad en Discord para abrir YouTube.');
-  const result=await discordSdk.commands.openExternalLink({url});
-  if(result.opened===false)throw new Error('Se canceló la apertura fuera de la actividad.');
-});
 if (!editorPreviewMode) boot();
