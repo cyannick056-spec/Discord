@@ -138,7 +138,9 @@ if (existsSync(distDir)) {
     return res.status(403).type('text/plain').send('Abre Shis Stream desde la actividad de Discord.');
   };
   app.get(['/', '/index.html', '/gate.html'], serveActivityEntry);
-  app.use(express.static(distDir, { index: false, maxAge: '1h' }));
+  app.use(express.static(distDir, { index: false, maxAge: '1h', setHeaders(res, file) {
+    if (!file.includes(`${path.sep}assets${path.sep}`)) res.set('Cache-Control', 'no-cache');
+  } }));
   app.use((req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
     return serveActivityEntry(req, res).catch(next);

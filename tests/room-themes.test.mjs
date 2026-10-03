@@ -18,8 +18,27 @@ test('shared TV models retain identical frame and glass proportions in every roo
 test('the shared TV remains complete in Discord landscape aspect ratios',()=>{
  for(const {id} of roomThemes)for(const type of ['crt','flat'])for(const [width,height] of [[1536,674],[1920,650]]){
   const {photo,frame}=photoLayout(width,height,type,{},false,id);
-  assert.ok(photo.top+frame.top>=11.999);
-  assert.ok(photo.top+frame.top+frame.height<=height);
+  const model=tvModels[type],units=frame.width/model.width;
+  assert.ok(photo.top+frame.top+model.body[1]*units>=11.999);
+  assert.ok(photo.top+frame.top+(model.body[1]+model.body[3])*units<=height);
+ }
+});
+test('moving and zooming a wide activity has no jump at the initial zoom and keeps the original TV glass aligned',()=>{
+ for(const type of ['crt','flat'])for(const [width,height] of [[1536,674],[1920,650],[430,932]]){
+  const initial=photoLayout(width,height,type,{zoom:1},false,'rain');
+  for(const zoom of [1.001,1.02,1.4,2])for(const x of [-40,0,40]){
+   const next=photoLayout(width,height,type,{zoom,x,y:x},false,'rain'),model=tvModels[type];
+   assert.ok(Math.abs(next.frame.width/initial.frame.width-zoom)<1e-8);
+   assert.ok(Math.abs(next.screen.width/initial.screen.width-zoom)<1e-8);
+   assert.ok(Math.abs((next.screen.left-next.frame.left)/next.frame.width-model.glass[0]/model.width)<1e-8);
+   assert.ok(Math.abs((next.screen.top-next.frame.top)/next.frame.height-model.glass[1]/model.height)<1e-8);
+  }
+ }
+ assert.equal(tvModels.crt.src,'/crt-room-4x3.webp');
+});
+test('all environments use new tableless URLs in both orientations, bypassing earlier cached backgrounds',()=>{
+ for(const {id} of roomThemes)for(const view of ['landscape','portrait']){
+  assert.match(roomPhoto('crt',view,id),/^\/rooms\/tableless-v2\//);
  }
 });
 
