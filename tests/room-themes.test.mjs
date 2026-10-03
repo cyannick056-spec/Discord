@@ -15,6 +15,20 @@ test('shared TV models retain identical frame and glass proportions in every roo
   assert.ok(Math.abs((screen.left-frame.left)/frame.width-tvModels[type].glass[0]/tvModels[type].width)<1e-8);
  }
 });
+test('independent TV size and position preserve every glass edge and leave the room camera unchanged',()=>{
+ for(const {id} of roomThemes)for(const type of ['crt','flat'])for(const [width,height] of [[1536,674],[430,932]])for(const zoom of [.3,1.001,1.5,2.5]){
+  const camera={zoom:1.4,x:20,y:-15},initial=photoLayout(width,height,type,camera,false,id);
+  const moved=photoLayout(width,height,type,camera,false,id,{zoom,x:12,y:-8}),model=tvModels[type];
+  assert.deepEqual(moved.photo,initial.photo);
+  assert.ok(Math.abs(moved.frame.width/initial.frame.width-zoom)<1e-8);
+  assert.ok(Math.abs(moved.screen.width/initial.screen.width-zoom)<1e-8);
+  assert.ok(Math.abs((moved.screen.left-moved.frame.left)/moved.frame.width-model.glass[0]/model.width)<1e-8);
+  assert.ok(Math.abs((moved.screen.top-moved.frame.top)/moved.frame.height-model.glass[1]/model.height)<1e-8);
+ }
+ assert.deepEqual(photoLayout(200,200,'crt',{},true,'rain',{zoom:2,x:50,y:50}),photoLayout(200,200,'crt',{},true,'rain'));
+ const views=new Set(['home-landscape-16x9']);
+ assert.equal(validPresentations({'home-landscape-16x9':{tv:{zoom:1.4,x:12,y:-8},tvPaint:{enabled:true,body:'#b8bbbf',strength:100,exposure:20}}},views),true);
+});
 test('the shared TV remains complete in Discord landscape aspect ratios',()=>{
  for(const {id} of roomThemes)for(const type of ['crt','flat'])for(const [width,height] of [[1536,674],[1920,650]]){
   const {photo,frame}=photoLayout(width,height,type,{},false,id);

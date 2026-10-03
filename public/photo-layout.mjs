@@ -1,7 +1,7 @@
 import {themeGlass,themeFrames} from './room-theme-glass.mjs';
 import {tvModels} from './tv/models.mjs';
 export const glass=themeGlass.midnight;
-export function photoLayout(width,height,type,camera={},compact=false,theme='midnight'){
+export function photoLayout(width,height,type,camera={},compact=false,theme='midnight',tv={}){
  if(compact){const rect={left:0,top:0,width,height};return {photo:rect,screen:rect,frame:rect}}
  const key=`${type}-${height>width?'portrait':'wide'}`;
  let [iw,ih,x,y,w,h]=(themeGlass[theme]??glass)[key];
@@ -15,6 +15,14 @@ export function photoLayout(width,height,type,camera={},compact=false,theme='mid
   const factor=Math.min(1,Math.max(.25,(contact+(height-ih*baseScale)/2/baseScale-12/baseScale)/(bh*units)));
   if(factor<1){const ox=fx,oy=fy;fx=center-(bx+bw/2)*units*factor;fy=contact-(by+bh)*units*factor;fw*=factor;fh*=factor;x=fx+(x-ox)*factor;y=fy+(y-oy)*factor;w*=factor;h*=factor}
  }
+ // One transform for the full housing and glass, independently of the room.
+ const tvZoom=Math.max(.3,Math.min(2.5,tv.zoom??1));
+ const [bx,by,bw,bh]=model.body,units=fw/model.width;
+ const cx=fx+(bx+bw/2)*units,cy=fy+(by+bh/2)*units;
+ const tx=Math.max(-80,Math.min(80,tv.x??0))*iw/100,ty=Math.max(-80,Math.min(80,tv.y??0))*ih/100;
+ fx=cx+(fx-cx)*tvZoom+tx;fy=cy+(fy-cy)*tvZoom+ty;
+ x=cx+(x-cx)*tvZoom+tx;y=cy+(y-cy)*tvZoom+ty;
+ fw*=tvZoom;fh*=tvZoom;w*=tvZoom;h*=tvZoom;
  const zoom=Math.max(1,Math.min(2,camera.zoom??1));
  const scale=baseScale*zoom;
  const pw=iw*scale,ph=ih*scale;

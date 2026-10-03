@@ -64,3 +64,6 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline-color:#a5a
 .osd-top span,#statusText{padding:2px 4px;border-radius:2px;background:rgba(0,0,0,.18)}
 
 .crt.no-signal:not(.off) #retro,.crt.no-signal.intense #retro{opacity:.12;background:repeating-linear-gradient(180deg,rgba(0,0,0,.24) 0 1px,transparent 1px 4px),radial-gradient(ellipse at center,transparent 57%,rgba(0,0,0,.38) 100%)}
+
+.tv-frame{isolation:isolate}.tv-tint{position:absolute;inset:0;mix-blend-mode:color;opacity:0;pointer-events:none}
+#tvAdjust{margin:14px 0;padding:12px;border:1px solid var(--line);border-radius:6px;min-width:0}#tvAdjust legend{color:var(--text);font-weight:600;padding:0 6px}#tvAdjust input[type=color]{width:100%;height:42px;border:1px solid var(--line);border-radius:4px;background:var(--field);padding:4px;cursor:pointer}#tvAdjust:disabled{opacity:.5}#tvSizeValue{color:var(--muted)}

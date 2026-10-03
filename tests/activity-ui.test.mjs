@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
 import {build} from 'esbuild';
+import {tvModels} from '../public/tv/models.mjs';
 
 test('fresh activity edits and saves a figure while retaining other views, assets and library; spectators remain read-only',async()=>{
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
@@ -25,8 +26,24 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  assert.equal(w.document.querySelector('#loading').hidden,true);assert.equal(w.document.querySelector('#options').hidden,false);
  assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/tableless-v2/midnight-wide.webp');assert.equal(w.document.querySelector('#oneBg'),null);assert.equal(w.document.querySelector('#staticNoise').hidden,false);
  w.document.querySelector('#edit').click();await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#editor').hidden,false);
+ const beforeTv=parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width),beforeGlass=parseFloat(w.document.querySelector('#previewRoom .screen').style.width);
+ for(const [id,value] of [['tvSize','1.4'],['tvX','12'],['tvY','-8']]){const input=w.document.querySelector('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))}
+ w.document.querySelector('[data-tv-color="#b8bbbf"]').click();await new Promise(r=>setTimeout(r,10));
+ assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width)/beforeTv-1.4)<1e-8);
+ assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .screen').style.width)/beforeGlass-1.4)<1e-8);
+ assert.equal(w.document.querySelector('#previewRoom .tv-tint').style.opacity,'1');
+ assert.equal(w.document.querySelector('#previewRoom .screen').style.filter,'');assert.equal(w.document.querySelector('#previewRoom .figure').style.filter,'');
+ w.document.querySelector('[data-tab=room]').click();
+ const preview=w.document.querySelector('#previewRoom'),tv=preview.querySelector('.tv-frame'),photo=preview.querySelector('.photo'),m=tvModels.crt,units=parseFloat(tv.style.width)/m.width;
+ const cx=parseFloat(photo.style.left)+parseFloat(tv.style.left)+(m.body[0]+m.body[2]/2)*units,cy=parseFloat(photo.style.top)+parseFloat(tv.style.top)+(m.body[1]+m.body[3]/2)*units;
+ const tvPointer=(type,x,y)=>{const e=new w.MouseEvent(type,{clientX:x,clientY:y,button:0,bubbles:true,cancelable:true});Object.defineProperty(e,'pointerId',{value:1});return e};
+ preview.dispatchEvent(tvPointer('pointerdown',cx,cy));preview.dispatchEvent(tvPointer('pointermove',cx+40,cy+20));preview.dispatchEvent(tvPointer('pointerup',cx+40,cy+20));
+ assert.ok(Number(w.document.querySelector('#tvX').value)>12);assert.ok(Number(w.document.querySelector('#tvY').value)>-8);
+ w.document.querySelector('#undo').click();assert.equal(w.document.querySelector('#tvX').value,'12');assert.equal(w.document.querySelector('#tvY').value,'-8');
+
  const size=w.document.querySelector('#size');size.dispatchEvent(new w.Event('pointerdown'));size.value='25';size.dispatchEvent(new w.Event('input'));
  w.document.querySelector('[data-tv=flat]').click();w.document.querySelector('#save').click();await new Promise(r=>setTimeout(r,20));
+ assert.deepEqual(manifest.presentations['home-landscape-16x9'].tv,{zoom:1.4,x:12,y:-8});assert.equal(manifest.presentations['home-landscape-16x9'].tvPaint.body,'#b8bbbf');assert.equal(manifest.presentations['home-portrait-16x9'].tv,undefined);
  assert.equal(manifest.items[0].placements['home-landscape-16x9'].width,25);assert.deepEqual(manifest.items[0].placements['home-portrait-16x9'],before.items[0].placements['home-portrait-16x9']);
  assert.equal(manifest.items[0].asset,before.items[0].asset);assert.deepEqual(manifest.library,before.library);assert.equal(manifest.presentations['home-landscape-16x9'].tvModel,'flat-modern');
  w.document.querySelector('#closeEditor').click();await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/tableless-v2/midnight-wide.webp');assert.equal(w.document.querySelector('#staticNoise').hidden,true);
