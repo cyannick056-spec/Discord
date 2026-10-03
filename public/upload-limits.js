@@ -1,3 +1,5 @@
+import './mobile-performance.js';
+
 const SHIS_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const SHIS_LEGACY_CLIENT_GUARD_BYTES = 2 * 1024 * 1024;
 
