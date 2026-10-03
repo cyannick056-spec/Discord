@@ -49,3 +49,18 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline-color:#a5a
 .no-signal-copy{color:#d3d6d6;text-shadow:0 1px 1px #000}.no-signal-copy strong{font-size:clamp(12px,calc(var(--glass-width,700px) * .031),24px);font-weight:400;letter-spacing:.22em}.no-signal-copy span{font-size:clamp(7px,calc(var(--glass-width,700px) * .014),12px);opacity:.8}
 #stage.compact .no-signal-copy strong{font-size:8px}#stage.compact .no-signal-copy span{font-size:5px}#stage.compact .osd-top{font-size:5px}
 .tv-frame>img{display:block;width:100%;height:100%;pointer-events:none}.tv-led{position:absolute;left:68.82%;top:79.38%;width:.45%;height:.8%;border-radius:50%;background:#e74646;box-shadow:0 0 3px #ff4b4b;pointer-events:none}.tv-frame[data-model=flat] .tv-led{display:none}
+/* Original standby composition from f0e10ec, scoped to the current glass. */
+#screen.no-signal{background:radial-gradient(ellipse at 50% 48%,#1a1d20 0,#080a0d 75%,#020304 100%)}
+.crt.no-signal #staticNoise{opacity:.57}
+#signal::after{content:'';position:absolute;z-index:1;inset:-30% 0;pointer-events:none;background:linear-gradient(transparent 42%,rgba(245,252,255,.11) 49%,rgba(0,0,0,.18) 51%,transparent 57%);animation:originalSignalRoll 4.8s linear infinite}
+#screen:not(.crt) #signal::after{display:none}
+@keyframes originalSignalRoll{from{transform:translateY(-35%)}to{transform:translateY(35%)}}
+#signal .no-signal-copy{position:relative;z-index:2;color:var(--osd,#c7ceca);text-shadow:0 1px 4px #000}
+.no-signal-copy strong{font-size:clamp(12px,1.8vw,24px);font-weight:700;letter-spacing:.14em}
+.no-signal-copy span{font-size:clamp(8px,.9vw,13px);opacity:.72}
+.osd{left:clamp(7px,1vw,14px);right:clamp(7px,1vw,14px);color:var(--osd,#c7ceca);text-shadow:0 1px 3px #000}
+.osd-top{top:clamp(6px,.8vw,11px);font-size:clamp(7px,.85vw,12px)}
+.osd-bottom{bottom:clamp(6px,.8vw,11px);font-size:clamp(6px,.68vw,10px)}
+.osd-top span,#statusText{padding:2px 4px;border-radius:2px;background:rgba(0,0,0,.18)}
+
+.crt.no-signal:not(.off) #retro,.crt.no-signal.intense #retro{opacity:.12;background:repeating-linear-gradient(180deg,rgba(0,0,0,.24) 0 1px,transparent 1px 4px),radial-gradient(ellipse at center,transparent 57%,rgba(0,0,0,.38) 100%)}
