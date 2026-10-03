@@ -1,3 +1,5 @@
+import './editor-performance';
+
 export type Controls={aspect:'16:9'|'4:3';scene:'home'|'arcade';retro:'off'|'normal'|'immersive'|'scanlines';smoothing:boolean;revision:number;epoch:string;host:boolean};
 const params=new URLSearchParams(location.search),ticket=params.get('ticket')||'';
 export const activityInstance=params.get('instance_id') || `local-${ticket.split('.').at(-1)||'preview'}`;
