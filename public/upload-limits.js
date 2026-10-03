@@ -11,16 +11,39 @@ function realSize(file) {
 function updateFigurePicker() {
   const input = document.querySelector('#editorUpload');
   if (!(input instanceof HTMLInputElement)) return;
+
   input.accept = 'image/png,image/gif';
   const label = input.closest('label');
-  if (label) {
-    for (const node of label.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent = 'Añadir figurita PNG/GIF · máx. 8 MB';
-        break;
-      }
+  if (!(label instanceof HTMLLabelElement)) return;
+
+  for (const node of label.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      node.textContent = '＋ Añadir figurita PNG/GIF · máx. 8 MB';
+      break;
     }
   }
+
+  // El layout moderno oculta varias acciones antiguas de la barra superior.
+  // Dejamos la subida dentro del panel de Objetos, donde siempre es encontrable.
+  const sidebar = document.querySelector('.editor-sidebar');
+  if (sidebar && label.parentElement !== sidebar) sidebar.prepend(label);
+
+  label.classList.add('shis-figure-upload');
+  label.style.display = 'flex';
+  label.style.alignItems = 'center';
+  label.style.justifyContent = 'center';
+  label.style.width = '100%';
+  label.style.boxSizing = 'border-box';
+  label.style.minHeight = '38px';
+  label.style.marginBottom = '10px';
+  label.style.padding = '9px 12px';
+  label.style.border = '1px solid #456579';
+  label.style.borderRadius = '8px';
+  label.style.background = '#203747';
+  label.style.color = '#eef8ff';
+  label.style.fontWeight = '700';
+  label.style.cursor = 'pointer';
+  label.title = 'Subir una figurita PNG o GIF de hasta 8 MB';
 }
 
 if (nativeBlobSize && !globalThis.__shisUploadLimitInstalled) {
