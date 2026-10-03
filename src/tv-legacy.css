@@ -20,16 +20,8 @@
 #screen:not(.no-signal) .osd-bottom{display:none}
 #liveBadge.live::before{content:'● ';font-size:.74em}
 #controls{left:50%;right:auto;transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);gap:10px;align-items:center}
-#controls button{display:flex;flex-direction:column;justify-content:center;gap:2px;width:50px;height:50px;min-width:50px;min-height:50px;padding:0;border:1px solid rgba(173,191,202,.55);background:var(--panel);color:#f0f2f1}
-#controls svg{width:20px;height:20px}
-.control-label{font:600 8px/1 system-ui,sans-serif;letter-spacing:.02em}
-#controls #options svg{display:none}
-#controls #options::before{content:'☷';font:600 22px/1 system-ui,sans-serif}
-#controls #volumeButton svg,#controls #exit svg{display:none}
-#controls #volumeButton::before{content:'♪';font:600 19px/1 system-ui,sans-serif}
-#controls #volumeButton[data-muted=true]::before,#controls #exit::before{content:'×';font:600 24px/1 system-ui,sans-serif}
-#controls #exit{background:var(--panel)}
-#controls #exit:hover{background:#404249}
+/* Keep the Discord button artwork, colors and borderless circles. */
+.control-label{display:none}
 @media(orientation:landscape){
  #controls{left:max(12px,env(safe-area-inset-left));right:auto;top:50%;bottom:auto;transform:translateY(-50%);flex-direction:column;padding:0}
  #optionsPanel{left:max(78px,calc(env(safe-area-inset-left) + 66px));right:auto;top:50%;bottom:auto;transform:translateY(-50%);max-height:calc(var(--activity-height,100vh) - 32px)}
