@@ -2,6 +2,7 @@
 type Description = { type: 'offer' | 'answer'; sdp: string };
 type TrackResult = { mid?: string; trackName?: string; errorCode?: string };
 type TrackResponse = { description: Description; tracks: TrackResult[] };
+type LegacyRtcGlobal = typeof globalThis & { webkitRTCPeerConnection?: typeof RTCPeerConnection };
 
 async function gather(pc: RTCPeerConnection) {
   if (pc.iceGatheringState === 'complete') return;
@@ -14,6 +15,32 @@ async function gather(pc: RTCPeerConnection) {
   });
 }
 
+function createPeerConnection() {
+  const standard = typeof RTCPeerConnection === 'function' ? RTCPeerConnection : undefined;
+  const legacy = (globalThis as LegacyRtcGlobal).webkitRTCPeerConnection;
+  const PeerConnection = standard || legacy;
+  if (!PeerConnection) throw new Error('WebRTC no está disponible en esta vista de Discord');
+
+  try {
+    return new PeerConnection({
+      iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
+    });
+  } catch {
+    // Algunos Android WebView rechazan una configuración ICE durante el
+    // constructor aunque sí permitan crear la conexión. El SFU puede seguir
+    // negociando con los candidatos que entregue el navegador.
+    return new PeerConnection();
+  }
+}
+
+function diagnosticKind(error: unknown) {
+  const name = error instanceof DOMException ? error.name : error instanceof Error ? error.name : 'error';
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/WebRTC no está disponible|RTCPeerConnection.*not defined|unsupported/i.test(message)) return 'rtc-unavailable';
+  if (/stun|turn|ice|peerconnection|construct/i.test(message)) return 'rtc-or-ice';
+  return name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 32) || 'error';
+}
+
 export class CloudflareViewer {
   private pc: RTCPeerConnection | null = null;
   private source: string | null = null;
@@ -22,6 +49,7 @@ export class CloudflareViewer {
   private attemptAt = 0;
   private closed = false;
   private mids = new Map<string, 'video' | 'audio'>();
+  private lastDiagnostic = '';
 
   constructor(
     private readonly accessToken: () => string,
@@ -41,6 +69,20 @@ export class CloudflareViewer {
     const value = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
     return value as T;
+  }
+
+  private reportDiagnostic(stage: string, error: unknown) {
+    const rtc = typeof RTCPeerConnection === 'function' ? 'standard' :
+      typeof (globalThis as LegacyRtcGlobal).webkitRTCPeerConnection === 'function' ? 'webkit' : 'none';
+    const key = `${stage}-${rtc}-${diagnosticKind(error)}`.replace(/[^a-z0-9_-]/gi, '-').slice(0, 96);
+    if (key === this.lastDiagnostic) return;
+    this.lastDiagnostic = key;
+    // Deliberadamente termina en 404: Railway registra la ruta y con ella el
+    // paso que falló, sin enviar SDP, tokens, IDs de usuario ni secretos.
+    void fetch(`/api/cloudflare/client-diagnostic/${key}`, {
+      headers: { 'X-Activity-Ticket': new URLSearchParams(location.search).get('ticket') || '' },
+      cache: 'no-store',
+    }).catch(() => {});
   }
 
   async start() {
@@ -89,9 +131,14 @@ export class CloudflareViewer {
   }
 
   private async connect(source: string) {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
-    });
+    let stage = 'peer';
+    let pc: RTCPeerConnection;
+    try {
+      pc = createPeerConnection();
+    } catch (error) {
+      this.reportDiagnostic(stage, error);
+      throw error;
+    }
     this.pc = pc;
     this.source = source;
     this.attemptAt = Date.now();
@@ -102,11 +149,17 @@ export class CloudflareViewer {
       event.track.addEventListener('ended', () => { if (this.pc === pc) this.reset(); }, { once: true });
     });
     pc.addEventListener('connectionstatechange', () => {
-      if (this.pc === pc && (pc.connectionState === 'failed' || pc.connectionState === 'closed')) this.reset();
+      if (this.pc !== pc) return;
+      if (pc.connectionState === 'failed') {
+        this.reportDiagnostic('connection-state', new Error('PeerConnection failed'));
+        this.reset();
+      } else if (pc.connectionState === 'closed') this.reset();
     });
     try {
+      stage = 'viewer-session';
       const session = await this.request<{ sessionId: string; source: string }>('viewer/session', {});
       if (this.closed || this.pc !== pc || session.source !== source) return this.reset();
+      stage = 'viewer-tracks';
       const result = await this.request<TrackResponse>('viewer/tracks', { sessionId: session.sessionId });
       if (this.closed || this.pc !== pc) return;
       for (const track of result.tracks) {
@@ -115,13 +168,20 @@ export class CloudflareViewer {
         if (track.mid && track.trackName === 'game-audio') this.mids.set(track.mid, 'audio');
       }
       if (this.mids.size !== 2) throw new Error('Falta video o audio');
+      stage = 'remote-description';
       await pc.setRemoteDescription(result.description);
+      stage = 'create-answer';
       const answer = await pc.createAnswer();
+      stage = 'local-description';
       await pc.setLocalDescription(answer);
+      stage = 'ice-gathering';
       await gather(pc);
       if (this.closed || this.pc !== pc) return;
+      stage = 'renegotiate';
       await this.request('viewer/answer', { sessionId: session.sessionId, description: pc.localDescription });
+      this.lastDiagnostic = '';
     } catch (error) {
+      this.reportDiagnostic(stage, error);
       if (this.pc === pc) this.reset();
       throw error;
     }
