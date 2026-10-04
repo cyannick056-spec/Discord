@@ -28,6 +28,9 @@ export function validPresentations(settings, views) {
     (p.tvModel === undefined || tvIds.has(p.tvModel)) &&
     (p.style === undefined || ['original', 'classic', 'minimal', 'wood', 'brick', 'custom'].includes(p.style)) &&
     ['wall', 'cabinet', 'floor'].every(key => p[key] === undefined || (typeof p[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p[key]))) &&
+    (p.showEnvironment === undefined || typeof p.showEnvironment === 'boolean') &&
+    (p.overlay === undefined || (object(p.overlay) && typeof p.overlay.asset === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(p.overlay.asset) && optionalNumbers(p.overlay,{opacity:[0,1]}))) &&
+    (p.aperture === undefined || (object(p.aperture) && ['x','y','width','height'].every(k=>typeof p.aperture[k]==='number') && optionalNumbers(p.aperture,{x:[0,100],y:[0,100],width:[1,100],height:[1,100]}))) &&
     (p.background === undefined || (typeof p.background === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(p.background))) &&
     (p.hideCabinet === undefined || typeof p.hideCabinet === 'boolean') && optionalNumbers(p, { cabinetY: [15, 90], cabinetHeight: [5, 45] }) &&
     (p.tvPaint === undefined || (object(p.tvPaint) && (p.tvPaint.enabled === undefined || typeof p.tvPaint.enabled === 'boolean') && ['body','bezel','panel'].every(key => p.tvPaint[key] === undefined || (typeof p.tvPaint[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p.tvPaint[key]))) && (p.tvPaint.finish === undefined || ['matte','satin','gloss'].includes(p.tvPaint.finish)) && optionalNumbers(p.tvPaint, { strength: [0,100], hue: [-180,180], saturation: [0,200], exposure: [-60,60], contrast: [50,150] }))) &&

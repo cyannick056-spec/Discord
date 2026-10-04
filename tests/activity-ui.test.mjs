@@ -19,12 +19,12 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  w.setInterval=(fn,delay)=>{timers.push({fn,delay});return timers.length};
  w.__shisDiscordSession={accessToken:'test-access',sdk:{ready:async()=>{},subscribe:async(_event,cb)=>{participantCallback=cb},commands:{getActivityInstanceConnectedParticipants:async()=>({participants:[]})},close:()=>{}}};
  w.fetch=async(url,init={})=>{const path=new URL(url,'https://test.invalid').pathname;
- let body={};if(path==='/api/config')body={discordClientId:'test'};else if(path==='/api/activity-controls'){if(init.method==='PUT')state={...state,...JSON.parse(init.body),revision:state.revision+1};body=state;}else if(path==='/api/decorations'){if(init.method==='PUT'){manifest=JSON.parse(init.body);body={ok:true}}else body=manifest}else if(path==='/api/cloudflare/stream')body={sessionId:null};
+ let body={};if(path==='/api/config')body={discordClientId:'test'};else if(path==='/api/activity-controls'){if(init.method==='PUT')state={...state,...JSON.parse(init.body),revision:state.revision+1};body=state;}else if(path==='/api/decorations'){if(init.method==='PUT'){manifest=JSON.parse(init.body);body={ok:true}}else body=manifest}else if(path==='/api/decorations/assets')body={asset:'e3d26189-65be-4c3b-ae4e-93b4f62b2a8c.png'};else if(path==='/api/cloudflare/stream')body={sessionId:null};
  return {ok:true,status:200,json:async()=>structuredClone(body)};};
  try{
  w.eval(compiled.outputFiles[0].text);await new Promise(r=>setTimeout(r,30));
  assert.equal(w.document.querySelector('#loading').hidden,true);assert.equal(w.document.querySelector('#options').hidden,false);
- assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/tableless-v2/midnight-wide.webp');assert.equal(w.document.querySelector('#oneBg'),null);assert.equal(w.document.querySelector('#staticNoise').hidden,false);
+ assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/hd-v3/midnight-wide.webp');assert.equal(w.document.querySelector('#oneBg'),null);assert.equal(w.document.querySelector('#staticNoise').hidden,false);
  w.document.querySelector('#edit').click();await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#editor').hidden,false);
  const inspectionCamera=structuredClone(manifest.presentations??{});
  w.document.querySelector('#preview').dispatchEvent(new w.WheelEvent('wheel',{deltaY:-100,clientX:300,clientY:200,bubbles:true,cancelable:true}));
@@ -36,10 +36,10 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));
  const initialMode=w.document.querySelector('#initialMode');initialMode.value='arcade';initialMode.dispatchEvent(new w.Event('change'));w.document.querySelector('#setInitial').click();
  const beforeTv=parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width),beforeGlass=parseFloat(w.document.querySelector('#previewRoom .screen').style.width);
- for(const [id,value] of [['tvSize','1.4'],['tvX','12'],['tvY','-8']]){const input=w.document.querySelector('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))}
+ for(const [id,value] of [['tvX','12'],['tvY','-8']]){const input=w.document.querySelector('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))}
  w.document.querySelector('[data-tv-color="#b8bbbf"]').click();await new Promise(r=>setTimeout(r,10));
- assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width)/beforeTv-1.4)<1e-8);
- assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .screen').style.width)/beforeGlass-1.4)<1e-8);
+ assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width)/beforeTv-1)<1e-8);
+ assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .screen').style.width)/beforeGlass-1)<1e-8);
  assert.equal(w.document.querySelector('#previewRoom .tv-tint').style.opacity,'1');
  assert.equal(w.document.querySelector('#previewRoom .screen').style.filter,'');assert.equal(w.document.querySelector('#previewRoom .figure').style.filter,'');
  w.document.querySelector('[data-tab=room]').click();
@@ -53,19 +53,37 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  const size=w.document.querySelector('#size');size.dispatchEvent(new w.Event('pointerdown'));size.value='25';size.dispatchEvent(new w.Event('input'));
  w.document.querySelector('[data-tv=flat]').click();w.document.querySelector('#save').click();await new Promise(r=>setTimeout(r,20));
  assert.deepEqual(manifest.initialScene,{scene:'arcade',aspect:'16:9',retro:'immersive',smoothing:true});
- assert.deepEqual(manifest.presentations['home-landscape-16x9'].tv,{zoom:1.4,x:12,y:-8});assert.equal(manifest.presentations['home-landscape-16x9'].tvPaint.body,'#b8bbbf');assert.equal(manifest.presentations['home-portrait-16x9'].tv,undefined);
+ assert.deepEqual(manifest.presentations['home-landscape-16x9'].tv,{x:12,y:-8});assert.equal(manifest.presentations['home-landscape-16x9'].tvPaint.body,'#b8bbbf');assert.equal(manifest.presentations['home-portrait-16x9'].tv,undefined);
  assert.equal(manifest.items[0].placements['home-landscape-16x9'].width,25);assert.deepEqual(manifest.items[0].placements['home-portrait-16x9'],before.items[0].placements['home-portrait-16x9']);
  assert.equal(manifest.items[0].asset,before.items[0].asset);assert.deepEqual(manifest.library,before.library);assert.equal(manifest.presentations['home-landscape-16x9'].tvModel,'flat-modern');
- w.document.querySelector('#closeEditor').click();await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/tableless-v2/midnight-wide.webp');assert.equal(w.document.querySelector('#staticNoise').hidden,true);
+ w.document.querySelector('#closeEditor').click();await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/hd-v3/midnight-wide.webp');assert.equal(w.document.querySelector('#staticNoise').hidden,true);
  state={...state,scene:'arcade'};await timers.find(t=>t.delay===1500).fn();await new Promise(r=>setTimeout(r,10));
- w.document.querySelector('[data-live-tv=crt]').click();await new Promise(r=>setTimeout(r,20));assert.equal(state.scene,'home');assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/tableless-v2/midnight-wide.webp');assert.equal(w.document.querySelector('#staticNoise').hidden,false);
+ w.document.querySelector('[data-live-tv=crt]').click();await new Promise(r=>setTimeout(r,20));assert.equal(state.scene,'home');assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/hd-v3/midnight-wide.webp');assert.equal(w.document.querySelector('#staticNoise').hidden,false);
  assert.deepEqual(manifest.items[0].placements['home-portrait-16x9'],before.items[0].placements['home-portrait-16x9']);assert.equal(manifest.presentations['home-portrait-4x3'].tvModel,'original');
  const preserved=structuredClone(manifest.items);
  w.document.querySelector('[data-live-theme=midnight]').click();await new Promise(r=>setTimeout(r,20));
- assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/tableless-v2/midnight-wide.webp');assert.deepEqual(manifest.items,preserved);assert.equal(manifest.presentations['home-portrait-4x3'].roomTheme,'midnight');
+ assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/hd-v3/midnight-wide.webp');assert.deepEqual(manifest.items,preserved);assert.equal(manifest.presentations['home-portrait-4x3'].roomTheme,'midnight');
  w.document.querySelector('#edit').click();w.document.querySelector('[data-theme=rain]').click();w.document.querySelector('#save').click();await new Promise(r=>setTimeout(r,20));w.document.querySelector('#closeEditor').click();
- assert.equal(manifest.presentations['home-landscape-16x9'].roomTheme,'rain');assert.equal(manifest.presentations['home-portrait-4x3'].roomTheme,'midnight');assert.deepEqual(manifest.items,preserved);
- w.document.querySelector('[data-live-tv=flat]').click();await new Promise(r=>setTimeout(r,20));assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/tableless-v2/rain-wide.webp');
+ assert.equal(manifest.presentations['home-landscape-4x3'].roomTheme,'rain');assert.equal(manifest.presentations['home-portrait-4x3'].roomTheme,'midnight');assert.deepEqual(manifest.items,preserved);
+ w.document.querySelector('[data-live-tv=flat]').click();await new Promise(r=>setTimeout(r,20));assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/hd-v3/midnight-wide.webp');
+
+ w.document.querySelector('#edit').click();await new Promise(r=>setTimeout(r,10));
+ for(const tab of ['background','room','video','camera','figures','spectators','initial']){w.document.querySelector(`[data-tab=${tab}]`).click();assert.equal(w.document.querySelector(`[data-editor-section=${tab}]`).hidden,false);assert.equal(w.document.querySelectorAll('[data-editor-section]:not([hidden])').length,1)}
+ assert.equal(w.document.querySelector('#tvSize'),null);assert.equal(w.document.querySelector('[data-edit-aspect]'),null);
+ const mode=w.document.querySelector('#editScene');mode.value='arcade';mode.dispatchEvent(new w.Event('change'));await new Promise(r=>setTimeout(r,10));
+ for(const id of ['backgroundUpload','overlayUpload']){const input=w.document.querySelector('#'+id);Object.defineProperty(input,'files',{value:[new w.File(['image'],'retroarch.png',{type:'image/png'})],configurable:true});input.dispatchEvent(new w.Event('change'));await new Promise(r=>setTimeout(r,10))}
+ for(const [id,value]of [['videoZoom','1.7'],['videoX','-8'],['apertureWidth','60'],['apertureHeight','55'],['zoom','1.4']]){const input=w.document.querySelector('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))}
+ await new Promise(r=>setTimeout(r,10));
+ const pr=w.document.querySelector('#previewRoom'),ps=pr.querySelector('.screen'),pp=pr.querySelector('.photo'),previewGeometry=[ps,pp].map(el=>['left','top','width','height'].map(key=>parseFloat(el.style[key])/pr.clientWidth));
+ assert.equal(w.document.querySelector('#previewOverlay').hidden,false);
+ w.document.querySelector('#save').click();await new Promise(r=>setTimeout(r,30));
+ assert.equal(state.scene,'arcade');assert.equal(manifest.presentations['arcade-landscape'].video.zoom,1.7);assert.equal(manifest.presentations['arcade-landscape'].video.x,-8);assert.equal(manifest.presentations['arcade-landscape'].aperture.width,60);
+ assert.deepEqual(manifest.items,preserved);assert.deepEqual(manifest.library,before.library);
+ w.document.querySelector('#closeEditor').click();await new Promise(r=>setTimeout(r,10));
+ assert.equal(w.document.querySelector('#sceneOverlay').hidden,false);assert.equal(w.document.querySelector('#stage').classList.contains('custom-background'),true);assert.equal(w.document.querySelector('#tvFrame').hidden,true);
+ const liveGeometry=['screen','photo'].map(id=>['left','top','width','height'].map(key=>parseFloat(w.document.querySelector('#'+id).style[key])/w.document.querySelector('#room').clientWidth));
+ for(let i=0;i<2;i++)for(let j=0;j<4;j++)assert.ok(Math.abs(liveGeometry[i][j]-previewGeometry[i][j])<1e-9);
+ assert.equal(w.document.querySelector('#previewVideo').srcObject,null);
  const event=new w.Event('contextmenu',{bubbles:true,cancelable:true});w.document.querySelector('#screen').dispatchEvent(event);assert.equal(event.defaultPrevented,true);
  const fieldEvent=new w.Event('selectstart',{bubbles:true,cancelable:true});w.document.querySelector('#hostKey').dispatchEvent(fieldEvent);assert.equal(fieldEvent.defaultPrevented,false);
  state={...state,host:false};await timers.find(t=>t.delay===1500).fn();await new Promise(r=>setTimeout(r,10));
