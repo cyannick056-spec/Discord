@@ -36,10 +36,10 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));
  const initialMode=w.document.querySelector('#initialMode');initialMode.value='arcade';initialMode.dispatchEvent(new w.Event('change'));w.document.querySelector('#setInitial').click();
  const beforeTv=parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width),beforeGlass=parseFloat(w.document.querySelector('#previewRoom .screen').style.width);
- for(const [id,value] of [['tvX','12'],['tvY','-8']]){const input=w.document.querySelector('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))}
+ for(const [id,value] of [['tvSize','1.4'],['tvX','12'],['tvY','-8']]){const input=w.document.querySelector('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))}
  w.document.querySelector('[data-tv-color="#b8bbbf"]').click();await new Promise(r=>setTimeout(r,10));
- assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width)/beforeTv-1)<1e-8);
- assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .screen').style.width)/beforeGlass-1)<1e-8);
+ assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width)/beforeTv-1.4)<1e-8);
+ assert.ok(Math.abs(parseFloat(w.document.querySelector('#previewRoom .screen').style.width)/beforeGlass-1.4)<1e-8);
  assert.equal(w.document.querySelector('#previewRoom .tv-tint').style.opacity,'1');
  assert.equal(w.document.querySelector('#previewRoom .screen').style.filter,'');assert.equal(w.document.querySelector('#previewRoom .figure').style.filter,'');
  w.document.querySelector('[data-tab=room]').click();
@@ -53,7 +53,7 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  const size=w.document.querySelector('#size');size.dispatchEvent(new w.Event('pointerdown'));size.value='25';size.dispatchEvent(new w.Event('input'));
  w.document.querySelector('[data-tv=flat]').click();w.document.querySelector('#save').click();await new Promise(r=>setTimeout(r,20));
  assert.deepEqual(manifest.initialScene,{scene:'arcade',aspect:'16:9',retro:'immersive',smoothing:true});
- assert.deepEqual(manifest.presentations['home-landscape-16x9'].tv,{x:12,y:-8});assert.equal(manifest.presentations['home-landscape-16x9'].tvPaint.body,'#b8bbbf');assert.equal(manifest.presentations['home-portrait-16x9'].tv,undefined);
+ assert.deepEqual(manifest.presentations['home-landscape-16x9'].tv,{zoom:1.4,x:12,y:-8});assert.equal(manifest.presentations['home-landscape-16x9'].tvPaint.body,'#b8bbbf');assert.equal(manifest.presentations['home-portrait-16x9'].tv,undefined);
  assert.equal(manifest.items[0].placements['home-landscape-16x9'].width,25);assert.deepEqual(manifest.items[0].placements['home-portrait-16x9'],before.items[0].placements['home-portrait-16x9']);
  assert.equal(manifest.items[0].asset,before.items[0].asset);assert.deepEqual(manifest.library,before.library);assert.equal(manifest.presentations['home-landscape-16x9'].tvModel,'flat-modern');
  w.document.querySelector('#closeEditor').click();await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/hd-v3/midnight-wide.webp');assert.equal(w.document.querySelector('#staticNoise').hidden,true);
@@ -69,7 +69,7 @@ test('fresh activity edits and saves a figure while retaining other views, asset
 
  w.document.querySelector('#edit').click();await new Promise(r=>setTimeout(r,10));
  for(const tab of ['background','room','video','camera','figures','spectators','initial']){w.document.querySelector(`[data-tab=${tab}]`).click();assert.equal(w.document.querySelector(`[data-editor-section=${tab}]`).hidden,false);assert.equal(w.document.querySelectorAll('[data-editor-section]:not([hidden])').length,1)}
- assert.equal(w.document.querySelector('#tvSize'),null);assert.equal(w.document.querySelector('[data-edit-aspect]'),null);
+ assert.ok(w.document.querySelector('#tvSize'));assert.equal(w.document.querySelector('[data-edit-aspect]'),null);
  const mode=w.document.querySelector('#editScene');mode.value='arcade';mode.dispatchEvent(new w.Event('change'));await new Promise(r=>setTimeout(r,10));
  for(const id of ['backgroundUpload','overlayUpload']){const input=w.document.querySelector('#'+id);Object.defineProperty(input,'files',{value:[new w.File(['image'],'retroarch.png',{type:'image/png'})],configurable:true});input.dispatchEvent(new w.Event('change'));await new Promise(r=>setTimeout(r,10))}
  for(const [id,value]of [['videoZoom','1.7'],['videoX','-8'],['apertureWidth','60'],['apertureHeight','55'],['zoom','1.4']]){const input=w.document.querySelector('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))}
