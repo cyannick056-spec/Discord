@@ -32,6 +32,7 @@ export function validPresentations(settings, views) {
     (p.overlay === undefined || (object(p.overlay) && typeof p.overlay.asset === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(p.overlay.asset) && optionalNumbers(p.overlay,{opacity:[0,1]}))) &&
     (p.aperture === undefined || (object(p.aperture) && ['x','y','width','height'].every(k=>typeof p.aperture[k]==='number') && optionalNumbers(p.aperture,{x:[0,100],y:[0,100],width:[1,100],height:[1,100]}))) &&
     (p.background === undefined || (typeof p.background === 'string' && /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/.test(p.background))) &&
+    (p.supportSurface === undefined || (Array.isArray(p.supportSurface) && p.supportSurface.length===2 && p.supportSurface.every(v=>object(v) && finite(v.x,0,100) && finite(v.y,0,100)) && p.supportSurface[1].x-p.supportSurface[0].x>=1)) &&
     (p.hideCabinet === undefined || typeof p.hideCabinet === 'boolean') && optionalNumbers(p, { cabinetY: [15, 90], cabinetHeight: [5, 45] }) &&
     (p.tvPaint === undefined || (object(p.tvPaint) && (p.tvPaint.modelRevision === undefined || p.tvPaint.modelRevision === 2) && (p.tvPaint.enabled === undefined || typeof p.tvPaint.enabled === 'boolean') && ['body','bezel','panel'].every(key => p.tvPaint[key] === undefined || (typeof p.tvPaint[key] === 'string' && /^#[a-fA-F0-9]{6}$/.test(p.tvPaint[key]))) && (p.tvPaint.finish === undefined || ['matte','satin','gloss'].includes(p.tvPaint.finish)) && optionalNumbers(p.tvPaint, { strength: [0,100], hue: [-180,180], saturation: [0,200], exposure: [-60,60], contrast: [50,150] }))) &&
     (p.reflection === undefined || (object(p.reflection) && (p.reflection.enabled === undefined || typeof p.reflection.enabled === 'boolean') && optionalNumbers(p.reflection, { intensity: [0,150], table: [0,200], floor: [0,200], blur: [0,30], reach: [30,180], spread: [50,180], offset: [-20,30], texture: [0,100] }))) &&
@@ -64,6 +65,7 @@ export function validStudioPlacement(p) {
   if(p.solid!==undefined && typeof p.solid!=='boolean') return false;
   if(p.tint!==undefined && (typeof p.tint!=='string' || !/^#[a-fA-F0-9]{6}$/.test(p.tint))) return false;
   if(p.tintStrength!==undefined && !finite(p.tintStrength,0,100)) return false;
+  if(p.effects!==undefined && (!object(p.effects)||!optionalNumbers(p.effects,{brightness:[0,200],contrast:[0,200],saturation:[0,200],hue:[-180,180],blur:[0,5],shadow:[0,100],shadowBlur:[0,25],shadowX:[-30,30],shadowY:[-30,30]})))return false;
   const t = p.transform;
   return (p.material === undefined || (object(p.material) && materialIds.has(p.material.preset) && (p.material.scope === undefined || ['top','all'].includes(p.material.scope)) && (p.material.color === undefined || /^#[a-fA-F0-9]{6}$/.test(p.material.color)) && optionalNumbers(p.material, { strength: [0,100], scale: [.25,4], roughness: [0,100] }))) &&
     (p.lava === undefined || (object(p.lava) && (p.lava.motion === undefined || typeof p.lava.motion === 'boolean') && optionalNumbers(p.lava, { speed: [.2, 3] }))) &&

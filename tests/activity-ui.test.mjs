@@ -99,3 +99,44 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  assert.equal(typeof participantCallback,'function');assert.equal(w.document.documentElement.classList.contains('one-room'),false);
  }finally{dom.window.close()}
 });
+
+test('object lists, redo, appearance, direct handles and furniture placement persist without changing other views',async()=>{
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
+ const dom=new JSDOM(html,{url:'https://test.invalid/?instance_id=testing&ticket=test',runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+ const compiled=await build({entryPoints:[new URL('../src/main.ts',import.meta.url).pathname],bundle:true,write:false,format:'iife',loader:{'.css':'empty'}});
+ const id='caf517c5-4a43-4b50-bb2c-ff71ca96d42a';
+ let manifest={items:[{id,name:'Mi figura',asset:'e3d26189-65be-4c3b-ae4e-93b4f62b2a8c.png',placements:{'home-landscape-16x9':{x:17,y:60,width:13,rotation:0,opacity:1,z:10,hidden:false,anchor:'scene'},'home-portrait-16x9':{x:55,y:78,width:21,rotation:4,opacity:.8,z:11,hidden:false,anchor:'frame'}}}],library:[{asset:'saved-library.png'}]};
+ const before=structuredClone(manifest),timers=[];let state={aspect:'16:9',scene:'home',retro:'immersive',smoothing:true,revision:0,epoch:'test',host:true};let participantCallback;
+ w.innerWidth=1200;w.innerHeight=800;w.structuredClone=structuredClone;w.Image.prototype.decode=async()=>{};
+ w.HTMLCanvasElement.prototype.getContext=()=>({createImageData:(width,height)=>({data:new Uint8ClampedArray(width*height*4)}),putImageData:()=>{}});
+ w.HTMLMediaElement.prototype.play=async()=>{};w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};w.HTMLElement.prototype.setPointerCapture=()=>{};
+ Object.defineProperties(w.HTMLElement.prototype,{clientWidth:{get(){return parseFloat(this.style.width)||(this.id==='preview'?700:1200)}},clientHeight:{get(){return parseFloat(this.style.height)||(this.id==='preview'?600:800)}}});
+ w.setInterval=(fn,delay)=>{timers.push({fn,delay});return timers.length};
+ w.__shisDiscordSession={accessToken:'test-access',sdk:{ready:async()=>{},subscribe:async(_event,cb)=>{participantCallback=cb},commands:{getActivityInstanceConnectedParticipants:async()=>({participants:[]})},close:()=>{}}};
+ w.fetch=async(url,init={})=>{const path=new URL(url,'https://test.invalid').pathname;
+ let body={};if(path==='/api/config')body={discordClientId:'test'};else if(path==='/api/activity-controls'){if(init.method==='PUT')state={...state,...JSON.parse(init.body),revision:state.revision+1};body=state;}else if(path==='/api/decorations'){if(init.method==='PUT'){manifest=JSON.parse(init.body);body={ok:true}}else body=manifest}else if(path==='/api/decorations/assets')body={asset:'e3d26189-65be-4c3b-ae4e-93b4f62b2a8c.png'};else if(path==='/api/cloudflare/stream')body={sessionId:null};
+ return {ok:true,status:200,json:async()=>structuredClone(body)};};
+ try{
+ w.eval(compiled.outputFiles[0].text);await new Promise(r=>setTimeout(r,30));
+ const q=s=>w.document.querySelector(s),pointer=(type,x,y,id=1,pointerType='mouse')=>{const e=new w.MouseEvent(type,{clientX:x,clientY:y,button:0,bubbles:true,cancelable:true});Object.defineProperties(e,{pointerId:{value:id},pointerType:{value:pointerType}});return e};
+ q('#edit').click();await new Promise(r=>setTimeout(r,10));
+ assert.equal(q('#redo').disabled,true);assert.equal(q('#figureRows').children.length,1);assert.equal(q('#slotTools').children.length,5);
+ const range=(id,value)=>{const input=q('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))};
+ range('effect-brightness','70');await new Promise(r=>setTimeout(r,10));
+ assert.match(q('#previewRoom .figure').style.filter,/brightness\(0.7\)/);q('#undo').click();await new Promise(r=>setTimeout(r,10));assert.equal(q('#previewRoom .figure').style.filter,'');assert.equal(q('#redo').disabled,false);q('#redo').click();
+ range('effect-shadow','30');range('effect-tiltY','12');range('effect-opacity','.8');
+ await new Promise(r=>setTimeout(r,10));assert.match(q('#previewRoom .figure').style.transform,/rotateY\(12deg\)/);
+ // Pointer handles operate on the selected placement, not the editor zoom.
+ const handle=q('.figure-handle[data-handle=scale]');handle.dispatchEvent(pointer('pointerdown',50,50));q('#previewRoom').dispatchEvent(pointer('pointermove',100,100));q('#previewRoom').dispatchEvent(pointer('pointerup',100,100));assert.equal(q('#size').value,'26');q('#undo').click();
+ q('#handTool').click();const oldZoom=q('#inspectZoom').textContent;q('#preview').dispatchEvent(pointer('pointerdown',30,30));q('#preview').dispatchEvent(pointer('pointermove',80,50));q('#preview').dispatchEvent(pointer('pointerup',80,50));assert.equal(q('#inspectZoom').textContent,oldZoom);assert.match(q('#previewRoom').style.transform,/translate\(50px,20px\)/);q('#handTool').click();q('#inspectFit').click();
+ // Two-finger gestures pan and zoom, including touches outside the narrow portrait.
+ q('#preview').dispatchEvent(pointer('pointerdown',100,100,1,'touch'));q('#preview').dispatchEvent(pointer('pointerdown',200,100,2,'touch'));q('#preview').dispatchEvent(pointer('pointermove',250,100,2,'touch'));assert.equal(q('#inspectZoom').textContent,'150%');q('#preview').dispatchEvent(pointer('pointerup',100,100,1,'touch'));q('#preview').dispatchEvent(pointer('pointerup',250,100,2,'touch'));q('#inspectFit').click();
+ q('#markSurface').click();q('#previewRoom').dispatchEvent(pointer('pointerdown',150,340));q('#previewRoom').dispatchEvent(pointer('pointerdown',450,340));q('#attachSurface').click();await new Promise(r=>setTimeout(r,10));
+ assert.ok(q('.support-line'));assert.ok(q('.contact-shadow'));q('#save').click();await new Promise(r=>setTimeout(r,20));
+ const savedPlace=manifest.items[0].placements['home-landscape-16x9'];assert.equal(savedPlace.effects.brightness,70);assert.equal(savedPlace.effects.shadow,30);assert.equal(savedPlace.opacity,.8);assert.equal(savedPlace.transform.surface,'cabinet');assert.equal(manifest.presentations['home-landscape-16x9'].supportSurface.length,2);assert.deepEqual(manifest.items[0].placements['home-portrait-16x9'],before.items[0].placements['home-portrait-16x9']);
+ q('#figureRows [data-object-action=visibility]').click();assert.equal(q('#hideFigure').textContent,'Mostrar');q('#figureRows [data-object-action=visibility]').click();q('#figureRows [data-object-action=up]').click();assert.match(q('#figureRows .object-title').textContent,/capa 11/);
+ q('#figureRows [data-object-action=delete]').click();assert.equal(q('#figureRows').children.length,0);q('#undo').click();assert.equal(q('#figureRows').children.length,1);
+ q('#slotTools [data-object-action=visibility]').click();await new Promise(r=>setTimeout(r,10));assert.equal(q('#figureList').value,'viewer-slot-red');q('#slotTools [data-object-action=up]').click();q('#save').click();await new Promise(r=>setTimeout(r,20));assert.equal(manifest.items.find(i=>i.id==='viewer-slot-red').placements['home-landscape-16x9'].z,19);
+ q('#slotTools [data-object-action=delete]').click();q('#save').click();await new Promise(r=>setTimeout(r,20));assert.equal(manifest.items.find(i=>i.id==='viewer-slot-red').placements['home-landscape-16x9'].hidden,true);
+ }finally{dom.window.close()}
+});

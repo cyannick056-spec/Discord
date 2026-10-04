@@ -77,3 +77,28 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline-color:#a5a
 #previewNoise{position:absolute;inset:0;width:100%;height:100%;opacity:.57;pointer-events:none;image-rendering:pixelated}#previewSignal{z-index:4}.preview-osd{position:absolute;left:3%;right:3%;top:4%;display:flex;justify-content:space-between;font:clamp(5px,calc(var(--glass-width)*.014),12px) monospace;color:#c7ceca;z-index:5;pointer-events:none}.screen.no-signal #previewVideo{visibility:hidden}.screen .no-signal-copy strong{font-size:clamp(7px,calc(var(--glass-width)*.031),24px)}.screen .no-signal-copy span{font-size:clamp(5px,calc(var(--glass-width)*.014),12px)}.screen.crt.normal #previewVideo{filter:blur(.42px) saturate(1.06) contrast(1.06)}.screen.crt.intense #previewVideo,.screen.crt.scanlines #previewVideo{filter:blur(.55px) saturate(1.09) contrast(1.08)}
 
 .tv-tint{mask-size:100% 100%;mask-repeat:no-repeat;mask-mode:alpha;-webkit-mask-size:100% 100%;-webkit-mask-repeat:no-repeat}
+
+/* The inspector has one scroll surface; no sticky blocks hide form controls. */
+#editorBody{padding-bottom:0;grid-template-columns:minmax(0,1fr) minmax(280px,340px)}
+#editor header{flex-wrap:wrap;flex-shrink:0}#editor header button{white-space:normal}
+#editor aside{min-width:0;scroll-padding:16px;padding-bottom:24px;overflow-x:hidden}
+#editorStatus,.editor-tabs{position:static}#editorStatus{margin:12px 0 0;min-height:30px}
+#editor aside button{white-space:normal;overflow-wrap:anywhere;min-width:0;height:auto}
+#editor aside input,#editor aside select{min-width:0;max-width:100%}
+#editor aside label{overflow-wrap:anywhere}#editor .row{align-items:stretch}
+#inspectionControls{max-width:calc(100% - 16px);flex-wrap:wrap;justify-content:center}
+#preview{padding-top:64px}.object-list{display:grid;gap:8px;margin:12px 0}
+.object-row{border:1px solid var(--line);border-radius:6px;padding:8px;background:var(--field);display:grid;gap:6px}
+.object-row[aria-current=true]{border-color:#b5bac1}.object-row .object-title{text-align:left;width:100%}
+.object-row .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.object-row .row button{font-size:12px;padding:6px}
+.figure-handle{position:absolute;width:16px;height:16px;min-height:0!important;padding:0!important;border:2px solid #fff!important;border-radius:3px!important;background:#5865f2!important;z-index:1000;touch-action:none}
+.figure-handle[data-handle=scale]{right:-9px;bottom:-9px;cursor:nwse-resize}
+.figure-handle[data-handle=rotate]{left:calc(50% - 8px);top:-30px;border-radius:50%!important;cursor:grab}
+.contact-shadow{position:absolute;left:50%;top:100%;height:5%;border-radius:50%;background:#000;z-index:-1;pointer-events:none}
+#preview.hand-mode,#preview.hand-mode .figure{cursor:grab}#preview.hand-mode:active{cursor:grabbing}
+.support-line{position:absolute;height:2px;background:#b5bac1;transform-origin:left center;pointer-events:none;z-index:1000}
+#preview.mark-mode{cursor:crosshair}
+@media(max-width:760px){#editorBody{display:flex;flex-direction:column}#preview{flex:0 0 38%;min-height:150px}#editor aside{flex:1;border-left:0;border-top:1px solid var(--line);padding-bottom:calc(136px + env(safe-area-inset-bottom))}#editor header{gap:4px}#editor header button{padding:7px 9px;min-height:36px}#editor header strong{flex-basis:100%}}
+@media(max-height:450px) and (min-width:761px){#editorBody{grid-template-columns:minmax(0,1fr) minmax(280px,36%)}#editor header button{min-height:32px;padding:5px 8px}}
+
+.effect-group{border:1px solid var(--line);border-radius:6px;margin:12px 0;padding:10px}.effect-group summary{cursor:pointer;font-weight:600;padding:4px}.effect-group label output{color:var(--muted);font-size:12px}#figureAppearance>button{margin:4px;width:calc(100% - 8px)}
