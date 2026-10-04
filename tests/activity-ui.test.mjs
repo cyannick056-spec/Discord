@@ -55,6 +55,7 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  assert.deepEqual(manifest.initialScene,{scene:'arcade',aspect:'16:9',retro:'immersive',smoothing:true});
  assert.deepEqual(manifest.presentations['home-landscape-16x9'].tv,{zoom:1.4,x:12,y:-8});assert.equal(manifest.presentations['home-landscape-16x9'].tvPaint.body,'#b8bbbf');assert.equal(manifest.presentations['home-portrait-16x9'].tv,undefined);
  assert.equal(manifest.items[0].placements['home-landscape-16x9'].width,25);assert.deepEqual(manifest.items[0].placements['home-portrait-16x9'],before.items[0].placements['home-portrait-16x9']);
+ assert.equal(w.document.querySelector('#previewRoom .tv-tint').style.maskImage,`url("${tvModels.flat.src}")`);assert.equal(w.document.querySelector('#previewRoom .tv-frame img').style.filter.includes('blur'),false);assert.equal(manifest.presentations['home-landscape-16x9'].tvPaint.modelRevision,2);
  assert.equal(manifest.items[0].asset,before.items[0].asset);assert.deepEqual(manifest.library,before.library);assert.equal(manifest.presentations['home-landscape-16x9'].tvModel,'flat-modern');
  w.document.querySelector('#closeEditor').click();await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/hd-v3/midnight-wide.webp');assert.equal(w.document.querySelector('#staticNoise').hidden,true);
  state={...state,scene:'arcade'};await timers.find(t=>t.delay===1500).fn();await new Promise(r=>setTimeout(r,10));

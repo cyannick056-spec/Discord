@@ -1,12 +1,12 @@
 import {tvModels} from './tv/models.mjs';
 // Edited room photos contain no TV and no coffee table.
-const cabinetTop={midnight:[576,785],retro:[548,811],minimal:[575,754],rain:[541,801]};
+const cabinetTop={midnight3:[541,889],midnight:[576,785],retro:[500,895],minimal:[485,861],rain:[536,915]};
 export const themeFrames={},themeGlass={};
 for(const [theme,tops] of Object.entries(cabinetTop)){
  themeFrames[theme]={};themeGlass[theme]={};
  for(const portrait of [false,true])for(const type of ['crt','flat']){
   const iw=portrait?941:1672,ih=portrait?1672:941,m=tvModels[type];
-  const bodyWidth=iw*(type==='crt'?(portrait?.78:.34):(portrait?.84:.43));
+  const bodyWidth=iw*(type==='crt'?(portrait?.78:.34):(portrait?.84:.38));
   const factor=bodyWidth/m.body[2],fw=m.width*factor,fh=m.height*factor;
   const fx=iw/2-(m.body[0]+m.body[2]/2)*factor,fy=tops[portrait?1:0]-(m.body[1]+m.body[3])*factor;
   const key=`${type}-${portrait?'portrait':'wide'}`;

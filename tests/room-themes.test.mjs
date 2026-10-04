@@ -52,7 +52,7 @@ test('moving and zooming a wide activity has no jump at the initial zoom and kee
 });
 test('all environments use new tableless URLs in both orientations, bypassing earlier cached backgrounds',()=>{
  for(const {id} of roomThemes)for(const view of ['landscape','portrait']){
-  assert.match(roomPhoto('crt',view,id),/^\/rooms\/hd-v3\//);
+  assert.match(roomPhoto('crt',view,id),/^\/rooms\/(hd-v3|clean-hd-v4)\//);
  }
 });
 
