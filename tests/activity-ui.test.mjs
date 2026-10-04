@@ -26,6 +26,15 @@ test('fresh activity edits and saves a figure while retaining other views, asset
  assert.equal(w.document.querySelector('#loading').hidden,true);assert.equal(w.document.querySelector('#options').hidden,false);
  assert.equal(w.document.querySelector('#backdrop').getAttribute('src'),'/rooms/tableless-v2/midnight-wide.webp');assert.equal(w.document.querySelector('#oneBg'),null);assert.equal(w.document.querySelector('#staticNoise').hidden,false);
  w.document.querySelector('#edit').click();await new Promise(r=>setTimeout(r,10));assert.equal(w.document.querySelector('#editor').hidden,false);
+ const inspectionCamera=structuredClone(manifest.presentations??{});
+ w.document.querySelector('#preview').dispatchEvent(new w.WheelEvent('wheel',{deltaY:-100,clientX:300,clientY:200,bubbles:true,cancelable:true}));
+ assert.equal(w.document.querySelector('#inspectZoom').textContent,'112%');assert.deepEqual(manifest.presentations??{},inspectionCamera);
+ w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'0',ctrlKey:true,bubbles:true,cancelable:true}));assert.equal(w.document.querySelector('#inspectZoom').textContent,'100%');
+ w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowRight',shiftKey:true,bubbles:true,cancelable:true}));
+ w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));
+ w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,shiftKey:true,bubbles:true,cancelable:true}));
+ w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));
+ const initialMode=w.document.querySelector('#initialMode');initialMode.value='arcade';initialMode.dispatchEvent(new w.Event('change'));w.document.querySelector('#setInitial').click();
  const beforeTv=parseFloat(w.document.querySelector('#previewRoom .tv-frame').style.width),beforeGlass=parseFloat(w.document.querySelector('#previewRoom .screen').style.width);
  for(const [id,value] of [['tvSize','1.4'],['tvX','12'],['tvY','-8']]){const input=w.document.querySelector('#'+id);input.dispatchEvent(new w.Event('pointerdown'));input.value=value;input.dispatchEvent(new w.Event('input'))}
  w.document.querySelector('[data-tv-color="#b8bbbf"]').click();await new Promise(r=>setTimeout(r,10));
@@ -43,6 +52,7 @@ test('fresh activity edits and saves a figure while retaining other views, asset
 
  const size=w.document.querySelector('#size');size.dispatchEvent(new w.Event('pointerdown'));size.value='25';size.dispatchEvent(new w.Event('input'));
  w.document.querySelector('[data-tv=flat]').click();w.document.querySelector('#save').click();await new Promise(r=>setTimeout(r,20));
+ assert.deepEqual(manifest.initialScene,{scene:'arcade',aspect:'16:9',retro:'immersive',smoothing:true});
  assert.deepEqual(manifest.presentations['home-landscape-16x9'].tv,{zoom:1.4,x:12,y:-8});assert.equal(manifest.presentations['home-landscape-16x9'].tvPaint.body,'#b8bbbf');assert.equal(manifest.presentations['home-portrait-16x9'].tv,undefined);
  assert.equal(manifest.items[0].placements['home-landscape-16x9'].width,25);assert.deepEqual(manifest.items[0].placements['home-portrait-16x9'],before.items[0].placements['home-portrait-16x9']);
  assert.equal(manifest.items[0].asset,before.items[0].asset);assert.deepEqual(manifest.library,before.library);assert.equal(manifest.presentations['home-landscape-16x9'].tvModel,'flat-modern');

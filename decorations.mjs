@@ -1,3 +1,4 @@
+import {validInitialScene} from './activity-initial.mjs';
 import { MAX_SCENE_ITEMS } from './material-catalog.mjs';
 import crypto from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -38,6 +39,7 @@ function validManifest(input) {
   if (!validCollections(input, validManifest)) return false;
   if (!validPresentations(input.presentations, views)) return false;
   if (input.startup !== undefined && input.startup !== null && !validPresentations({ startup: input.startup }, new Set(['startup']))) return false;
+  if (input.initialScene !== undefined && !validInitialScene(input.initialScene)) return false;
   const ids = new Set();
   let decorations = 0;
   let builtins = 0;
@@ -173,6 +175,7 @@ export function installDecorations(app, { directory, editKey, rebuildRooms = fal
       await mkdir(directory, { recursive: true });
       const temporary = path.join(directory, `manifest-${crypto.randomUUID()}.tmp`);
       await writeFile(temporary, JSON.stringify({ items: req.body.items,
+        ...(req.body.initialScene !== undefined ? {initialScene:req.body.initialScene} : {}),
         ...(req.body.ambient !== undefined ? { ambient: req.body.ambient } : {}),
         ...(req.body.mood !== undefined ? { mood: req.body.mood } : {}),
         ...(req.body.library !== undefined ? { library: req.body.library } : {}),

@@ -15,7 +15,7 @@ test('historical signal labels follow decoded frames, loss and recovery without 
  w.HTMLCanvasElement.prototype.getContext=()=>null;w.HTMLMediaElement.prototype.play=async()=>{};
  w.HTMLVideoElement.prototype.requestVideoFrameCallback=fn=>{frame=fn};w.MediaStream=class{constructor(tracks){this.tracks=tracks}};
  Object.defineProperties(w.HTMLElement.prototype,{clientWidth:{get(){return 1200}},clientHeight:{get(){return 800}}});
- w.__shisDiscordSession={accessToken:'test',sdk:{ready:async()=>{},subscribe:async()=>{},commands:{getActivityInstanceConnectedParticipants:async()=>({participants:[]})}}};
+ w.__shisDiscordSession={accessToken:'test',sdk:{ready:async()=>{},subscribe:()=>new Promise(()=>{}),commands:{getActivityInstanceConnectedParticipants:()=>new Promise(()=>{})}}};
  w.fetch=async url=>({ok:true,status:200,json:async()=>new URL(url,'https://test.invalid').pathname==='/api/config'?{discordClientId:'test'}:{items:[]}});
  const status=()=>w.document.querySelector('#statusText').textContent;
  try{
@@ -23,7 +23,7 @@ test('historical signal labels follow decoded frames, loss and recovery without 
   assert.equal(status(),'BUSCANDO SEÑAL…');
   const track=new w.EventTarget();w.testTrack('video',track);assert.equal(status(),'SEÑAL DETECTADA…');
   frame();assert.equal(status(),'');assert.equal(w.document.querySelector('#liveBadge').textContent,'PLAY');
-  assert.equal(w.document.querySelector('#signal').hidden,true);assert.equal([...timers.values()].some(t=>t.delay===8000),false);
+  assert.equal(w.document.querySelector('#signal').hidden,true);assert.equal([...timers.values()].filter(t=>t.delay===8000).length,1);
   // A stalled source retains its track so the next decoded frame can recover.
   now+=9000;intervals.find(t=>t.delay===2000).fn();assert.equal(status(),'SEÑAL PERDIDA');
   const waiting=[...timers.entries()].find(([,t])=>t.delay===2000);waiting[1].fn();timers.delete(waiting[0]);assert.equal(status(),'ESPERANDO SEÑAL…');

@@ -20,7 +20,7 @@ app.use((_req,res,next)=>{res.set('Referrer-Policy','strict-origin-when-cross-or
 app.use('/api/decorations', express.json({ limit: '16mb' }));
 app.use(express.json({ limit: '256kb' }));
 installCloudflare(app, requireActivityTicket);
-const activityControls=installActivityControls(app,requireActivityTicket,{editKey:process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY});
+const activityControls=installActivityControls(app,requireActivityTicket,{editKey:process.env.DECORATION_EDIT_KEY || process.env.STREAM_KEY,initialScene:async()=>{const file=path.join(process.env.DECORATION_DATA_DIR || path.join(__dirname,'.data','decorations'),'manifest.json');return JSON.parse(await readFile(file,'utf8')).initialScene}});
 app.use('/api/decorations', requireActivityTicket);
 installDecorations(app, {
   directory: process.env.DECORATION_DATA_DIR || path.join(__dirname, '.data', 'decorations'),

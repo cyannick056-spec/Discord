@@ -27,3 +27,16 @@ test('host credentials are scoped, expire and protect shared activity controls',
   const reset=await (await call('/api/activity-controls?instance=one')).json();assert.equal(reset.revision,0);assert.notEqual(reset.epoch,initial.epoch);
  }finally{await new Promise(r=>server.close(r));}
 });
+
+
+test('new activities use the saved initial scene while active calls keep their shared choices',async()=>{
+ let initial={scene:'arcade',aspect:'4:3',retro:'normal',smoothing:false};const app=express();app.use(express.json());
+ installActivityControls(app,(_req,_res,next)=>next(),{editKey:'test',initialScene:async()=>initial});
+ const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const root=`http://127.0.0.1:${server.address().port}`;
+ try{
+  const first=await (await fetch(root+'/api/activity-controls?instance=first')).json();assert.equal(first.scene,'arcade');assert.equal(first.aspect,'4:3');assert.equal(first.smoothing,false);
+  initial={scene:'home',aspect:'16:9',retro:'immersive',smoothing:true};
+  const existing=await (await fetch(root+'/api/activity-controls?instance=first')).json();assert.equal(existing.scene,'arcade');assert.equal(existing.epoch,first.epoch);
+  const second=await (await fetch(root+'/api/activity-controls?instance=second')).json();assert.equal(second.scene,'home');assert.equal(second.aspect,'16:9');
+ }finally{await new Promise(r=>server.close(r))}
+});

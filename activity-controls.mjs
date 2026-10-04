@@ -1,7 +1,8 @@
+import {validInitialScene} from './activity-initial.mjs';
 import crypto from 'node:crypto';
 const lifetime=6*60*60*1000;
 const same=(a,b)=>{const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));return x.length>0 && x.length===y.length && crypto.timingSafeEqual(x,y);};
-export function installActivityControls(app,authorize,{editKey,now=Date.now}={}) {
+export function installActivityControls(app,authorize,{editKey,now=Date.now,initialScene=async()=>undefined}={}) {
   const rooms=new Map(),attempts=new Map();
   const instance=req=>req.query.instance || req.get('X-Activity-Instance');
   const validInstance=id=>typeof id==='string' && /^[A-Za-z0-9_-]{1,128}$/.test(id);
@@ -12,10 +13,10 @@ export function installActivityControls(app,authorize,{editKey,now=Date.now}={})
     try{const value=JSON.parse(Buffer.from(body,'base64url'));return value.instance===instance(req) && Number.isSafeInteger(value.expires) && value.expires>now() && value.expires<=now()+lifetime;}catch{return false;}
   };
   const requireHost=(req,res,next)=>isHost(req)?next():res.status(403).json({error:'Solo el host puede cambiar la actividad'});
-  const session=(req,res,next)=>{
+  const session=async(req,res,next)=>{
     const id=instance(req);if(!validInstance(id))return res.status(400).json({error:'Actividad inválida'});
     for(const [id,room] of rooms)if(now()-room.touched>lifetime)rooms.delete(id);
-    if(!rooms.has(id)){if(rooms.size>=128)return res.status(503).json({error:'Inténtalo en unos minutos'});rooms.set(id,{aspect:'16:9',scene:'home',retro:'immersive',smoothing:true,revision:0,epoch:crypto.randomUUID()});}
+    if(!rooms.has(id)){let initial;try{initial=await initialScene()}catch{}if(!rooms.has(id)){if(rooms.size>=128)return res.status(503).json({error:'Inténtalo en unos minutos'});rooms.set(id,{aspect:'16:9',scene:'home',retro:'immersive',smoothing:true,...(validInitialScene(initial)?{scene:initial.scene,aspect:initial.aspect,retro:initial.retro,smoothing:initial.smoothing}:{}),revision:0,epoch:crypto.randomUUID()});}}
     req.controls=rooms.get(id);req.controls.touched=now();res.set('Cache-Control','no-store');next();
   };
   app.post('/api/host/auth',authorize,(req,res)=>{
