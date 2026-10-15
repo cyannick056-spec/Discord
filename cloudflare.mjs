@@ -102,6 +102,65 @@ function activePublisher() {
   return null;
 }
 
+const fallbackIceServers = [{ urls: 'stun:stun.cloudflare.com:3478' }];
+const turnCredentialCache = new Map();
+const turnCredentialTtlSeconds = 86_400;
+const turnCredentialCacheMs = 12 * 60 * 60 * 1000;
+
+async function iceServersForViewer(viewerId) {
+  const keyId = process.env.CLOUDFLARE_TURN_KEY_ID;
+  const apiToken = process.env.CLOUDFLARE_TURN_API_TOKEN;
+  if (!keyId || !apiToken) {
+    return { iceServers: fallbackIceServers, turnAvailable: false };
+  }
+
+  const cached = turnCredentialCache.get(viewerId);
+  if (cached && cached.expires > Date.now() + 5 * 60 * 1000) return cached.value;
+
+  if (turnCredentialCache.size > 200) {
+    for (const [id, entry] of turnCredentialCache) {
+      if (entry.expires <= Date.now()) turnCredentialCache.delete(id);
+    }
+    if (turnCredentialCache.size > 200) turnCredentialCache.clear();
+  }
+
+  const response = await fetch(
+    `https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ttl: turnCredentialTtlSeconds }),
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !Array.isArray(result.iceServers)) {
+    throw new Error(`Cloudflare TURN credential generation failed (HTTP ${response.status})`);
+  }
+
+  // No incluimos el puerto 53: puede estar bloqueado en navegadores y retrasar
+  // la recolección ICE cuando la app espera una oferta completa.
+  const iceServers = result.iceServers
+    .map((server) => {
+      const urls = (Array.isArray(server.urls) ? server.urls : [server.urls])
+        .filter((url) => typeof url === 'string' &&
+          /^(stun|turn|turns):/i.test(url) && !/:53(?:\D|$)/i.test(url));
+      return { ...server, urls };
+    })
+    .filter((server) => server.urls.length > 0);
+
+  if (!iceServers.some((server) => server.urls.some((url) => /^turns?:/i.test(url)))) {
+    throw new Error('Cloudflare TURN response did not include relay URLs');
+  }
+
+  const value = { iceServers, turnAvailable: true };
+  turnCredentialCache.set(viewerId, { value, expires: Date.now() + turnCredentialCacheMs });
+  return value;
+}
+
 export function installCloudflare(app, requireActivityTicket) {
   app.use('/api/cloudflare/viewer', requireActivityTicket);
   const publisherAuth = (req, res, next) => {
@@ -195,6 +254,21 @@ export function installCloudflare(app, requireActivityTicket) {
   app.get('/api/cloudflare/stream', requireActivityTicket, viewerAuth, (_req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json({ sessionId: activePublisher()?.sessionId || null });
+  });
+
+  app.get('/api/cloudflare/viewer/ice-servers', viewerAuth, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      res.json(await iceServersForViewer(req.viewerId));
+    } catch (error) {
+      console.warn(
+        'Cloudflare TURN credentials unavailable; using STUN fallback:',
+        error instanceof Error ? error.message : 'unknown error',
+      );
+      // Un error de configuración de TURN no debe romper la ruta que ya
+      // funcionaba: devolvemos STUN y permitimos que el cliente siga intentando.
+      res.json({ iceServers: fallbackIceServers, turnAvailable: false });
+    }
   });
 
   app.post('/api/cloudflare/viewer/session', viewerAuth, async (req, res) => {

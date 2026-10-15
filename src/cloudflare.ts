@@ -15,21 +15,23 @@ async function gather(pc: RTCPeerConnection) {
   });
 }
 
-function createPeerConnection() {
+const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.cloudflare.com:3478' },
+];
+
+function createPeerConnection(iceServers: RTCIceServer[] = FALLBACK_ICE_SERVERS) {
   const standard = typeof RTCPeerConnection === 'function' ? RTCPeerConnection : undefined;
   const legacy = (globalThis as LegacyRtcGlobal).webkitRTCPeerConnection;
   const PeerConnection = standard || legacy;
   if (!PeerConnection) throw new Error('WebRTC no está disponible en esta vista de Discord');
 
   try {
-    return new PeerConnection({
-      iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }],
-    });
+    return new PeerConnection({ iceServers });
   } catch {
     // Algunos Android WebView rechazan una configuración ICE durante el
-    // constructor aunque sí permitan crear la conexión. El SFU puede seguir
-    // negociando con los candidatos que entregue el navegador.
-    return new PeerConnection();
+    // constructor aunque sí permitan crear la conexión. Conservamos la opción
+    // de STUN básico para no bloquear versiones antiguas del WebView.
+    return new PeerConnection({ iceServers: FALLBACK_ICE_SERVERS });
   }
 }
 
@@ -131,10 +133,24 @@ export class CloudflareViewer {
   }
 
   private async connect(source: string) {
+    const fallbackIceServers = FALLBACK_ICE_SERVERS;
+    let iceServers = fallbackIceServers;
+    try {
+      const config = await this.request<{ iceServers?: RTCIceServer[] }>('viewer/ice-servers');
+      if (Array.isArray(config.iceServers) && config.iceServers.length > 0) {
+        iceServers = config.iceServers;
+      }
+    } catch (error) {
+      // Si el endpoint de configuración no está disponible, conserva la ruta
+      // anterior con STUN en lugar de impedir la transmisión por completo.
+      this.reportDiagnostic('ice-servers', error);
+    }
+    if (this.closed) return;
+
     let stage = 'peer';
     let pc: RTCPeerConnection;
     try {
-      pc = createPeerConnection();
+      pc = createPeerConnection(iceServers);
     } catch (error) {
       this.reportDiagnostic(stage, error);
       throw error;
