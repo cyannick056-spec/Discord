@@ -206,9 +206,15 @@ func publishCloudflare(id uint64, conn net.Conn, reader *bufio.Reader) {
   case kindAudio:
    mono, monoErr := stereoPCM16ToMono(payload)
    if monoErr != nil { log.Printf("[%d] audio: %v", id, monoErr); continue }
+   frame := audioFrame{pcm: mono, timestampUS: h.TimestampUS}
    select {
-   case audioCh <- audioFrame{pcm: mono, timestampUS: h.TimestampUS}:
-   default: log.Printf("[%d] Cloudflare audio queue overflow", id)
+   case audioCh <- frame:
+   default:
+    // Keep audio near the live edge: discard an old queued packet before
+    // retrying, rather than letting congestion preserve stale audio.
+    select { case <-audioCh: default: }
+    select { case audioCh <- frame: default: }
+    log.Printf("[%d] Cloudflare audio queue overflow; discarded stale audio", id)
    }
   }
  }
