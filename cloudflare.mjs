@@ -147,7 +147,7 @@ async function iceServersForViewer(viewerId) {
     .map((server) => {
       const urls = (Array.isArray(server.urls) ? server.urls : [server.urls])
         .filter((url) => typeof url === 'string' &&
-          /^(stun|turn|turns):/i.test(url) && !/:53(?:\\D|$)/i.test(url));
+          /^(stun|turn|turns):/i.test(url) && !/:53(?:\D|$)/i.test(url));
       return { ...server, urls };
     })
     .filter((server) => server.urls.length > 0);
