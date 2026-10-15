@@ -21,9 +21,10 @@ const (
 	maxPayload      = 0x60000
 
 	videoFPS             = 30
-	videoJitterFrames    = 6
-	videoQueueDepth      = 180
-	audioQueueDepth      = 384
+	videoJitterFrames    = 2  // about 67 ms of startup cushion at 30 fps
+	videoQueueDepth      = 8  // cap inbound video backlog at about 267 ms
+	audioQueueDepth      = 48 // avoid multi-second audio backlog under congestion
+	videoPacerQueueDepth = 8  // cap the second video queue as well
 	videoDiscontinuityUS = 500000
 	senderIdleTimeout     = 10 * time.Second
 )

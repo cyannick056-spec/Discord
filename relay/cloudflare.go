@@ -206,12 +206,39 @@ func publishCloudflare(id uint64, conn net.Conn, reader *bufio.Reader) {
   case kindAudio:
    mono, monoErr := stereoPCM16ToMono(payload)
    if monoErr != nil { log.Printf("[%d] audio: %v", id, monoErr); continue }
+   frame := audioFrame{pcm: mono, timestampUS: h.TimestampUS}
    select {
-   case audioCh <- audioFrame{pcm: mono, timestampUS: h.TimestampUS}:
-   default: log.Printf("[%d] Cloudflare audio queue overflow", id)
+   case audioCh <- frame:
+   default:
+    // Keep audio near the live edge: discard an old queued packet before
+    // retrying, rather than letting congestion preserve stale audio.
+    select { case <-audioCh: default: }
+    select { case audioCh <- frame: default: }
+    log.Printf("[%d] Cloudflare audio queue overflow; discarded stale audio", id)
    }
   }
  }
+}
+
+
+// trimVideoPacerQueue bounds stale video buffering without forwarding a broken
+// H.264 reference chain. If no IDR exists in the retained live window, it drops
+// the queued frames and lets the caller wait for the next IDR.
+func trimVideoPacerQueue(queue []videoFrame, maxDepth int) ([]videoFrame, bool) {
+ if maxDepth < 1 {
+  return nil, len(queue) > 0
+ }
+ if len(queue) <= maxDepth {
+  return queue, false
+ }
+
+ start := len(queue) - maxDepth
+ for i := len(queue) - 1; i >= start; i-- {
+  if queue[i].idr {
+   return queue[i:], true
+  }
+ }
+ return nil, true
 }
 
 func runCFVideoPacer(id uint64, track *webrtc.TrackLocalStaticSample, in <-chan videoFrame,
@@ -223,7 +250,18 @@ func runCFVideoPacer(id uint64, track *webrtc.TrackLocalStaticSample, in <-chan 
  for {
   select {
   case <-done: return
-  case frame := <-in: queue = append(queue, frame)
+  case frame := <-in:
+   queue = append(queue, frame)
+   if len(queue) > videoPacerQueueDepth {
+    var trimmed bool
+    queue, trimmed = trimVideoPacerQueue(queue, videoPacerQueueDepth)
+    if trimmed {
+     // Never skip arbitrary H.264 reference frames: restart from a recent IDR
+     // when possible, otherwise wait for the next IDR before resuming playback.
+     waitForIDR.Store(true)
+     log.Printf("[%d] trimming stale video pacer backlog", id)
+    }
+   }
   case <-ticker.C:
    if !started {
     if len(queue) < videoJitterFrames { continue }
