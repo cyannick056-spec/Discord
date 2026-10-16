@@ -4,12 +4,21 @@ type TrackResult = { mid?: string; trackName?: string; errorCode?: string };
 type TrackResponse = { description: Description; tracks: TrackResult[] };
 type LegacyRtcGlobal = typeof globalThis & { webkitRTCPeerConnection?: typeof RTCPeerConnection };
 
-async function gather(pc: RTCPeerConnection) {
-  if (pc.iceGatheringState === 'complete') return;
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => { cleanup(); reject(new Error('Tiempo de conexión agotado')); }, 8000);
-    const changed = () => { if (pc.iceGatheringState === 'complete') { cleanup(); resolve(); } };
-    const cleanup = () => { clearTimeout(timeout); pc.removeEventListener('icegatheringstatechange', changed); };
+async function gather(pc: RTCPeerConnection): Promise<boolean> {
+  if (pc.iceGatheringState === 'complete') return true;
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (complete: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      pc.removeEventListener('icegatheringstatechange', changed);
+      resolve(complete);
+    };
+    const timeout = setTimeout(() => finish(false), 8000);
+    const changed = () => {
+      if (pc.iceGatheringState === 'complete') finish(true);
+    };
     pc.addEventListener('icegatheringstatechange', changed);
     changed();
   });
@@ -191,8 +200,15 @@ export class CloudflareViewer {
       stage = 'local-description';
       await pc.setLocalDescription(answer);
       stage = 'ice-gathering';
-      await gather(pc);
+      const gatheringComplete = await gather(pc);
       if (this.closed || this.pc !== pc) return;
+      if (!gatheringComplete) {
+        // Some Android WebViews never report "complete" when a TURN/STUN
+        // candidate stalls. Continue with candidates gathered so far instead
+        // of aborting before /viewer/answer; the SFU can then try the usable
+        // candidates and the normal connection-state recovery remains active.
+        this.reportDiagnostic('ice-gathering-timeout', new Error('ICE gathering incomplete'));
+      }
       stage = 'renegotiate';
       await this.request('viewer/answer', { sessionId: session.sessionId, description: pc.localDescription });
       this.lastDiagnostic = '';
